@@ -12,6 +12,7 @@ from commands.auth import AuthCommands
 from commands.stats import StatsCommands
 from commands.tickets import TicketsCommands
 from commands.payroll import PayrollCommands
+from commands.menu import MenuCommands
 
 # Настройка логирования
 logging.basicConfig(
@@ -71,6 +72,7 @@ class AlbionBot(commands.Bot):
         await self.add_cog(StatsCommands(self, self.db, self.permissions))
         await self.add_cog(TicketsCommands(self, self.db, self.permissions))
         await self.add_cog(PayrollCommands(self, self.db, self.permissions))
+        await self.add_cog(MenuCommands(self, self.db, self.permissions))
         logger.info("✓ Command cogs loaded")
         
         # Синхронизация слэш-команд
