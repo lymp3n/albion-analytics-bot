@@ -64,6 +64,23 @@ class AlbionBot(commands.Bot):
         if not self.database_url:
             logger.error("❌ DATABASE_URL not found in environment variables!")
             sys.exit(1)
+        
+        # КРИТИЧНО: Загружаем cogs ДО подключения к Discord!
+        # Это позволяет py-cord обнаружить slash-команды
+        logger.info("Loading command cogs...")
+        try:
+            self.load_extension("commands.auth")
+            self.load_extension("commands.stats")
+            self.load_extension("commands.tickets")
+            self.load_extension("commands.payroll")
+            self.load_extension("commands.menu")
+            logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
+            logger.info(f"✓ Found {len(self.application_commands)} application commands")
+        except Exception as e:
+            logger.error(f"❌ Failed to load cogs: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
     
     async def on_ready(self):
         """Обработчик готовности бота"""
@@ -76,21 +93,8 @@ class AlbionBot(commands.Bot):
         
         # 1. Инициализация системы прав
         self.permissions = Permissions(self)
-        
-        # 2. Регистрация команд (cogs) - используем load_extension для правильной регистрации slash-команд
-        try:
-            self.load_extension("commands.auth")
-            self.load_extension("commands.stats")
-            self.load_extension("commands.tickets")
-            self.load_extension("commands.payroll")
-            self.load_extension("commands.menu")
-            logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
-        except Exception as e:
-            logger.error(f"❌ Failed to load cogs: {e}")
-            import traceback
-            traceback.print_exc()
 
-        # 3. Подключение к БД (с обработкой ошибок)
+        # 2. Подключение к БД (с обработкой ошибок)
         try:
             await self.db.connect()
             logger.info("✓ Database connected")
@@ -99,7 +103,7 @@ class AlbionBot(commands.Bot):
             logger.error("Check DATABASE_URL in Render Environment Variables.")
             # Не падаем полностью, чтобы бот мог хотя бы отвечать на ping
         
-        # 4. Синхронизация слэш-команд
+        # 3. Синхронизация слэш-команд
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
