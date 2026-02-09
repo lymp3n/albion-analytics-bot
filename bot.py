@@ -101,14 +101,18 @@ class AlbionBot(commands.Bot):
         await super().close()
         logger.info("✓ Bot shutdown complete")
 
+from keep_alive import keep_alive
+
 async def main():
     """Точка входа приложения"""
     logger.info("=" * 50)
     logger.info("🚀 Starting Albion Analytics Discord Bot")
     logger.info("=" * 50)
     
-    bot = AlbionBot()
+    keep_alive()
     
+    bot = AlbionBot()
+
     try:
         await bot.start(bot.token)
     except KeyboardInterrupt:

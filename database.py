@@ -248,7 +248,7 @@ class Database:
             
             await self.execute("""
                 INSERT INTO guilds (discord_id, name, code, founder_code, mentor_code)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5)
             """, 
                 (0, guild_data['name'], hashed_code, hashed_founder, hashed_mentor)
             )
@@ -257,32 +257,32 @@ class Database:
         content_types = ['Castles', 'Crystal League', 'Open World', 'HG 5v5', 'Avalon', 'Scrims']
         for content in content_types:
             await self.execute(
-                "INSERT INTO content (name) VALUES (?)",
+                "INSERT INTO content (name) VALUES ($1)",
                 (content,)
             )
     
     async def update_guild_discord_id(self, guild_name: str, discord_guild_id: int):
         """Обновление Discord ID гильдии"""
         await self.execute(
-            "UPDATE guilds SET discord_id = ? WHERE name = ? AND discord_id = 0",
+            "UPDATE guilds SET discord_id = $1 WHERE name = $2 AND discord_id = 0",
             (discord_guild_id, guild_name)
         )
     
     # Утилиты для работы с игроками
     async def get_player_by_discord_id(self, discord_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(
-            "SELECT * FROM players WHERE discord_id = ?", 
+            "SELECT * FROM players WHERE discord_id = $1", 
             (discord_id,)
         )
     
     async def get_guild_by_code(self, code_hash: str) -> Optional[Dict[str, Any]]:
         return await self.fetchrow("""
             SELECT * FROM guilds 
-            WHERE code = ? OR founder_code = ? OR mentor_code = ?
+            WHERE code = $1 OR founder_code = $2 OR mentor_code = $3
         """, (code_hash, code_hash, code_hash))
     
     async def get_guild_by_discord_id(self, discord_guild_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(
-            "SELECT * FROM guilds WHERE discord_id = ?", 
+            "SELECT * FROM guilds WHERE discord_id = $1", 
             (discord_guild_id,)
         )
