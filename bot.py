@@ -24,27 +24,28 @@ logger = logging.getLogger('albion-bot')
 
 class AlbionBot(commands.Bot):
     def __init__(self):
+        # Загрузка конфигурации сначала, чтобы получить GUILD_ID
+        load_dotenv()
+        self.token = os.getenv('DISCORD_TOKEN')
+        self.database_url = os.getenv('DATABASE_URL')
+        self.guild_id = int(os.getenv('GUILD_ID', '0'))
+        self.tickets_category_id = int(os.getenv('TICKETS_CATEGORY_ID', '0'))
+        
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
         
+        # debug_guilds - мгновенная синхронизация команд для указанных серверов
         super().__init__(
             command_prefix="!",
             intents=intents,
-            help_command=None
+            help_command=None,
+            debug_guilds=[self.guild_id] if self.guild_id else None
         )
-        
-        # Загрузка конфигурации
-        load_dotenv()
-        self.token = os.getenv('DISCORD_TOKEN')
-        self.database_url = os.getenv('DATABASE_URL')
         
         # Load YAML config
         with open('config.yaml', 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
-            
-        self.guild_id = int(os.getenv('GUILD_ID', '0'))
-        self.tickets_category_id = int(os.getenv('TICKETS_CATEGORY_ID', '0'))
         
         # Инициализация компонентов
         self.db = Database(self.database_url)
@@ -80,20 +81,13 @@ class AlbionBot(commands.Bot):
         logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         
-        # Синхронизация слэш-команд (py-cord API)
-        if self.guild_id:
-            guild = discord.Object(id=self.guild_id)
-            await self.sync_commands(guild_ids=[self.guild_id])
-            logger.info(f"✓ Slash commands synced to guild {self.guild_id}")
-        else:
-            await self.sync_commands()
-            logger.info("✓ Global slash commands synced")
-        
-        # Логируем зарегистрированные команды
+        # Логируем зарегистрированные команды (py-cord автоматически синхронизирует через debug_guilds)
         cmd_names = [cmd.name for cmd in self.pending_application_commands]
         logger.info(f"✓ Registered {len(cmd_names)} slash commands: {', '.join(cmd_names)}")
         
-        if not self.guild_id:
+        if self.guild_id:
+            logger.info(f"✓ Commands synced to guild {self.guild_id} (debug_guilds)")
+        else:
             logger.warning("⚠️  GUILD_ID is not set! Global commands may take up to 1 hour to propagate.")
             logger.warning("👉 Set GUILD_ID in Render Environment Variables for instant updates.")
         
