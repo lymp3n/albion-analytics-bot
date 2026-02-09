@@ -40,11 +40,17 @@ class Database:
             await self.conn.execute("PRAGMA journal_mode = WAL")
         else:
             # PostgreSQL
+            import ssl
+            ctx = ssl.create_default_context(cafile='')
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            
             self.pool = await asyncpg.create_pool(
                 dsn=self.database_url,
                 min_size=1,
                 max_size=10,
-                command_timeout=60
+                command_timeout=60,
+                ssl=ctx
             )
         
         await self.initialize_schema()
