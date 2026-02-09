@@ -240,18 +240,20 @@ class FeedbackModal(ui.Modal):
             """, TicketStatus.CLOSED.value, self.mentor_id, datetime.utcnow(), self.ticket_id)
             
             # Send DM to Player
-            player_user = self.bot.get_user(self.player_id) or await self.bot.fetch_user(self.player_id)
-            if player_user:
-                embed = discord.Embed(title="✅ Session Evaluated", color=discord.Color.green())
-                embed.add_field(name="Content", value=content_name)
-                embed.add_field(name="Role", value=role_name)
-                embed.add_field(name="Score", value=f"{score}/10")
-                if errors: embed.add_field(name="Errors", value=", ".join(errors), inline=False)
-                embed.add_field(name="Work On", value=self.work_on.value, inline=False)
-                embed.add_field(name="Comments", value=self.comments.value, inline=False)
-                embed.add_field(name="Replay", value=f"[Link]({self.replay_link})")
-                try: await player_user.send(embed=embed)
-                except: pass
+            player_data = await self.bot.db.get_player_by_id(self.player_id)
+            if player_data:
+                player_user = self.bot.get_user(player_data['discord_id']) or await self.bot.fetch_user(player_data['discord_id'])
+                if player_user:
+                    embed = discord.Embed(title="✅ Session Evaluated", color=discord.Color.green())
+                    embed.add_field(name="Content", value=content_name)
+                    embed.add_field(name="Role", value=role_name)
+                    embed.add_field(name="Score", value=f"{score}/10")
+                    if errors: embed.add_field(name="Errors", value=", ".join(errors), inline=False)
+                    embed.add_field(name="Work On", value=self.work_on.value, inline=False)
+                    embed.add_field(name="Comments", value=self.comments.value, inline=False)
+                    embed.add_field(name="Replay", value=f"[Link]({self.replay_link})")
+                    try: await player_user.send(embed=embed)
+                    except: pass
             
             await interaction.response.send_message("✅ Evaluation submitted! Channel closing in 10s...", ephemeral=True)
             await asyncio.sleep(10)
@@ -281,15 +283,22 @@ class TicketControlView(ui.View):
             return
 
         if ticket['status'] != TicketStatus.AVAILABLE.value:
-            if ticket['mentor_id'] == interaction.user.id:
+            # Сравниваем с внутренним ID ментора
+            mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
+            if mentor and ticket['mentor_id'] == mentor['id']:
                 await interaction.response.send_message("✅ You already claimed this.", ephemeral=True)
             else:
                 await interaction.response.send_message("❌ Already claimed by someone else.", ephemeral=True)
             return
             
+        mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
+        if not mentor:
+            await interaction.response.send_message("❌ You are not registered in the system.", ephemeral=True)
+            return
+
         await self.bot.db.execute("""
             UPDATE tickets SET status = $1, mentor_id = $2, updated_at = $3 WHERE id = $4
-        """, TicketStatus.IN_PROGRESS.value, interaction.user.id, datetime.utcnow(), ticket['id'])
+        """, TicketStatus.IN_PROGRESS.value, mentor['id'], datetime.utcnow(), ticket['id'])
         
         # Update Embed
         embed = discord.Embed(
@@ -341,7 +350,12 @@ class TicketControlView(ui.View):
             await interaction.response.send_message("❌ Ticket must be 'In Progress'.", ephemeral=True)
             return
         
-        view = RatingSelectView(self.bot, ticket['id'], ticket['p_did'], interaction.user.id, ticket['replay_link'])
+        mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
+        if not mentor:
+            await interaction.response.send_message("❌ You are not registered.", ephemeral=True)
+            return
+            
+        view = RatingSelectView(self.bot, ticket['id'], ticket['player_id'], mentor['id'], ticket['replay_link'])
         await interaction.response.send_message("📊 **Session Evaluation**\nPlease select details:", view=view, ephemeral=True)
 
 

@@ -85,9 +85,18 @@ class Database:
             return cursor.lastrowid
         else:
             async with self.pool.acquire() as conn:
-                # asyncpg execute ожидает распакованные аргументы
-                result = await conn.execute(query, *clean_args)
-                return result
+                # Если это INSERT, пытаемся получить ID
+                query_stripped = query.strip().upper()
+                if query_stripped.startswith("INSERT"):
+                    if "RETURNING" not in query_stripped:
+                        # Убеждаемся, что возвращаем id
+                        query = query.rstrip(';') + " RETURNING id"
+                    result = await conn.fetchval(query, *clean_args)
+                    return result
+                else:
+                    # Для UPDATE/DELETE возвращаем None или количество строк
+                    await conn.execute(query, *clean_args)
+                    return None
     
     async def fetch(self, query: str, *args) -> list:
         """Получение данных"""
@@ -319,6 +328,12 @@ class Database:
         return await self.fetchrow(
             "SELECT * FROM players WHERE discord_id = $1", 
             discord_id
+        )
+    
+    async def get_player_by_id(self, player_id: int) -> Optional[Dict[str, Any]]:
+        return await self.fetchrow(
+            "SELECT * FROM players WHERE id = $1", 
+            player_id
         )
     
     async def get_guild_by_code(self, code_hash: str) -> Optional[Dict[str, Any]]:
