@@ -1,5 +1,16 @@
 import os
 import sys
+
+# Monkeypatch audioop for Python 3.13+ compatibility
+try:
+    import audioop
+except ImportError:
+    try:
+        import audioop_lts as audioop
+        sys.modules["audioop"] = audioop
+    except ImportError:
+        print("Warning: audioop not found. Voice features may fail.")
+
 import asyncio
 import logging
 import discord
@@ -59,8 +70,15 @@ class AlbionBot(commands.Bot):
             logger.error("❌ DATABASE_URL not found in environment variables!")
             sys.exit(1)
     
-    async def setup_hook(self):
-        """Асинхронная инициализация бота"""
+    async def on_ready(self):
+        """Обработчик готовности бота"""
+        if getattr(self, 'ready_check', False):
+            return
+        self.ready_check = True
+
+        logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
+        logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
+        
         # Подключение к БД
         await self.db.connect()
         logger.info("✓ Database connected")
@@ -74,28 +92,36 @@ class AlbionBot(commands.Bot):
         self.add_cog(TicketsCommands(self, self.db, self.permissions))
         self.add_cog(PayrollCommands(self, self.db, self.permissions))
         self.add_cog(MenuCommands(self, self.db, self.permissions))
-        logger.info("✓ Command cogs loaded")
-    
-    async def on_ready(self):
-        """Обработчик готовности бота"""
-        logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
-        logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
+        logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
         
-        # Логируем зарегистрированные команды (py-cord автоматически синхронизирует через debug_guilds)
-        cmd_names = [cmd.name for cmd in self.pending_application_commands]
-        logger.info(f"✓ Registered {len(cmd_names)} slash commands: {', '.join(cmd_names)}")
+        # Синхронизация слэш-команд
+        logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         if self.guild_id:
-            logger.info(f"✓ Commands synced to guild {self.guild_id} (debug_guilds)")
+            logger.info(f"⏳ Syncing to guild {self.guild_id}")
+            # Explicit sync for py-cord
+            await self.sync_commands(guild_ids=[self.guild_id], force=True)
+            logger.info(f"✓ Slash commands synced to guild {self.guild_id}")
         else:
+            await self.sync_commands(force=True)
+            logger.info("✓ Global slash commands synced")
+        
+        # Логируем
+        cmds = self.application_commands
+        logger.info(f"✓ Registered {len(cmds)} commands: {', '.join([c.name for c in cmds])}")
+        
+        if not self.guild_id:
             logger.warning("⚠️  GUILD_ID is not set! Global commands may take up to 1 hour to propagate.")
-            logger.warning("👉 Set GUILD_ID in Render Environment Variables for instant updates.")
         
         # Установка статуса
         await self.change_presence(
-            activity=discord.Game(name="Albion Analytics"),
+            activity=discord.Game(name="Albion Analytics | !ping"),
             status=discord.Status.online
         )
+    
+    @commands.command()
+    async def ping(self, ctx):
+        await ctx.send("Pong! Bot is alive.")
     
     async def close(self):
         """Корректное завершение работы"""
