@@ -241,6 +241,7 @@ class StatsCommands(commands.Cog):
             week_scores[week_key].append(row['score'])
             
         trend_data = [{'week': k, 'avg_score': sum(v)/len(v)} for k, v in week_scores.items()]
+        trend_data.sort(key=lambda x: x['week']) # Сортируем по неделям для правильного графика
         
         # Статистика по ролям
         role_query = f"""

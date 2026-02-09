@@ -26,45 +26,45 @@ class ChartGenerator:
     
     def generate_score_trend(self, weeks: List[str], scores: List[float], player_name: str) -> io.BytesIO:
         """Генерация линейного графика тренда очков"""
-        plt.figure(figsize=(8, 5))
+        plt.figure(figsize=(7, 4))
         plt.plot(weeks, scores, marker='o', linewidth=2.5, markersize=8, 
                 color=self.colors['primary'], label='Average Score')
         plt.fill_between(range(len(weeks)), scores, alpha=0.25, color=self.colors['primary'])
         
-        plt.title(f'Score Trend: {player_name}', fontsize=14, pad=15)
-        plt.xlabel('Week (YYYY-WW)', fontsize=10)
-        plt.ylabel('Average Score', fontsize=10)
+        plt.title(f'Score Trend: {player_name}', fontsize=12, pad=10)
+        plt.xlabel('Week (YYYY-WW)', fontsize=9)
+        plt.ylabel('Average Score', fontsize=9)
         plt.ylim(0, 10.5)
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.legend()
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=8)
         plt.tight_layout()
         
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
         plt.close()
         buf.seek(0)
         return buf
     
     def generate_role_scores(self, roles: List[str], scores: List[float], player_name: str) -> io.BytesIO:
         """Генерация столбчатой диаграммы по ролям"""
-        plt.figure(figsize=(8, 5))
+        plt.figure(figsize=(7, 4))
         bars = plt.bar(roles, scores, color=self.colors['primary'], edgecolor='white', linewidth=1.5)
         
         # Добавление значений над столбцами
         for bar in bars:
             height = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}', ha='center', va='bottom', fontsize=10)
+                    f'{height:.1f}', ha='center', va='bottom', fontsize=9)
         
-        plt.title(f'Average Score by Role: {player_name}', fontsize=14, pad=15)
-        plt.ylabel('Average Score', fontsize=10)
+        plt.title(f'Average Score by Role: {player_name}', fontsize=12, pad=10)
+        plt.ylabel('Average Score', fontsize=9)
         plt.ylim(0, 10.5)
         plt.grid(axis='y', alpha=0.3, linestyle='--')
         plt.tight_layout()
         
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
         plt.close()
         buf.seek(0)
         return buf
@@ -88,7 +88,7 @@ class ChartGenerator:
         plt.tight_layout()
         
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
         plt.close()
         buf.seek(0)
         return buf
