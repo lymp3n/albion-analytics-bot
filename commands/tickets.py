@@ -119,7 +119,7 @@ class TicketModal(ui.Modal):
         embed.add_field(name="Status", value="⏳ Awaiting Mentor", inline=True)
         embed.set_footer(text=f"Ticket ID: {ticket_id} | Created by {interaction.user.display_name}")
         
-        view = TicketControlView(self.bot, ticket_id, channel.id)
+        view = TicketControlView(self.bot)
         message = await channel.send(f"{interaction.user.mention}", embed=embed, view=view)
         
         await self.bot.db.execute("UPDATE tickets SET discord_message_id = $1 WHERE id = $2", message.id, ticket_id)
