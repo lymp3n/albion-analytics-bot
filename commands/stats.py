@@ -74,13 +74,12 @@ class StatsCommands(commands.Cog):
         embed.set_thumbnail(url=target.display_avatar.url)
         embed.set_footer(text=f"Data updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
         
-        # Отправляем графики как вложения
-        files = [
-            discord.File(trend_chart, filename="score_trend.png"),
-            discord.File(role_chart, filename="role_scores.png")
-        ]
+        # 1. Отправляем Embed с основной инфой
+        await ctx.respond(embed=embed)
         
-        await ctx.respond(embed=embed, files=files)
+        # 2. Отправляем графики по одному
+        await ctx.send(file=discord.File(trend_chart, filename="score_trend.png"))
+        await ctx.send(file=discord.File(role_chart, filename="role_scores.png"))
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):
@@ -129,10 +128,11 @@ class StatsCommands(commands.Cog):
         table_text += "```"
         
         embed.description = table_text
-        embed.set_image(url="attachment://top_players.png")
+        # embed.set_image(url="attachment://top_players.png") # Убираем картинку из эмбеда
         embed.set_footer(text="Top 10 players by average score")
         
-        await ctx.respond(embed=embed, file=discord.File(chart, filename="top_players.png"))
+        await ctx.respond(embed=embed)
+        await ctx.send(file=discord.File(chart, filename="top_players.png"))
 
     @discord.slash_command(name="stats_seed_test", description="Seed database with test session data (Founder only)")
     async def stats_seed_test(self, ctx: discord.ApplicationContext):
