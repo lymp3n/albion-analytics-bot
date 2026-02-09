@@ -280,30 +280,29 @@ class TicketControlView(ui.View):
     
     @ui.button(label="Claim Ticket", style=discord.ButtonStyle.primary, emoji="🔍", custom_id="claim_ticket")
     async def claim_ticket(self, button: ui.Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         # Use new permissions check
         if not await self.bot.permissions.require_mentor(interaction.user):
-            await interaction.response.send_message("❌ Only mentors can claim tickets.", ephemeral=True)
+            await interaction.followup.send("❌ Only mentors can claim tickets.", ephemeral=True)
             return
             
         ticket = await self.bot.db.fetchrow("SELECT id, status, mentor_id, discord_message_id FROM tickets WHERE discord_channel_id = $1", interaction.channel.id)
         if not ticket:
-            await interaction.response.send_message("❌ Ticket not found for this channel.", ephemeral=True)
-            return
-
-        if ticket['status'] != TicketStatus.AVAILABLE.value:
-            # Сравниваем с внутренним ID ментора
-            mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
-            if mentor and ticket['mentor_id'] == mentor['id']:
-                await interaction.response.send_message("✅ You already claimed this.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Already claimed by someone else.", ephemeral=True)
+            await interaction.followup.send("❌ Ticket not found for this channel.", ephemeral=True)
             return
             
         mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         if not mentor:
-            await interaction.response.send_message("❌ You are not registered in the system.", ephemeral=True)
+            await interaction.followup.send("❌ You are not registered in the system.", ephemeral=True)
             return
 
+        if ticket['status'] != TicketStatus.AVAILABLE.value:
+            if ticket['mentor_id'] == mentor['id']:
+                await interaction.followup.send("✅ You already claimed this.", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Already claimed by someone else.", ephemeral=True)
+            return
+            
         await self.bot.db.execute("""
             UPDATE tickets SET status = $1, mentor_id = $2, updated_at = $3 WHERE id = $4
         """, TicketStatus.IN_PROGRESS.value, mentor['id'], datetime.utcnow(), ticket['id'])
@@ -329,14 +328,21 @@ class TicketControlView(ui.View):
         embed.set_footer(text=f"Ticket ID: {ticket['id']} | Claimed by {interaction.user.display_name}")
         
         try:
+            # Отключаем кнопку Claim после успешного взятия
+            button.disabled = True
+            button.label = "Claimed"
+            button.style = discord.ButtonStyle.secondary
+            
             msg = await interaction.channel.fetch_message(ticket['discord_message_id'])
-            await msg.edit(embed=embed)
-        except: pass
+            await msg.edit(embed=embed, view=self)
+        except Exception as e:
+            print(f"⚠️ Failed to update ticket message: {e}")
         
-        await interaction.response.send_message(f"✅ Claimed by {interaction.user.mention}! Use `/ticket rate` to evaluate.", ephemeral=False)
+        await interaction.followup.send(f"✅ Claimed by {interaction.user.mention}! Use `/ticket rate` to evaluate.", ephemeral=False)
     
     @ui.button(label="Rate Session", style=discord.ButtonStyle.green, emoji="⭐", custom_id="rate_session")
     async def rate_session(self, button: ui.Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         ticket = await self.bot.db.fetchrow("""
             SELECT t.id, t.status, t.mentor_id, t.player_id, t.replay_link, p.discord_id as p_did
             FROM tickets t JOIN players p ON p.id = t.player_id
@@ -344,27 +350,29 @@ class TicketControlView(ui.View):
         """, interaction.channel.id)
         
         if not ticket:
-            await interaction.response.send_message("❌ Ticket not found.", ephemeral=True)
+            await interaction.followup.send("❌ Ticket not found.", ephemeral=True)
             return
         
         is_mentor = await self.bot.permissions.require_mentor(interaction.user)
-        is_owner = ticket['mentor_id'] == interaction.user.id
+        
+        # Находим внутреннего игрока для сравнения ID
+        mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
+        is_owner = mentor and ticket['mentor_id'] == mentor['id']
         
         if not is_mentor or not is_owner:
-            await interaction.response.send_message("❌ Only the claimer can rate.", ephemeral=True)
+            await interaction.followup.send("❌ Only the claimer can rate.", ephemeral=True)
             return
         
         if ticket['status'] != TicketStatus.IN_PROGRESS.value:
-            await interaction.response.send_message("❌ Ticket must be 'In Progress'.", ephemeral=True)
+            await interaction.followup.send("❌ Ticket must be 'In Progress'.", ephemeral=True)
             return
         
-        mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         if not mentor:
-            await interaction.response.send_message("❌ You are not registered.", ephemeral=True)
+            await interaction.followup.send("❌ You are not registered.", ephemeral=True)
             return
             
         view = RatingSelectView(self.bot, ticket['id'], ticket['player_id'], mentor['id'], ticket['replay_link'])
-        await interaction.response.send_message("📊 **Session Evaluation**\nPlease select details:", view=view, ephemeral=True)
+        await interaction.followup.send("📊 **Session Evaluation**\nPlease select details:", view=view, ephemeral=True)
 
 
 class TicketsCommands(commands.Cog):
