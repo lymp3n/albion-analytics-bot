@@ -114,9 +114,11 @@ class TicketModal(ui.Modal):
             color=discord.Color.blue(),
             timestamp=datetime.utcnow()
         )
-        embed.add_field(name="Replay", value=f"[View Replay]({self.replay_url.value.strip()})", inline=False)
+        embed.add_field(name="Replay Link", value=self.replay_url.value.strip(), inline=False)
         embed.add_field(name="Role", value=normalized_role, inline=True)
         embed.add_field(name="Status", value="⏳ Awaiting Mentor", inline=True)
+        if self.description.value:
+            embed.add_field(name="Description", value=self.description.value, inline=False)
         embed.set_footer(text=f"Ticket ID: {ticket_id} | Created by {interaction.user.display_name}")
         
         view = TicketControlView(self.bot)
@@ -124,7 +126,13 @@ class TicketModal(ui.Modal):
         
         await self.bot.db.execute("UPDATE tickets SET discord_message_id = $1 WHERE id = $2", message.id, ticket_id)
         
-        await interaction.response.send_message(f"✅ Ticket created: {channel.mention}", ephemeral=True)
+        try:
+            await interaction.response.send_message(f"✅ Ticket created: {channel.mention}", ephemeral=True)
+        except Exception as e:
+            print(f"⚠️ Failed to send modal success message: {e}")
+            # fall back if already acknowledged
+            try: await interaction.followup.send(f"✅ Ticket created: {channel.mention}", ephemeral=True)
+            except: pass
 
 
 # --- Rating Flow (Selects + Modal) ---

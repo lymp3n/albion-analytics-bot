@@ -85,16 +85,19 @@ class Database:
             return cursor.lastrowid
         else:
             async with self.pool.acquire() as conn:
-                # Если это INSERT, пытаемся получить ID
-                query_stripped = query.strip().upper()
-                if query_stripped.startswith("INSERT"):
-                    if "RETURNING" not in query_stripped:
-                        # Убеждаемся, что возвращаем id
-                        query = query.rstrip(';') + " RETURNING id"
-                    result = await conn.fetchval(query, *clean_args)
-                    return result
+                query_trimmed = query.strip()
+                query_upper = query_trimmed.upper()
+                
+                if query_upper.startswith("INSERT"):
+                    # Обеспечиваем получение ID через RETURNING id
+                    if "RETURNING" not in query_upper:
+                        # Удаляем возможную точку с запятой в конце и добавляем RETURNING
+                        query_trimmed = query_trimmed.rstrip('; \t\n\r')
+                        query_trimmed += " RETURNING id"
+                    
+                    return await conn.fetchval(query_trimmed, *clean_args)
                 else:
-                    # Для UPDATE/DELETE возвращаем None или количество строк
+                    # Для UPDATE/DELETE/CREATE и т.д.
                     await conn.execute(query, *clean_args)
                     return None
     
