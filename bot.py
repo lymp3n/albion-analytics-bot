@@ -88,6 +88,14 @@ class AlbionBot(commands.Bot):
         logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         
+        # Log registered commands
+        commands = await self.tree.fetch_commands(guild=discord.Object(id=self.guild_id) if self.guild_id else None)
+        logger.info(f"✓ Registered {len(commands)} slash commands: {', '.join([c.name for c in commands])}")
+        
+        if not self.guild_id:
+            logger.warning("⚠️  GUILD_ID is not set! Global commands may take up to 1 hour to propagate.")
+            logger.warning("👉 Set GUILD_ID in Render Environment Variables for instant updates.")
+        
         # Установка статуса
         await self.change_presence(
             activity=discord.Game(name="Albion Analytics"),

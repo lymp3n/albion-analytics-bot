@@ -459,9 +459,9 @@ class TicketsCommands(commands.Cog):
              # Redirect to channel button logic logic essentially
              # But we need to update DB here too
              await self.bot.db.execute("""
-                UPDATE tickets SET status = 'in_progress', mentor_id = $1, updated_at = NOW() 
-                WHERE id = $2
-             """, ctx.author.id, ticket_id)
+                UPDATE tickets SET status = 'in_progress', mentor_id = $1, updated_at = $2 
+                WHERE id = $3
+             """, ctx.author.id, datetime.utcnow(), ticket_id)
              
              await ctx.respond(f"✅ Claimed! Go to <#{ticket['discord_channel_id']}>", ephemeral=True)
 
