@@ -67,32 +67,31 @@ class AlbionBot(commands.Bot):
         # Инициализация системы прав
         self.permissions = Permissions(self)
         
-        # Регистрация команд
-        await self.add_cog(AuthCommands(self, self.db, self.permissions))
-        await self.add_cog(StatsCommands(self, self.db, self.permissions))
-        await self.add_cog(TicketsCommands(self, self.db, self.permissions))
-        await self.add_cog(PayrollCommands(self, self.db, self.permissions))
-        await self.add_cog(MenuCommands(self, self.db, self.permissions))
+        # Регистрация команд (cogs)
+        self.add_cog(AuthCommands(self, self.db, self.permissions))
+        self.add_cog(StatsCommands(self, self.db, self.permissions))
+        self.add_cog(TicketsCommands(self, self.db, self.permissions))
+        self.add_cog(PayrollCommands(self, self.db, self.permissions))
+        self.add_cog(MenuCommands(self, self.db, self.permissions))
         logger.info("✓ Command cogs loaded")
-        
-        # Синхронизация слэш-команд
-        if self.guild_id:
-            guild = discord.Object(id=self.guild_id)
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            logger.info(f"✓ Slash commands synced to guild {self.guild_id}")
-        else:
-            await self.tree.sync()
-            logger.info("✓ Global slash commands synced")
     
     async def on_ready(self):
         """Обработчик готовности бота"""
         logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         
-        # Log registered commands
-        commands = await self.tree.fetch_commands(guild=discord.Object(id=self.guild_id) if self.guild_id else None)
-        logger.info(f"✓ Registered {len(commands)} slash commands: {', '.join([c.name for c in commands])}")
+        # Синхронизация слэш-команд (py-cord API)
+        if self.guild_id:
+            guild = discord.Object(id=self.guild_id)
+            await self.sync_commands(guild_ids=[self.guild_id])
+            logger.info(f"✓ Slash commands synced to guild {self.guild_id}")
+        else:
+            await self.sync_commands()
+            logger.info("✓ Global slash commands synced")
+        
+        # Логируем зарегистрированные команды
+        cmd_names = [cmd.name for cmd in self.pending_application_commands]
+        logger.info(f"✓ Registered {len(cmd_names)} slash commands: {', '.join(cmd_names)}")
         
         if not self.guild_id:
             logger.warning("⚠️  GUILD_ID is not set! Global commands may take up to 1 hour to propagate.")
