@@ -42,7 +42,7 @@ class StatsCommands(commands.Cog):
         
         # Получаем статистику
         stats = await self._get_player_stats(player['id'], days)
-        if not stats['sessions']:
+        if not stats or stats['session_count'] == 0:
             await ctx.respond(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
             return
         
@@ -100,13 +100,13 @@ class StatsCommands(commands.Cog):
             JOIN sessions s ON s.player_id = p.id
             WHERE s.session_date >= $1
             GROUP BY p.id, p.discord_id, p.nickname
-            HAVING COUNT(s.id) >= 3  -- Минимум 3 сессии для объективности
+            HAVING COUNT(s.id) >= 1  -- Изменили с 3 на 1 для более легкого тестирования
             ORDER BY avg_score DESC
             LIMIT 10
         """, start_date)
         
         if not top_players:
-            await ctx.respond("❌ Not enough data to generate top players list (minimum 3 sessions required).", ephemeral=True)
+            await ctx.respond("❌ Not enough data to generate top players list.", ephemeral=True)
             return
         
         # Подготавливаем данные для графика
@@ -130,9 +130,62 @@ class StatsCommands(commands.Cog):
         
         embed.description = table_text
         embed.set_image(url="attachment://top_players.png")
-        embed.set_footer(text="Minimum 3 sessions required for ranking")
+        embed.set_footer(text="Top 10 players by average score")
         
         await ctx.respond(embed=embed, file=discord.File(chart, filename="top_players.png"))
+
+    @discord.slash_command(name="stats_seed_test", description="Seed database with test session data (Founder only)")
+    async def stats_seed_test(self, ctx: discord.ApplicationContext):
+        """Команда для генерации тестовых данных статистики"""
+        await ctx.defer(ephemeral=True)
+        
+        if not await self.bot.permissions.require_founder(ctx.author):
+            await ctx.respond("❌ Только основатели могут использовать эту команду.", ephemeral=True)
+            return
+            
+        import random
+        from datetime import datetime, timedelta
+        
+        # Получаем всех игроков
+        players = await self.bot.db.fetch("SELECT id FROM players")
+        if not players:
+            await ctx.respond("❌ Нет игроков для заполнения статистики.", ephemeral=True)
+            return
+            
+        # Получаем типы контента
+        content_types = await self.bot.db.fetch("SELECT id FROM content")
+        if not content_types:
+            await ctx.respond("❌ Таблица контента пуста.", ephemeral=True)
+            return
+            
+        # Добавляем по 5 случайных сессий для каждого игрока
+        sessions_added = 0
+        roles = ['Tank', 'Healer', 'DPS', 'Support']
+        
+        for player in players:
+            for _ in range(5):
+                # Случайная дата за последние 30 дней
+                random_days = random.randint(0, 30)
+                session_date = datetime.utcnow() - timedelta(days=random_days)
+                
+                await self.bot.db.execute("""
+                    INSERT INTO sessions (
+                        ticket_id, player_id, content_id, score, role, 
+                        error_types, work_on, comments, mentor_id, session_date
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                """, 
+                0, # Fake ticket_id
+                player['id'],
+                random.choice(content_types)['id'],
+                random.uniform(5.0, 10.0), # Score 5-10
+                random.choice(roles),
+                "Positioning", "Stay alive", "Good job",
+                player['id'], # Self-reviewed for test
+                session_date
+                )
+                sessions_added += 1
+                
+        await ctx.respond(f"✅ Добавлено {sessions_added} тестовых сессий для {len(players)} игроков!", ephemeral=True)
     
     async def _get_player_stats(self, player_id: int, days: int = None):
         """Получение статистики игрока из БД"""

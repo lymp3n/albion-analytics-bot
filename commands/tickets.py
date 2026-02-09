@@ -263,12 +263,27 @@ class FeedbackModal(ui.Modal):
                     try: await player_user.send(embed=embed)
                     except: pass
             
-            await interaction.response.send_message("✅ Evaluation submitted! Channel closing in 10s...", ephemeral=True)
+            try:
+                await interaction.response.send_message("✅ Evaluation submitted! This channel will be deleted in 10 seconds.", ephemeral=True)
+            except:
+                try: await interaction.followup.send("✅ Evaluation submitted! This channel will be deleted in 10 seconds.", ephemeral=True)
+                except: pass
+
+            # Ждем 10 секунд и удаляем канал
             await asyncio.sleep(10)
-            if interaction.channel: await interaction.channel.delete()
+            try:
+                if interaction.channel:
+                    await interaction.channel.delete(reason="Ticket closed and evaluated")
+            except Exception as delete_error:
+                print(f"⚠️ Failed to delete ticket channel: {delete_error}")
             
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error saving: {e}", ephemeral=True)
+            print(f"❌ Error in FeedbackModal callback: {e}")
+            try:
+                await interaction.response.send_message(f"❌ Error saving results: {e}", ephemeral=True)
+            except:
+                try: await interaction.followup.send(f"❌ Error saving results: {e}", ephemeral=True)
+                except: pass
 
 
 class TicketControlView(ui.View):
