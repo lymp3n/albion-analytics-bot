@@ -15,7 +15,11 @@ class AuthCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         """Автоматическое обновление Discord ID гильдии при запуске"""
-        guild = discord.utils.get(self.bot.guilds, id=int(self.bot.config['GUILD_ID']))
+        guild_id = self.bot.guild_id or int(self.bot.config.get('GUILD_ID', 0))
+        if not guild_id:
+            return
+            
+        guild = discord.utils.get(self.bot.guilds, id=guild_id)
         if guild:
             # Обновляем Discord ID для всех гильдий в БД
             for db_guild in await self.bot.db.fetch("SELECT id, name FROM guilds WHERE discord_id = 0"):

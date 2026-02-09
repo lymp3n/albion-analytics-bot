@@ -69,41 +69,58 @@ class Database:
     
     async def execute(self, query: str, *args) -> Optional[int]:
         """Выполнение запроса"""
+        # Если передан кортеж как один аргумент, распаковываем его
+        if len(args) == 1 and isinstance(args[0], (list, tuple)):
+            clean_args = args[0]
+        else:
+            clean_args = args
+
         if self.is_sqlite:
             # Для SQLite заменяем $1, $2 на ? и преобразуем типы
             placeholders = query.count('$')
             for i in range(placeholders, 0, -1):
                 query = query.replace(f'${i}', '?')
-            cursor = await self.conn.execute(query, args)
+            cursor = await self.conn.execute(query, clean_args)
             await self.conn.commit()
             return cursor.lastrowid
         else:
             async with self.pool.acquire() as conn:
-                result = await conn.execute(query, *args)
+                # asyncpg execute ожидает распакованные аргументы
+                result = await conn.execute(query, *clean_args)
                 return result
     
     async def fetch(self, query: str, *args) -> list:
         """Получение данных"""
+        if len(args) == 1 and isinstance(args[0], (list, tuple)):
+            clean_args = args[0]
+        else:
+            clean_args = args
+
         if self.is_sqlite:
             placeholders = query.count('$')
             for i in range(placeholders, 0, -1):
                 query = query.replace(f'${i}', '?')
-            cursor = await self.conn.execute(query, args)
+            cursor = await self.conn.execute(query, clean_args)
             rows = await cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
             return [dict(zip(columns, row)) for row in rows]
         else:
             async with self.pool.acquire() as conn:
-                rows = await conn.fetch(query, *args)
+                rows = await conn.fetch(query, *clean_args)
                 return [dict(row) for row in rows]
     
     async def fetchrow(self, query: str, *args) -> Optional[Dict[str, Any]]:
         """Получение одной строки"""
+        if len(args) == 1 and isinstance(args[0], (list, tuple)):
+            clean_args = args[0]
+        else:
+            clean_args = args
+
         if self.is_sqlite:
             placeholders = query.count('$')
             for i in range(placeholders, 0, -1):
                 query = query.replace(f'${i}', '?')
-            cursor = await self.conn.execute(query, args)
+            cursor = await self.conn.execute(query, clean_args)
             row = await cursor.fetchone()
             if row:
                 columns = [desc[0] for desc in cursor.description]
@@ -111,7 +128,7 @@ class Database:
             return None
         else:
             async with self.pool.acquire() as conn:
-                row = await conn.fetchrow(query, *args)
+                row = await conn.fetchrow(query, *clean_args)
                 return dict(row) if row else None
     
     async def initialize_schema(self):
@@ -271,39 +288,39 @@ class Database:
                 INSERT INTO guilds (discord_id, name, code, founder_code, mentor_code)
                 VALUES ($1, $2, $3, $4, $5)
             """, 
-                (0, guild_data['name'], hashed_code, hashed_founder, hashed_mentor)
+                0, guild_data['name'], hashed_code, hashed_founder, hashed_mentor
             )
-        
-        # Заполняем контент
-        content_types = ['Castles', 'Crystal League', 'Open World', 'HG 5v5', 'Avalon', 'Scrims']
-        for content in content_types:
-            await self.execute(
-                "INSERT INTO content (name) VALUES ($1)",
-                (content,)
-            )
+    
+    # Заполняем контент
+    content_types = ['Castles', 'Crystal League', 'Open World', 'HG 5v5', 'Avalon', 'Scrims']
+    for content in content_types:
+        await self.execute(
+            "INSERT INTO content (name) VALUES ($1)",
+            content
+        )
     
     async def update_guild_discord_id(self, guild_name: str, discord_guild_id: int):
         """Обновление Discord ID гильдии"""
         await self.execute(
             "UPDATE guilds SET discord_id = $1 WHERE name = $2 AND discord_id = 0",
-            (discord_guild_id, guild_name)
+            discord_guild_id, guild_name
         )
     
     # Утилиты для работы с игроками
     async def get_player_by_discord_id(self, discord_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(
             "SELECT * FROM players WHERE discord_id = $1", 
-            (discord_id,)
+            discord_id
         )
     
     async def get_guild_by_code(self, code_hash: str) -> Optional[Dict[str, Any]]:
         return await self.fetchrow("""
             SELECT * FROM guilds 
             WHERE code = $1 OR founder_code = $2 OR mentor_code = $3
-        """, (code_hash, code_hash, code_hash))
+        """, code_hash, code_hash, code_hash)
     
     async def get_guild_by_discord_id(self, discord_guild_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(
             "SELECT * FROM guilds WHERE discord_id = $1", 
-            (discord_guild_id,)
+            discord_guild_id
         )

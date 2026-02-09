@@ -65,7 +65,7 @@ class TicketModal(ui.Modal):
             return
         
         # Create Channel Logic
-        category_id = self.bot.config.get('tickets_category_id')
+        category_id = self.bot.tickets_category_id or self.bot.config.get('tickets_category_id')
         category = discord.utils.get(interaction.guild.categories, id=category_id)
         
         if not category:
