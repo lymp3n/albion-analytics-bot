@@ -47,12 +47,6 @@ class TicketModal(ui.Modal):
         self.add_item(self.description)
     
     async def callback(self, interaction: discord.Interaction):
-        # Validate Replay
-        is_valid, error_msg = ReplayValidator.validate_replay_url(self.replay_url.value)
-        if not is_valid:
-            await interaction.response.send_message(f"❌ Invalid replay URL: {error_msg}", ephemeral=True)
-            return
-        
         # Validate Role
         normalized_role = RoleValidator.normalize_role(self.role.value)
         if not normalized_role:

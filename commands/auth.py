@@ -41,6 +41,7 @@ class AuthCommands(commands.Cog):
     @option("code", description="Guild invitation code")
     async def register(self, ctx: discord.ApplicationContext, code: str):
         """Регистрация нового игрока в гильдии"""
+        await ctx.defer(ephemeral=True)
         # Хешируем код для сравнения с БД
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         
@@ -120,6 +121,7 @@ class AuthCommands(commands.Cog):
     @option("user", required=False, description="Target user (for approve/promote/demote)")
     async def guild_management(self, ctx: discord.ApplicationContext, action: str, user: discord.Member = None):
         """Управление гильдией (только для фаундеров)"""
+        await ctx.defer(ephemeral=True)
         # Проверка прав фаундера
         if not await self.bot.permissions.require_founder(ctx.author):
             await ctx.respond("❌ Only guild founders can use this command.", ephemeral=True)

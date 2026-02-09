@@ -17,6 +17,8 @@ class StatsCommands(commands.Cog):
     @option("period", choices=["7 days", "30 days", "all time"], default="30 days")
     async def stats(self, ctx: discord.ApplicationContext, target: discord.Member = None, period: str = "30 days"):
         """Просмотр статистики игрока"""
+        await ctx.defer()  # Сразу деферим, так как работа с БД и графиками долгая
+        
         # Определяем целевого игрока
         if target is None:
             target = ctx.author
@@ -45,8 +47,6 @@ class StatsCommands(commands.Cog):
             return
         
         # Генерируем графики
-        await ctx.defer()  # Для долгих операций
-        
         # 1. Тренд очков
         trend_chart = self.chart_generator.generate_score_trend(
             stats['trend_weeks'], 

@@ -14,6 +14,7 @@ class PayrollCommands(commands.Cog):
     @option("days", description="Number of days to look back (default 14)", default=14, min_value=1, max_value=365)
     async def payroll(self, ctx: discord.ApplicationContext, total_amount: int, days: int = 14):
         """Calculate payroll for mentors based on sessions closed in the last N days."""
+        await ctx.defer()
         
         # Check permissions (Founder only)
         if not await self.bot.permissions.require_founder(ctx.author):
