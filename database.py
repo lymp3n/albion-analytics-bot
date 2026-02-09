@@ -291,13 +291,13 @@ class Database:
                 0, guild_data['name'], hashed_code, hashed_founder, hashed_mentor
             )
     
-    # Заполняем контент
-    content_types = ['Castles', 'Crystal League', 'Open World', 'HG 5v5', 'Avalon', 'Scrims']
-    for content in content_types:
-        await self.execute(
-            "INSERT INTO content (name) VALUES ($1)",
-            content
-        )
+        # Заполняем контент
+        content_types = ['Castles', 'Crystal League', 'Open World', 'HG 5v5', 'Avalon', 'Scrims']
+        for content in content_types:
+            await self.execute(
+                "INSERT INTO content (name) VALUES ($1)",
+                content
+            )
     
     async def update_guild_discord_id(self, guild_name: str, discord_guild_id: int):
         """Обновление Discord ID гильдии"""
