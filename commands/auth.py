@@ -15,6 +15,17 @@ class AuthCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         """Автоматическое обновление Discord ID гильдии при запуске"""
+        # Ждем подключения к БД, если оно еще не произошло (в bot.py)
+        import asyncio
+        for _ in range(10):
+            if self.bot.db.is_sqlite or (self.bot.db.pool is not None):
+                break
+            await asyncio.sleep(1)
+        
+        if not self.bot.db.is_sqlite and self.bot.db.pool is None:
+            print("⚠️ AuthCommands: Database not connected after wait, skipping on_ready sync")
+            return
+
         guild_id = self.bot.guild_id or int(self.bot.config.get('GUILD_ID', 0))
         if not guild_id:
             return

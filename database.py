@@ -147,7 +147,7 @@ class Database:
         await self.execute(f"""
             CREATE TABLE IF NOT EXISTS guilds (
                 id {pk_type},
-                discord_id {bigint_type} UNIQUE NOT NULL,
+                discord_id {bigint_type} NOT NULL,
                 name TEXT NOT NULL,
                 code TEXT NOT NULL UNIQUE,
                 founder_code TEXT NOT NULL UNIQUE,
@@ -157,6 +157,14 @@ class Database:
                 created_at {timestamp_default}
             )
         """)
+        
+        # Если БД PostgreSQL, на всякий случай удаляем UNIQUE ограничение с discord_id, 
+        # чтобы можно было иметь несколько гильдий с ID 0 при инициализации
+        if not self.is_sqlite:
+            try:
+                await self.execute("ALTER TABLE guilds DROP CONSTRAINT IF EXISTS guilds_discord_id_key")
+            except:
+                pass
         
         # Таблица игроков
         await self.execute(f"""
