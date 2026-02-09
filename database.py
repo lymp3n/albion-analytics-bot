@@ -115,27 +115,37 @@ class Database:
                 return dict(row) if row else None
     
     async def initialize_schema(self):
-        """Создание таблиц"""
+        """Создание таблиц с поддержкой SQLite и PostgreSQL"""
+        # Определяем синтаксис в зависимости от типа БД
+        if self.is_sqlite:
+            pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
+            bigint_type = "BIGINT"
+            timestamp_default = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        else:
+            pk_type = "SERIAL PRIMARY KEY"
+            bigint_type = "BIGINT"
+            timestamp_default = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        
         # Таблица гильдий
-        await self.execute("""
+        await self.execute(f"""
             CREATE TABLE IF NOT EXISTS guilds (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                discord_id BIGINT UNIQUE NOT NULL,
+                id {pk_type},
+                discord_id {bigint_type} UNIQUE NOT NULL,
                 name TEXT NOT NULL,
                 code TEXT NOT NULL UNIQUE,
                 founder_code TEXT NOT NULL UNIQUE,
                 mentor_code TEXT NOT NULL UNIQUE,
                 kill_fame INTEGER DEFAULT 0,
                 death_fame INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at {timestamp_default}
             )
         """)
         
         # Таблица игроков
-        await self.execute("""
+        await self.execute(f"""
             CREATE TABLE IF NOT EXISTS players (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                discord_id BIGINT UNIQUE NOT NULL,
+                id {pk_type},
+                discord_id {bigint_type} UNIQUE NOT NULL,
                 discord_username TEXT NOT NULL,
                 nickname TEXT NOT NULL,
                 guild_id INTEGER NOT NULL,
@@ -144,24 +154,25 @@ class Database:
                 description TEXT,
                 specialization TEXT,
                 balance INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at {timestamp_default},
                 FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
             )
         """)
         
         # Таблица контента
-        await self.execute("""
+        await self.execute(f"""
             CREATE TABLE IF NOT EXISTS content (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {pk_type},
                 name TEXT UNIQUE NOT NULL
             )
         """)
         
         # Таблица тикетов
-        await self.execute("""
+        await self.execute(f"""
             CREATE TABLE IF NOT EXISTS tickets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                discord_channel_id BIGINT UNIQUE,
+                id {pk_type},
+                discord_channel_id {bigint_type} UNIQUE,
+                discord_message_id {bigint_type},
                 player_id INTEGER NOT NULL,
                 mentor_id INTEGER,
                 replay_link TEXT NOT NULL,
@@ -169,8 +180,8 @@ class Database:
                 role TEXT NOT NULL,
                 description TEXT,
                 status TEXT NOT NULL DEFAULT 'available',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at {timestamp_default},
+                updated_at {timestamp_default},
                 closed_at TIMESTAMP,
                 FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
                 FOREIGN KEY (mentor_id) REFERENCES players(id) ON DELETE SET NULL
@@ -178,9 +189,9 @@ class Database:
         """)
         
         # Таблица сессий
-        await self.execute("""
+        await self.execute(f"""
             CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {pk_type},
                 ticket_id INTEGER NOT NULL,
                 player_id INTEGER NOT NULL,
                 content_id INTEGER NOT NULL,
@@ -190,7 +201,7 @@ class Database:
                 work_on TEXT,
                 comments TEXT,
                 mentor_id INTEGER NOT NULL,
-                session_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                session_date {timestamp_default},
                 FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
                 FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
                 FOREIGN KEY (content_id) REFERENCES content(id) ON DELETE CASCADE,
@@ -199,16 +210,16 @@ class Database:
         """)
         
         # Таблица целей
-        await self.execute("""
+        await self.execute(f"""
             CREATE TABLE IF NOT EXISTS goals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {pk_type},
                 player_id INTEGER NOT NULL,
                 created_by_id INTEGER,
                 title TEXT NOT NULL,
                 description TEXT,
                 status TEXT DEFAULT 'in_progress',
                 due_date TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at {timestamp_default},
                 metric TEXT,
                 metric_target REAL,
                 metric_start_value REAL,
@@ -220,12 +231,12 @@ class Database:
             )
         """)
         
-        # Индексы (для SQLite)
+        # Индексы
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_sessions_player_date ON sessions(player_id, session_date)")
         
-        # Триггер для обновления updated_at в SQLite
+        # Триггер для обновления updated_at (только для SQLite)
         if self.is_sqlite:
             await self.execute("""
                 CREATE TRIGGER IF NOT EXISTS update_tickets_updated_at
