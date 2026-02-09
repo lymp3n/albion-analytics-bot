@@ -79,39 +79,46 @@ class AlbionBot(commands.Bot):
         logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         
-        # Подключение к БД
-        await self.db.connect()
-        logger.info("✓ Database connected")
-        
-        # Инициализация системы прав
+        # 1. Инициализация системы прав
         self.permissions = Permissions(self)
         
-        # Регистрация команд (cogs)
-        self.add_cog(AuthCommands(self, self.db, self.permissions))
-        self.add_cog(StatsCommands(self, self.db, self.permissions))
-        self.add_cog(TicketsCommands(self, self.db, self.permissions))
-        self.add_cog(PayrollCommands(self, self.db, self.permissions))
-        self.add_cog(MenuCommands(self, self.db, self.permissions))
-        logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
+        # 2. Регистрация команд (cogs) - загружаем ДО подключения к БД, чтобы видеть логи
+        try:
+            self.add_cog(AuthCommands(self, self.db, self.permissions))
+            self.add_cog(StatsCommands(self, self.db, self.permissions))
+            self.add_cog(TicketsCommands(self, self.db, self.permissions))
+            self.add_cog(PayrollCommands(self, self.db, self.permissions))
+            self.add_cog(MenuCommands(self, self.db, self.permissions))
+            logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
+        except Exception as e:
+            logger.error(f"❌ Failed to load cogs: {e}")
+
+        # 3. Подключение к БД (с обработкой ошибок)
+        try:
+            await self.db.connect()
+            logger.info("✓ Database connected")
+        except Exception as e:
+            logger.error(f"❌ Database connection failed: {e}")
+            logger.error("Check DATABASE_URL in Render Environment Variables.")
+            # Не падаем полностью, чтобы бот мог хотя бы отвечать на ping
         
-        # Синхронизация слэш-команд
+        # 4. Синхронизация слэш-команд
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
-        if self.guild_id:
-            logger.info(f"⏳ Syncing to guild {self.guild_id}")
-            # Explicit sync for py-cord
-            await self.sync_commands(guild_ids=[self.guild_id], force=True)
-            logger.info(f"✓ Slash commands synced to guild {self.guild_id}")
-        else:
-            await self.sync_commands(force=True)
-            logger.info("✓ Global slash commands synced")
+        try:
+            if self.guild_id:
+                logger.info(f"⏳ Syncing to guild {self.guild_id}")
+                await self.sync_commands(guild_ids=[self.guild_id], force=True)
+                logger.info(f"✓ Slash commands synced to guild {self.guild_id}")
+            else:
+                await self.sync_commands(force=True)
+                logger.info("✓ Global slash commands synced")
+        except Exception as e:
+             logger.error(f"❌ Command sync failed: {e}")
         
         # Логируем
         cmds = self.application_commands
         logger.info(f"✓ Registered {len(cmds)} commands: {', '.join([c.name for c in cmds])}")
-        
-        if not self.guild_id:
-            logger.warning("⚠️  GUILD_ID is not set! Global commands may take up to 1 hour to propagate.")
         
         # Установка статуса
         await self.change_presence(
