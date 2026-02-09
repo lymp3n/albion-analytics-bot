@@ -1,0 +1,23 @@
+# Конфигурация бота
+bot:
+  prefix: "!"
+  status: "Albion Analytics"
+  log_level: "INFO"
+
+# Настройки гильдий (пример для инициализации)
+guilds:
+  - name: "Take a Break"
+    code: "TAB123"
+    founder_code: "FOUNDARTAB_UIO123" # Fixed typo in original file if any, or just keeping consistent
+    mentor_code: "MENTORTAB_UIO942"
+  
+  - name: "Grey Knights"
+    code: "GK456"
+    founder_code: "FOUNDERGK_XYZ789"
+    mentor_code: "MENTORGK_ABC123"
+
+# Роли Discord (IDs)
+roles:
+  member_id: 1470393989072162856
+  mentor_id: 1470394066247221258
+  founder_id: 1470394116469821574

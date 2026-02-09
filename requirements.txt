@@ -1,0 +1,9 @@
+py-cord==2.5.0
+python-dotenv==1.0.1
+aiosqlite==0.20.0
+matplotlib==3.10.8
+numpy==2.4.2
+pillow==12.1.0
+pyyaml==6.0.2
+structlog==24.1.0
+colorama==0.4.6
