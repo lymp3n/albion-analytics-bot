@@ -12,6 +12,10 @@ class AuthCommands(commands.Cog):
         self.bot = bot
         self.db = db
         self.permissions = permissions
+        print("✓ AuthCommands initialized")
+
+def setup(bot):
+    pass
     
     @commands.Cog.listener()
     async def on_ready(self):

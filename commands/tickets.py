@@ -356,117 +356,115 @@ class TicketsCommands(commands.Cog):
         self.bot = bot
         self.db = db
         self.permissions = permissions
+        print("✓ TicketsCommands initialized")
+
+def setup(bot):
+    pass
         
     @commands.Cog.listener()
     async def on_ready(self):
         """Register persistent view"""
         self.bot.add_view(TicketControlView(self.bot))
 
-    @discord.slash_command(name="ticket", description="Manage tickets")
-    @option("action", choices=["create", "list", "claim", "rate"])
-    @option("ticket_id", required=False)
-    async def ticket(self, ctx: discord.ApplicationContext, action: str, ticket_id: int = None):
+    ticket_group = discord.SlashCommandGroup("ticket", "Manage tickets")
+
+    @ticket_group.command(name="create", description="Create a new ticket")
+    async def ticket_create(self, ctx: discord.ApplicationContext):
+        if not await self.permissions.require_member(ctx.author):
+            await ctx.respond("❌ You must be a Member to create tickets.", ephemeral=True)
+            return
         
-        if action == "create":
-            if not await self.permissions.require_member(ctx.author):
-                await ctx.respond("❌ You must be a Member to create tickets.", ephemeral=True)
-                return
+        player = await self.db.get_player_by_discord_id(ctx.author.id)
+        if not player:
+            await ctx.respond("❌ Please use `/register <code>` first.", ephemeral=True)
+            return
             
-            player = await self.db.get_player_by_discord_id(ctx.author.id)
-            if not player:
-                await ctx.respond("❌ Please use `/register <code>` first.", ephemeral=True)
-                return
-                
-            modal = TicketModal(self.bot, player['id'], player['guild_id'])
-            await ctx.send_modal(modal)
+        modal = TicketModal(self.bot, player['id'], player['guild_id'])
+        await ctx.send_modal(modal)
+
+    @ticket_group.command(name="list", description="List active tickets")
+    async def ticket_list(self, ctx: discord.ApplicationContext):
+        if not await self.permissions.require_member(ctx.author):
+            await ctx.respond("❌ Access denied.", ephemeral=True)
+            return
             
-        elif action == "rate":
-            # Command version of rate (can be used if button fails)
-            if not await self.permissions.require_mentor(ctx.author):
-                await ctx.respond("❌ Only mentors can rate.", ephemeral=True)
-                return
-                
-            ticket = await self.db.fetchrow("""
-                SELECT t.*, p.discord_id as p_did FROM tickets t 
-                JOIN players p ON p.id = t.player_id 
-                WHERE t.discord_channel_id = $1
-            """, ctx.channel.id)
+        guild_id = await self.permissions.get_guild_id(ctx.author)
+        is_mentor = await self.permissions.require_mentor(ctx.author)
+        
+        if is_mentor:
+            tickets = await self.db.fetch("""
+            SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
+            FROM tickets t JOIN players p ON p.id = t.player_id
+            WHERE p.guild_id = $1 AND t.status IN ('available', 'in_progress')
+            AND (t.status = 'available' OR t.mentor_id = $2)
+            ORDER BY t.created_at ASC
+            """, guild_id, ctx.author.id)
+        else:
+            tickets = await self.db.fetch("""
+            SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
+            FROM tickets t JOIN players p ON p.id = t.player_id
+            WHERE p.discord_id = $1 AND t.status != 'closed'
+            ORDER BY t.created_at DESC
+            """, ctx.author.id)
             
-            if not ticket:
-                await ctx.respond("❌ Not a ticket channel.", ephemeral=True)
-                return
-                
-            if ticket['mentor_id'] != ctx.author.id:
-                await ctx.respond("❌ You must claim this ticket first.", ephemeral=True)
-                return
-                
-            view = RatingSelectView(self.bot, ticket['id'], ticket['p_did'], ctx.author.id, ticket['replay_link'])
-            await ctx.respond("📊 **Session Evaluation**\nPlease select details:", view=view, ephemeral=True)
+        if not tickets:
+            await ctx.respond("📭 No active tickets found.", ephemeral=True)
+            return
+            
+        embed = discord.Embed(title="🎫 Active Tickets", color=discord.Color.blue())
+        for t in tickets[:10]:
+            emoji = "⏳" if t['status'] == 'available' else "BETA"
+            if t['status'] == 'in_progress': emoji = "🔍"
+            embed.add_field(
+                name=f"{emoji} #{t['id']} | {t['role']}",
+                value=f"By <@{(t['discord_id'])}>\nStatus: {t['status']}",
+                inline=False
+            )
+        await ctx.respond(embed=embed, ephemeral=True)
 
-        elif action == "list":
-             if not await self.permissions.require_member(ctx.author):
-                await ctx.respond("❌ Access denied.", ephemeral=True)
-                return
-             
-             guild_id = await self.permissions.get_guild_id(ctx.author)
-             is_mentor = await self.permissions.require_mentor(ctx.author)
-             
-             if is_mentor:
-                 tickets = await self.db.fetch("""
-                    SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
-                    FROM tickets t JOIN players p ON p.id = t.player_id
-                    WHERE p.guild_id = $1 AND t.status IN ('available', 'in_progress')
-                    AND (t.status = 'available' OR t.mentor_id = $2)
-                    ORDER BY t.created_at ASC
-                 """, guild_id, ctx.author.id)
-             else:
-                 tickets = await self.db.fetch("""
-                    SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
-                    FROM tickets t JOIN players p ON p.id = t.player_id
-                    WHERE p.discord_id = $1 AND t.status != 'closed'
-                    ORDER BY t.created_at DESC
-                 """, ctx.author.id)
-                 
-             if not tickets:
-                 await ctx.respond("📭 No active tickets found.", ephemeral=True)
-                 return
-                 
-             embed = discord.Embed(title="🎫 Active Tickets", color=discord.Color.blue())
-             for t in tickets[:10]:
-                 emoji = "⏳" if t['status'] == 'available' else "BETA"
-                 if t['status'] == 'in_progress': emoji = "🔍"
-                 embed.add_field(
-                     name=f"{emoji} #{t['id']} | {t['role']}",
-                     value=f"By <@{(t['discord_id'])}>\nStatus: {t['status']}",
-                     inline=False
-                 )
-             await ctx.respond(embed=embed, ephemeral=True)
+    @ticket_group.command(name="claim", description="Claim a ticket (Mentors only)")
+    @option("ticket_id", description="ID of the ticket to claim")
+    async def ticket_claim(self, ctx: discord.ApplicationContext, ticket_id: int):
+        if not await self.permissions.require_mentor(ctx.author):
+            await ctx.respond("❌ Mentors only.", ephemeral=True)
+            return
+            
+        ticket = await self.db.fetchrow("SELECT discord_channel_id FROM tickets WHERE id = $1 AND status = 'available'", ticket_id)
+        if not ticket:
+            await ctx.respond("❌ Ticket not found or not available.", ephemeral=True)
+            return
+            
+        await self.bot.db.execute("""
+        UPDATE tickets SET status = 'in_progress', mentor_id = $1, updated_at = $2 
+        WHERE id = $3
+        """, ctx.author.id, datetime.utcnow(), ticket_id)
+        
+        await ctx.respond(f"✅ Claimed! Go to <#{ticket['discord_channel_id']}>", ephemeral=True)
 
-        elif action == "claim":
-             if not ticket_id:
-                 await ctx.respond("❌ Provide ticket ID", ephemeral=True)
-                 return
-             
-             if not await self.permissions.require_mentor(ctx.author):
-                 await ctx.respond("❌ Mentors only.", ephemeral=True)
-                 return
-                 
-             ticket = await self.db.fetchrow("SELECT discord_channel_id FROM tickets WHERE id = $1 AND status = 'available'", ticket_id)
-             if not ticket:
-                 await ctx.respond("❌ Ticket not found or not available.", ephemeral=True)
-                 return
-                 
-             # Redirect to channel button logic logic essentially
-             # But we need to update DB here too
-             await self.bot.db.execute("""
-                UPDATE tickets SET status = 'in_progress', mentor_id = $1, updated_at = $2 
-                WHERE id = $3
-             """, ctx.author.id, datetime.utcnow(), ticket_id)
-             
-             await ctx.respond(f"✅ Claimed! Go to <#{ticket['discord_channel_id']}>", ephemeral=True)
-
-
-    @discord.slash_command(name="ticket_info", description="View detailed info about a ticket")
+    @ticket_group.command(name="rate", description="Rate a ticket (Mentors only)")
+    async def ticket_rate(self, ctx: discord.ApplicationContext):
+        if not await self.permissions.require_mentor(ctx.author):
+            await ctx.respond("❌ Only mentors can rate.", ephemeral=True)
+            return
+            
+        ticket = await self.db.fetchrow("""
+            SELECT t.*, p.discord_id as p_did FROM tickets t 
+            JOIN players p ON p.id = t.player_id 
+            WHERE t.discord_channel_id = $1
+        """, ctx.channel.id)
+        
+        if not ticket:
+            await ctx.respond("❌ Not a ticket channel.", ephemeral=True)
+            return
+            
+        if ticket['mentor_id'] != ctx.author.id:
+            await ctx.respond("❌ You must claim this ticket first.", ephemeral=True)
+            return
+            
+        view = RatingSelectView(self.bot, ticket['id'], ticket['p_did'], ctx.author.id, ticket['replay_link'])
+        await ctx.respond("📊 **Session Evaluation**\nPlease select details:", view=view, ephemeral=True)
+    
+    @ticket_group.command(name="info", description="View ticket details (Mentors only)")
     @option("ticket_id", description="Ticket ID to view")
     async def ticket_info(self, ctx: discord.ApplicationContext, ticket_id: int):
         """Просмотр детальной информации о тикете (для менторов/фаундеров)"""

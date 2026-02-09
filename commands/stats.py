@@ -13,6 +13,10 @@ class StatsCommands(commands.Cog):
         self.db = db
         self.permissions = permissions
         self.chart_generator = ChartGenerator()
+        print("✓ StatsCommands initialized")
+
+def setup(bot):
+    pass
     
     @discord.slash_command(name="stats", description="View player statistics")
     @option("target", description="Player to view stats for (leave empty for yourself)", required=False)

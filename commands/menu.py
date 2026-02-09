@@ -169,6 +169,10 @@ class MenuCommands(commands.Cog):
         self.bot = bot
         self.db = db
         self.permissions = permissions
+        print("✓ MenuCommands initialized")
+
+def setup(bot):
+    pass
     
     @discord.slash_command(name="menu", description="Открыть главное меню бота")
     async def menu(self, ctx: discord.ApplicationContext):

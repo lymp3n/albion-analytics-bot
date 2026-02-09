@@ -9,6 +9,10 @@ class PayrollCommands(commands.Cog):
         self.bot = bot
         self.db = db
         self.permissions = permissions
+        print("✓ PayrollCommands initialized")
+
+def setup(bot):
+    pass
 
     @discord.slash_command(name="payroll", description="Calculate mentor payroll")
     @option("total_amount", description="Total amount to distribute", min_value=1)
