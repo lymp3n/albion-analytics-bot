@@ -352,15 +352,10 @@ class TicketControlView(ui.View):
 
 
 class TicketsCommands(commands.Cog):
-    def __init__(self, bot, db, permissions: Permissions):
+    def __init__(self, bot):
         self.bot = bot
-        self.db = db
-        self.permissions = permissions
         print("✓ TicketsCommands initialized")
-
-def setup(bot):
-    pass
-        
+    
     @commands.Cog.listener()
     async def on_ready(self):
         """Register persistent view"""
@@ -370,11 +365,11 @@ def setup(bot):
 
     @ticket_group.command(name="create", description="Create a new ticket")
     async def ticket_create(self, ctx: discord.ApplicationContext):
-        if not await self.permissions.require_member(ctx.author):
+        if not await self.bot.permissions.require_member(ctx.author):
             await ctx.respond("❌ You must be a Member to create tickets.", ephemeral=True)
             return
         
-        player = await self.db.get_player_by_discord_id(ctx.author.id)
+        player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         if not player:
             await ctx.respond("❌ Please use `/register <code>` first.", ephemeral=True)
             return
@@ -384,15 +379,15 @@ def setup(bot):
 
     @ticket_group.command(name="list", description="List active tickets")
     async def ticket_list(self, ctx: discord.ApplicationContext):
-        if not await self.permissions.require_member(ctx.author):
+        if not await self.bot.permissions.require_member(ctx.author):
             await ctx.respond("❌ Access denied.", ephemeral=True)
             return
             
-        guild_id = await self.permissions.get_guild_id(ctx.author)
-        is_mentor = await self.permissions.require_mentor(ctx.author)
+        guild_id = await self.bot.permissions.get_guild_id(ctx.author)
+        is_mentor = await self.bot.permissions.require_mentor(ctx.author)
         
         if is_mentor:
-            tickets = await self.db.fetch("""
+            tickets = await self.bot.db.fetch("""
             SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
             FROM tickets t JOIN players p ON p.id = t.player_id
             WHERE p.guild_id = $1 AND t.status IN ('available', 'in_progress')
@@ -400,7 +395,7 @@ def setup(bot):
             ORDER BY t.created_at ASC
             """, guild_id, ctx.author.id)
         else:
-            tickets = await self.db.fetch("""
+            tickets = await self.bot.db.fetch("""
             SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
             FROM tickets t JOIN players p ON p.id = t.player_id
             WHERE p.discord_id = $1 AND t.status != 'closed'
@@ -425,11 +420,11 @@ def setup(bot):
     @ticket_group.command(name="claim", description="Claim a ticket (Mentors only)")
     @option("ticket_id", description="ID of the ticket to claim")
     async def ticket_claim(self, ctx: discord.ApplicationContext, ticket_id: int):
-        if not await self.permissions.require_mentor(ctx.author):
+        if not await self.bot.permissions.require_mentor(ctx.author):
             await ctx.respond("❌ Mentors only.", ephemeral=True)
             return
             
-        ticket = await self.db.fetchrow("SELECT discord_channel_id FROM tickets WHERE id = $1 AND status = 'available'", ticket_id)
+        ticket = await self.bot.db.fetchrow("SELECT discord_channel_id FROM tickets WHERE id = $1 AND status = 'available'", ticket_id)
         if not ticket:
             await ctx.respond("❌ Ticket not found or not available.", ephemeral=True)
             return
@@ -443,11 +438,11 @@ def setup(bot):
 
     @ticket_group.command(name="rate", description="Rate a ticket (Mentors only)")
     async def ticket_rate(self, ctx: discord.ApplicationContext):
-        if not await self.permissions.require_mentor(ctx.author):
+        if not await self.bot.permissions.require_mentor(ctx.author):
             await ctx.respond("❌ Only mentors can rate.", ephemeral=True)
             return
             
-        ticket = await self.db.fetchrow("""
+        ticket = await self.bot.db.fetchrow("""
             SELECT t.*, p.discord_id as p_did FROM tickets t 
             JOIN players p ON p.id = t.player_id 
             WHERE t.discord_channel_id = $1
@@ -469,12 +464,12 @@ def setup(bot):
     async def ticket_info(self, ctx: discord.ApplicationContext, ticket_id: int):
         """Просмотр детальной информации о тикете (для менторов/фаундеров)"""
         # Проверка прав ментора
-        if not await self.permissions.require_mentor(ctx.author):
+        if not await self.bot.permissions.require_mentor(ctx.author):
             await ctx.respond("❌ Only mentors and founders can view ticket details.", ephemeral=True)
             return
         
         # Получение данных тикета
-        ticket = await self.db.fetchrow("""
+        ticket = await self.bot.db.fetchrow("""
             SELECT 
                 t.*,
                 p1.nickname as player_nickname,
@@ -514,3 +509,6 @@ def setup(bot):
         embed.set_footer(text=f"Channel ID: {ticket['discord_channel_id'] or 'N/A'}")
         
         await ctx.respond(embed=embed, ephemeral=True)
+
+def setup(bot):
+    bot.add_cog(TicketsCommands(bot))

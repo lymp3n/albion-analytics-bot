@@ -3,20 +3,14 @@ from discord import option
 from discord.ext import commands
 from datetime import datetime, timedelta
 from services.chart_generator import ChartGenerator
-from utils.permissions import Permissions
 
 class StatsCommands(commands.Cog):
     """Команды для просмотра статистики"""
     
-    def __init__(self, bot, db, permissions: Permissions):
+    def __init__(self, bot):
         self.bot = bot
-        self.db = db
-        self.permissions = permissions
         self.chart_generator = ChartGenerator()
         print("✓ StatsCommands initialized")
-
-def setup(bot):
-    pass
     
     @discord.slash_command(name="stats", description="View player statistics")
     @option("target", description="Player to view stats for (leave empty for yourself)", required=False)
@@ -29,14 +23,14 @@ def setup(bot):
         
         # Проверяем права доступа
         is_self = target.id == ctx.author.id
-        is_mentor = await self.permissions.require_mentor(ctx.author)
+        is_mentor = await self.bot.permissions.require_mentor(ctx.author)
         
         if not is_self and not is_mentor:
             await ctx.respond("❌ Only mentors and founders can view other players' statistics.", ephemeral=True)
             return
         
         # Получаем данные игрока
-        player = await self.db.get_player_by_discord_id(target.id)
+        player = await self.bot.db.get_player_by_discord_id(target.id)
         if not player:
             await ctx.respond(f"❌ Player {target.mention} is not registered in the system.", ephemeral=True)
             return
@@ -96,7 +90,7 @@ def setup(bot):
         # Получаем топ-10 за последние 30 дней
         start_date = datetime.utcnow() - timedelta(days=30)
         
-        top_players = await self.db.fetch("""
+        top_players = await self.bot.db.fetch("""
             SELECT 
                 p.discord_id,
                 p.nickname,
@@ -169,28 +163,24 @@ def setup(bot):
             FROM sessions s
             WHERE {where_str}
         """
-        stats = await self.db.fetchrow(stats_query, *params)
+        stats = await self.bot.db.fetchrow(stats_query, *params)
         
         if not stats or not stats['session_count']:
             return {'sessions': [], 'avg_score': 0, 'session_count': 0}
         
-        # Тренд по неделям (Note: to_char is Postgres specific, SQLite uses strftime)
-        # We need a cross-db way. Usually best to fetch date and aggregate in python if DB agnostic.
-        # But for now let's use SQLite syntax as default if we assume local dev is SQLite?
-        # Or better: just select date and score and aggregate in python.
+        # Тренд по неделям
         trend_query = f"""
             SELECT s.session_date, s.score
             FROM sessions s
             WHERE {where_str}
             ORDER BY s.session_date ASC
         """
-        raw_trend_data = await self.db.fetch(trend_query, *params)
+        raw_trend_data = await self.bot.db.fetch(trend_query, *params)
         
         # Aggregate in Python for portability
         from collections import defaultdict
         week_scores = defaultdict(list)
         for row in raw_trend_data:
-            # Parse date if string, else assume date obj
             d = row['session_date']
             if isinstance(d, str):
                 d = datetime.strptime(d, '%Y-%m-%d').date()
@@ -209,7 +199,7 @@ def setup(bot):
             GROUP BY s.role
             ORDER BY avg_score DESC
         """
-        role_data = await self.db.fetch(role_query, *params)
+        role_data = await self.bot.db.fetch(role_query, *params)
         
         return {
             'avg_score': float(stats['avg_score']) if stats['avg_score'] else 0,
@@ -217,9 +207,12 @@ def setup(bot):
             'last_session': stats['last_session'],
             'best_role': stats['best_role'],
             'top_content': stats['top_content'],
-            'sessions': [],  # Для будущего использования
+            'sessions': [],
             'trend_weeks': [r['week'] for r in trend_data],
             'trend_scores': [float(r['avg_score']) for r in trend_data],
             'role_names': [r['role'] for r in role_data],
             'role_scores': [float(r['avg_score']) for r in role_data]
         }
+
+def setup(bot):
+    bot.add_cog(StatsCommands(bot))

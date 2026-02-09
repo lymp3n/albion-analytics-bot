@@ -8,14 +8,9 @@ from utils.permissions import Permissions
 class AuthCommands(commands.Cog):
     """Команды регистрации и управления гильдией"""
     
-    def __init__(self, bot, db, permissions: Permissions):
+    def __init__(self, bot):
         self.bot = bot
-        self.db = db
-        self.permissions = permissions
         print("✓ AuthCommands initialized")
-
-def setup(bot):
-    pass
     
     @commands.Cog.listener()
     async def on_ready(self):
@@ -23,8 +18,8 @@ def setup(bot):
         guild = discord.utils.get(self.bot.guilds, id=int(self.bot.config['GUILD_ID']))
         if guild:
             # Обновляем Discord ID для всех гильдий в БД
-            for db_guild in await self.db.fetch("SELECT id, name FROM guilds WHERE discord_id = 0"):
-                await self.db.update_guild_discord_id(db_guild['name'], guild.id)
+            for db_guild in await self.bot.db.fetch("SELECT id, name FROM guilds WHERE discord_id = 0"):
+                await self.bot.db.update_guild_discord_id(db_guild['name'], guild.id)
                 print(f"✓ Обновлён Discord ID для гильдии '{db_guild['name']}' -> {guild.id}")
     
     @discord.slash_command(name="register", description="Register in the guild using invite code")
@@ -35,13 +30,13 @@ def setup(bot):
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         
         # Ищем гильдию по коду
-        guild = await self.db.get_guild_by_code(code_hash)
+        guild = await self.bot.db.get_guild_by_code(code_hash)
         if not guild:
             await ctx.respond("❌ Invalid guild code. Please check and try again.", ephemeral=True)
             return
         
         # Проверяем, не зарегистрирован ли уже игрок
-        existing_player = await self.db.get_player_by_discord_id(ctx.author.id)
+        existing_player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         if existing_player:
             if existing_player['status'] == 'pending':
                 await ctx.respond("⏳ Your registration is pending approval by guild founder.", ephemeral=True)
@@ -59,7 +54,7 @@ def setup(bot):
         
         # Создаём запись игрока
         try:
-            await self.db.execute("""
+            await self.bot.db.execute("""
                 INSERT INTO players (discord_id, discord_username, nickname, guild_id, status)
                 VALUES ($1, $2, $3, $4, $5)
             """, 
@@ -72,7 +67,7 @@ def setup(bot):
             
             if status == PlayerStatus.PENDING.value:
                 # Уведомляем фаундеров гильдии
-                founders = await self.db.fetch("""
+                founders = await self.bot.db.fetch("""
                     SELECT discord_id FROM players 
                     WHERE guild_id = $1 AND status = 'founder'
                 """, guild['id'])
@@ -111,18 +106,18 @@ def setup(bot):
     async def guild_management(self, ctx: discord.ApplicationContext, action: str, user: discord.Member = None):
         """Управление гильдией (только для фаундеров)"""
         # Проверка прав фаундера
-        if not await self.permissions.require_founder(ctx.author):
+        if not await self.bot.permissions.require_founder(ctx.author):
             await ctx.respond("❌ Only guild founders can use this command.", ephemeral=True)
             return
         
         if action == "info":
             # Информация о гильдии
-            guild_id = await self.permissions.get_guild_id(ctx.author)
+            guild_id = await self.bot.permissions.get_guild_id(ctx.author)
             if not guild_id:
                 await ctx.respond("❌ Unable to determine your guild.", ephemeral=True)
                 return
             
-            stats = await self.db.fetchrow("""
+            stats = await self.bot.db.fetchrow("""
                 SELECT 
                     g.name as guild_name,
                     COUNT(CASE WHEN p.status != 'pending' THEN 1 END) as active_members,
@@ -156,13 +151,13 @@ def setup(bot):
             return
         
         # Получаем данные игрока
-        target_player = await self.db.get_player_by_discord_id(user.id)
+        target_player = await self.bot.db.get_player_by_discord_id(user.id)
         if not target_player:
             await ctx.respond(f"❌ User {user.mention} is not registered in the system.", ephemeral=True)
             return
         
         # Проверяем, что игрок из той же гильдии
-        if target_player['guild_id'] != await self.permissions.get_guild_id(ctx.author):
+        if target_player['guild_id'] != await self.bot.permissions.get_guild_id(ctx.author):
             await ctx.respond(f"❌ User {user.mention} belongs to a different guild.", ephemeral=True)
             return
         
@@ -171,7 +166,7 @@ def setup(bot):
                 await ctx.respond(f"❌ User {user.mention} is not pending approval.", ephemeral=True)
                 return
             
-            await self.db.execute(
+            await self.bot.db.execute(
                 "UPDATE players SET status = 'active' WHERE id = $1",
                 target_player['id']
             )
@@ -190,7 +185,7 @@ def setup(bot):
                 return
             
             new_status = PlayerStatus.MENTOR.value if target_player['status'] == PlayerStatus.ACTIVE.value else PlayerStatus.FOUNDER.value
-            await self.db.execute(
+            await self.bot.db.execute(
                 "UPDATE players SET status = $1 WHERE id = $2",
                 new_status,
                 target_player['id']
@@ -215,7 +210,7 @@ def setup(bot):
                 return
             
             new_status = PlayerStatus.ACTIVE.value if target_player['status'] == PlayerStatus.MENTOR.value else PlayerStatus.MENTOR.value
-            await self.db.execute(
+            await self.bot.db.execute(
                 "UPDATE players SET status = $1 WHERE id = $2",
                 new_status,
                 target_player['id']
@@ -234,3 +229,6 @@ def setup(bot):
             
             await ctx.respond(f"✅ User {user.mention} has been demoted to **{new_role_name}**.")
             await user.send(f"⬇️ Your role in **{target_player['guild_name']}** has been changed to **{new_role_name}**.")
+
+def setup(bot):
+    bot.add_cog(AuthCommands(bot))

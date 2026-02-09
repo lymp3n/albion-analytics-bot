@@ -19,11 +19,6 @@ from dotenv import load_dotenv
 import yaml
 from database import Database
 from utils.permissions import Permissions
-from commands.auth import AuthCommands
-from commands.stats import StatsCommands
-from commands.tickets import TicketsCommands
-from commands.payroll import PayrollCommands
-from commands.menu import MenuCommands
 
 # Настройка логирования
 logging.basicConfig(
@@ -82,16 +77,18 @@ class AlbionBot(commands.Bot):
         # 1. Инициализация системы прав
         self.permissions = Permissions(self)
         
-        # 2. Регистрация команд (cogs) - загружаем ДО подключения к БД, чтобы видеть логи
+        # 2. Регистрация команд (cogs) - используем load_extension для правильной регистрации slash-команд
         try:
-            self.add_cog(AuthCommands(self, self.db, self.permissions))
-            self.add_cog(StatsCommands(self, self.db, self.permissions))
-            self.add_cog(TicketsCommands(self, self.db, self.permissions))
-            self.add_cog(PayrollCommands(self, self.db, self.permissions))
-            self.add_cog(MenuCommands(self, self.db, self.permissions))
+            self.load_extension("commands.auth")
+            self.load_extension("commands.stats")
+            self.load_extension("commands.tickets")
+            self.load_extension("commands.payroll")
+            self.load_extension("commands.menu")
             logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
         except Exception as e:
             logger.error(f"❌ Failed to load cogs: {e}")
+            import traceback
+            traceback.print_exc()
 
         # 3. Подключение к БД (с обработкой ошибок)
         try:

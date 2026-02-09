@@ -5,14 +5,9 @@ from datetime import datetime, timedelta
 from utils.permissions import Permissions
 
 class PayrollCommands(commands.Cog):
-    def __init__(self, bot, db, permissions: Permissions):
+    def __init__(self, bot):
         self.bot = bot
-        self.db = db
-        self.permissions = permissions
         print("✓ PayrollCommands initialized")
-
-def setup(bot):
-    pass
 
     @discord.slash_command(name="payroll", description="Calculate mentor payroll")
     @option("total_amount", description="Total amount to distribute", min_value=1)
@@ -21,7 +16,7 @@ def setup(bot):
         """Calculate payroll for mentors based on sessions closed in the last N days."""
         
         # Check permissions (Founder only)
-        if not await self.permissions.require_founder(ctx.author):
+        if not await self.bot.permissions.require_founder(ctx.author):
             await ctx.respond("❌ Only Founders can calculate payroll.", ephemeral=True)
             return
 
@@ -30,9 +25,7 @@ def setup(bot):
         start_date = end_date - timedelta(days=days)
         
         # Fetch session counts per mentor
-        # We join with players to get nicknames
-        # We count sessions table entries which represent evaluated tickets
-        rows = await self.db.fetch("""
+        rows = await self.bot.db.fetch("""
             SELECT 
                 p.discord_id,
                 p.nickname,
@@ -81,6 +74,4 @@ def setup(bot):
         await ctx.respond(embed=embed)
 
 def setup(bot):
-    # This setup function is not strictly needed if we add cog manually in bot.py 
-    # but good for extension loading if we switched to extensions.
-    pass
+    bot.add_cog(PayrollCommands(bot))

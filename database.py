@@ -40,6 +40,10 @@ class Database:
             await self.conn.execute("PRAGMA journal_mode = WAL")
         else:
             # PostgreSQL
+            # Fix Render's "postgres://" scheme which asyncpg doesn't like
+            if self.database_url.startswith("postgres://"):
+                self.database_url = self.database_url.replace("postgres://", "postgresql://", 1)
+            
             import ssl
             ctx = ssl.create_default_context(cafile='')
             ctx.check_hostname = False
