@@ -45,6 +45,17 @@ class StatsCommands(commands.Cog):
         if not stats or stats['session_count'] == 0:
             await ctx.respond(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
             return
+            
+        # Get Global Rank
+        rank_data = await self.bot.db.fetchrow("""
+            SELECT rank FROM (
+                SELECT p.id, RANK() OVER (ORDER BY SUM(s.score) DESC) as rank
+                FROM players p
+                JOIN sessions s ON s.player_id = p.id
+                GROUP BY p.id
+            ) ranked WHERE id = $1
+        """, player['id'])
+        current_rank = rank_data['rank'] if rank_data else "N/A"
         
         # Генерируем графики
         # 1. Тренд очков
@@ -60,8 +71,22 @@ class StatsCommands(commands.Cog):
             stats['role_scores'],
             target.display_name
         )
+
+        # 3. Content Performance
+        content_chart = self.chart_generator.generate_content_performance(
+            stats['content_names'],
+            stats['content_scores'],
+            target.display_name
+        )
+
+        # 4. Error Distribution
+        error_chart = self.chart_generator.generate_error_distribution(
+            stats['error_names'],
+            stats['error_counts'],
+            target.display_name
+        )
         
-        # Отправляем результаты
+        # Send Results
         embed = discord.Embed(
             title=f"📊 Statistics for {target.display_name}",
             description=f"Period: {period}",
@@ -69,17 +94,18 @@ class StatsCommands(commands.Cog):
         )
         embed.add_field(name="Average Score", value=f"{stats['avg_score']:.2f}/10", inline=True)
         embed.add_field(name="Total Sessions", value=stats['session_count'], inline=True)
+        embed.add_field(name="Global Rank", value=f"#{current_rank}", inline=True)
         embed.add_field(name="Best Role", value=stats['best_role'] or "N/A", inline=True)
         embed.add_field(name="Most Played Content", value=stats['top_content'] or "N/A", inline=True)
-        embed.set_thumbnail(url=target.display_avatar.url)
-        embed.set_footer(text=f"Data updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
         
-        # 1. Отправляем Embed с основной инфой
         await ctx.respond(embed=embed)
         
-        # 2. Отправляем графики по одному
+        # Send charts one by one
         await ctx.send(file=discord.File(trend_chart, filename="score_trend.png"))
         await ctx.send(file=discord.File(role_chart, filename="role_scores.png"))
+        await ctx.send(file=discord.File(content_chart, filename="content_perf.png"))
+        if stats['error_names']:
+            await ctx.send(file=discord.File(error_chart, filename="errors.png"))
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):
@@ -94,13 +120,14 @@ class StatsCommands(commands.Cog):
                 p.discord_id,
                 p.nickname,
                 AVG(s.score) as avg_score,
-                COUNT(s.id) as session_count
+                COUNT(s.id) as session_count,
+                SUM(s.score) as total_points
             FROM players p
             JOIN sessions s ON s.player_id = p.id
             WHERE s.session_date >= $1
             GROUP BY p.id, p.discord_id, p.nickname
-            HAVING COUNT(s.id) >= 1  -- Изменили с 3 на 1 для более легкого тестирования
-            ORDER BY avg_score DESC
+            HAVING COUNT(s.id) >= 1
+            ORDER BY total_points DESC
             LIMIT 10
         """, start_date)
         
@@ -129,7 +156,7 @@ class StatsCommands(commands.Cog):
         
         embed.description = table_text
         # embed.set_image(url="attachment://top_players.png") # Убираем картинку из эмбеда
-        embed.set_footer(text="Top 10 players by average score")
+        embed.set_footer(text="Ranking based on total score (Volume + Quality)")
         
         await ctx.respond(embed=embed)
         await ctx.send(file=discord.File(chart, filename="top_players.png"))
@@ -140,7 +167,7 @@ class StatsCommands(commands.Cog):
         await ctx.defer(ephemeral=True)
         
         if not await self.bot.permissions.require_founder(ctx.author):
-            await ctx.respond("❌ Только основатели могут использовать эту команду.", ephemeral=True)
+            await ctx.respond("❌ Only founders can use this command.", ephemeral=True)
             return
             
         import random
@@ -185,11 +212,11 @@ class StatsCommands(commands.Cog):
                 )
                 sessions_added += 1
                 
-        await ctx.respond(f"✅ Добавлено {sessions_added} тестовых сессий для {len(players)} игроков!", ephemeral=True)
+        await ctx.respond(f"✅ Added {sessions_added} test sessions for {len(players)} players!", ephemeral=True)
     
     async def _get_player_stats(self, player_id: int, days: int = None):
-        """Получение статистики игрока из БД"""
-        # Базовый фильтр по периоду
+        """Fetches player statistics from the database"""
+        # Base filter by period
         where_clauses = ["s.player_id = $1"]
         params = [player_id]
         
@@ -200,7 +227,7 @@ class StatsCommands(commands.Cog):
             
         where_str = " AND ".join(where_clauses)
         
-        # Основная статистика
+        # Main statistics
         stats_query = f"""
             SELECT 
                 AVG(s.score) as avg_score,
@@ -219,9 +246,9 @@ class StatsCommands(commands.Cog):
         stats = await self.bot.db.fetchrow(stats_query, *params)
         
         if not stats or not stats['session_count']:
-            return {'sessions': [], 'avg_score': 0, 'session_count': 0}
+            return {'sessions': [], 'avg_score': 0, 'session_count': 0, 'error_names': []}
         
-        # Тренд по неделям
+        # Weekly Trend
         trend_query = f"""
             SELECT s.session_date, s.score
             FROM sessions s
@@ -230,7 +257,6 @@ class StatsCommands(commands.Cog):
         """
         raw_trend_data = await self.bot.db.fetch(trend_query, *params)
         
-        # Aggregate in Python for portability
         from collections import defaultdict
         week_scores = defaultdict(list)
         for row in raw_trend_data:
@@ -241,9 +267,9 @@ class StatsCommands(commands.Cog):
             week_scores[week_key].append(row['score'])
             
         trend_data = [{'week': k, 'avg_score': sum(v)/len(v)} for k, v in week_scores.items()]
-        trend_data.sort(key=lambda x: x['week']) # Сортируем по неделям для правильного графика
+        trend_data.sort(key=lambda x: x['week'])
         
-        # Статистика по ролям
+        # Stats by Role
         role_query = f"""
             SELECT 
                 s.role,
@@ -254,6 +280,31 @@ class StatsCommands(commands.Cog):
             ORDER BY avg_score DESC
         """
         role_data = await self.bot.db.fetch(role_query, *params)
+
+        # Content Performance
+        content_perf_query = f"""
+            SELECT c.name, AVG(s.score) as avg_score
+            FROM sessions s
+            JOIN content c ON c.id = s.content_id
+            WHERE {where_str}
+            GROUP BY c.name
+            ORDER BY avg_score DESC
+        """
+        content_perf_data = await self.bot.db.fetch(content_perf_query, *params)
+
+        # Error Frequency
+        error_types_query = f"""
+            SELECT error_types FROM sessions s
+            WHERE {where_str} AND error_types IS NOT NULL
+        """
+        error_rows = await self.bot.db.fetch(error_types_query, *params)
+        error_counts = defaultdict(int)
+        for row in error_rows:
+            if row['error_types']:
+                for e in row['error_types'].split(','):
+                    error_counts[e.strip()] += 1
+        
+        sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:5]
         
         return {
             'avg_score': float(stats['avg_score']) if stats['avg_score'] else 0,
@@ -261,11 +312,15 @@ class StatsCommands(commands.Cog):
             'last_session': stats['last_session'],
             'best_role': stats['best_role'],
             'top_content': stats['top_content'],
-            'sessions': [],
+            'sessions': raw_trend_data,
             'trend_weeks': [r['week'] for r in trend_data],
             'trend_scores': [float(r['avg_score']) for r in trend_data],
             'role_names': [r['role'] for r in role_data],
-            'role_scores': [float(r['avg_score']) for r in role_data]
+            'role_scores': [float(r['avg_score']) for r in role_data],
+            'content_names': [r['name'] for r in content_perf_data],
+            'content_scores': [float(r['avg_score']) for r in content_perf_data],
+            'error_names': [e[0] for e in sorted_errors],
+            'error_counts': [e[1] for e in sorted_errors]
         }
 
 def setup(bot):

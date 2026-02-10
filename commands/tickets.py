@@ -264,13 +264,31 @@ class FeedbackModal(ui.Modal):
                     try: await player_user.send(embed=embed)
                     except: pass
             
+            # Send to history-of-tickets channel
+            try:
+                guild = interaction.guild
+                history_channel = discord.utils.get(guild.text_channels, name="history-of-tickets")
+                if history_channel:
+                    hist_embed = discord.Embed(title=f"📝 Session History: {player_data['nickname'] if player_data else 'Player'}", color=discord.Color.blue())
+                    hist_embed.add_field(name="Player", value=f"<@{player_data['discord_id']}>" if player_data else "Unknown")
+                    hist_embed.add_field(name="Mentor", value=f"{interaction.user.mention}")
+                    hist_embed.add_field(name="Content", value=content_name)
+                    hist_embed.add_field(name="Role", value=role_name)
+                    hist_embed.add_field(name="Score", value=f"{score}/10")
+                    hist_embed.add_field(name="Work On", value=self.work_on.value, inline=False)
+                    hist_embed.add_field(name="Comments", value=self.comments.value, inline=False)
+                    hist_embed.add_field(name="Replay", value=f"[Link]({self.replay_link})")
+                    await history_channel.send(embed=hist_embed)
+            except Exception as e:
+                print(f"⚠️ Failed to log to history channel: {e}")
+            
             try:
                 await interaction.response.send_message("✅ Evaluation submitted! This channel will be deleted in 10 seconds.", ephemeral=True)
             except:
                 try: await interaction.followup.send("✅ Evaluation submitted! This channel will be deleted in 10 seconds.", ephemeral=True)
                 except: pass
 
-            # Ждем 10 секунд и удаляем канал
+            # Wait 10 seconds and delete the channel
             await asyncio.sleep(10)
             try:
                 if interaction.channel:
@@ -424,16 +442,17 @@ class TicketsCommands(commands.Cog):
             return
             
         guild_id = await self.bot.permissions.get_guild_id(ctx.author)
+        mentor = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         is_mentor = await self.bot.permissions.require_mentor(ctx.author)
         
-        if is_mentor:
+        if is_mentor and mentor:
             tickets = await self.bot.db.fetch("""
             SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
             FROM tickets t JOIN players p ON p.id = t.player_id
             WHERE p.guild_id = $1 AND t.status IN ('available', 'in_progress')
             AND (t.status = 'available' OR t.mentor_id = $2)
             ORDER BY t.created_at ASC
-            """, guild_id, ctx.author.id)
+            """, guild_id, mentor['id'])
         else:
             tickets = await self.bot.db.fetch("""
             SELECT t.id, t.status, t.created_at, p.discord_id, t.role 
@@ -469,10 +488,15 @@ class TicketsCommands(commands.Cog):
             await ctx.respond("❌ Ticket not found or not available.", ephemeral=True)
             return
             
+        mentor = await self.bot.db.get_player_by_discord_id(ctx.author.id)
+        if not mentor:
+            await ctx.respond("❌ You are not registered as a mentor.", ephemeral=True)
+            return
+            
         await self.bot.db.execute("""
         UPDATE tickets SET status = 'in_progress', mentor_id = $1, updated_at = $2 
         WHERE id = $3
-        """, ctx.author.id, datetime.utcnow(), ticket_id)
+        """, mentor['id'], datetime.utcnow(), ticket_id)
         
         await ctx.respond(f"✅ Claimed! Go to <#{ticket['discord_channel_id']}>", ephemeral=True)
 
@@ -492,11 +516,16 @@ class TicketsCommands(commands.Cog):
             await ctx.respond("❌ Not a ticket channel.", ephemeral=True)
             return
             
-        if ticket['mentor_id'] != ctx.author.id:
+        mentor = await self.bot.db.get_player_by_discord_id(ctx.author.id)
+        if not mentor:
+            await ctx.respond("❌ You are not registered.", ephemeral=True)
+            return
+            
+        if ticket['mentor_id'] != mentor['id']:
             await ctx.respond("❌ You must claim this ticket first.", ephemeral=True)
             return
             
-        view = RatingSelectView(self.bot, ticket['id'], ticket['p_did'], ctx.author.id, ticket['replay_link'])
+        view = RatingSelectView(self.bot, ticket['id'], ticket['p_did'], mentor['id'], ticket['replay_link'])
         await ctx.respond("📊 **Session Evaluation**\nPlease select details:", view=view, ephemeral=True)
     
     @ticket_group.command(name="info", description="View ticket details (Mentors only)")

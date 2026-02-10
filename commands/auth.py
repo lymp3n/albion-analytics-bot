@@ -6,7 +6,7 @@ from models import PlayerStatus
 from utils.permissions import Permissions
 
 class AuthCommands(commands.Cog):
-    """Команды регистрации и управления гильдией"""
+    """Registration and Guild Management Commands"""
     
     def __init__(self, bot):
         self.bot = bot
@@ -14,8 +14,7 @@ class AuthCommands(commands.Cog):
     
     @commands.Cog.listener()
     async def on_ready(self):
-        """Автоматическое обновление Discord ID гильдии при запуске"""
-        # Ждем подключения к БД, если оно еще не произошло (в bot.py)
+        """Automatically update Guild Discord ID on startup"""
         import asyncio
         for _ in range(10):
             if self.bot.db.is_sqlite or (self.bot.db.pool is not None):
@@ -32,26 +31,26 @@ class AuthCommands(commands.Cog):
             
         guild = discord.utils.get(self.bot.guilds, id=guild_id)
         if guild:
-            # Обновляем Discord ID для всех гильдий в БД
+            # Update Discord ID for all guilds in DB that are still using 0
             for db_guild in await self.bot.db.fetch("SELECT id, name FROM guilds WHERE discord_id = 0"):
                 await self.bot.db.update_guild_discord_id(db_guild['name'], guild.id)
-                print(f"✓ Обновлён Discord ID для гильдии '{db_guild['name']}' -> {guild.id}")
+                print(f"✓ Updated Discord ID for guild '{db_guild['name']}' -> {guild.id}")
     
     @discord.slash_command(name="register", description="Register in the guild using invite code")
     @option("code", description="Guild invitation code")
     async def register(self, ctx: discord.ApplicationContext, code: str):
-        """Регистрация нового игрока в гильдии"""
+        """Register a new player in the guild"""
         await ctx.defer(ephemeral=True)
-        # Хешируем код для сравнения с БД
+        # Hash the code for DB comparison
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         
-        # Ищем гильдию по коду
+        # Find guild by code
         guild = await self.bot.db.get_guild_by_code(code_hash)
         if not guild:
             await ctx.respond("❌ Invalid guild code. Please check and try again.", ephemeral=True)
             return
         
-        # Проверяем, не зарегистрирован ли уже игрок
+        # Check if already registered
         existing_player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         if existing_player:
             if existing_player['status'] == 'pending':
@@ -60,15 +59,15 @@ class AuthCommands(commands.Cog):
                 await ctx.respond(f"✅ You are already registered in guild **{existing_player['guild_name']}**", ephemeral=True)
             return
         
-        # Определяем статус на основе кода
+        # Determine status based on code
         if code_hash == guild['founder_code']:
             status = PlayerStatus.FOUNDER.value
         elif code_hash == guild['mentor_code']:
             status = PlayerStatus.MENTOR.value
         else:
-            status = PlayerStatus.PENDING.value  # Обычные игроки требуют одобрения
+            status = PlayerStatus.PENDING.value
         
-        # Создаём запись игрока
+        # Create player record
         try:
             await self.bot.db.execute("""
                 INSERT INTO players (discord_id, discord_username, nickname, guild_id, status)
@@ -82,7 +81,7 @@ class AuthCommands(commands.Cog):
             )
             
             if status == PlayerStatus.PENDING.value:
-                # Уведомляем фаундеров гильдии
+                # Notify guild founders
                 founders = await self.bot.db.fetch("""
                     SELECT discord_id FROM players 
                     WHERE guild_id = $1 AND status = 'founder'
@@ -96,17 +95,18 @@ class AuthCommands(commands.Cog):
                     ephemeral=True
                 )
                 
-                # Отправляем уведомление в канал #регистрация (если существует)
-                registration_channel = discord.utils.get(ctx.guild.channels, name="регистрация")
-                if registration_channel:
-                    await registration_channel.send(
+                # Send notification to #registration or #registration-logs
+                reg_channel = discord.utils.get(ctx.guild.channels, name="registration") or \
+                              discord.utils.get(ctx.guild.channels, name="registration-logs")
+                if reg_channel:
+                    await reg_channel.send(
                         f"🆕 New registration pending approval:\n"
                         f"Player: {ctx.author.mention} (`{ctx.author.display_name}`)\n"
                         f"Guild: **{guild['name']}**\n"
                         f"Use `/guild approve {ctx.author.id}` to approve"
                     )
             else:
-                # Для фаундеров/менторов — автоматическое одобрение
+                # Founders/Mentors auto-approved
                 role_name = "Founder" if status == PlayerStatus.FOUNDER.value else "Mentor"
                 await ctx.respond(
                     f"✅ Welcome {role_name}! You have been registered in guild **{guild['name']}** with full permissions.",
@@ -120,15 +120,14 @@ class AuthCommands(commands.Cog):
     @option("action", choices=["approve", "promote", "demote", "info"])
     @option("user", required=False, description="Target user (for approve/promote/demote)")
     async def guild_management(self, ctx: discord.ApplicationContext, action: str, user: discord.Member = None):
-        """Управление гильдией (только для фаундеров)"""
+        """Manage the guild (Founders only)"""
         await ctx.defer(ephemeral=True)
-        # Проверка прав фаундера
         if not await self.bot.permissions.require_founder(ctx.author):
             await ctx.respond("❌ Only guild founders can use this command.", ephemeral=True)
             return
         
         if action == "info":
-            # Информация о гильдии
+            # Guild Info
             guild_id = await self.bot.permissions.get_guild_id(ctx.author)
             if not guild_id:
                 await ctx.respond("❌ Unable to determine your guild.", ephemeral=True)
@@ -167,13 +166,11 @@ class AuthCommands(commands.Cog):
             await ctx.respond(f"❌ Please specify a user for action '{action}'.", ephemeral=True)
             return
         
-        # Получаем данные игрока
         target_player = await self.bot.db.get_player_by_discord_id(user.id)
         if not target_player:
             await ctx.respond(f"❌ User {user.mention} is not registered in the system.", ephemeral=True)
             return
         
-        # Проверяем, что игрок из той же гильдии
         if target_player['guild_id'] != await self.bot.permissions.get_guild_id(ctx.author):
             await ctx.respond(f"❌ User {user.mention} belongs to a different guild.", ephemeral=True)
             return
@@ -188,7 +185,6 @@ class AuthCommands(commands.Cog):
                 target_player['id']
             )
             
-            # Выдаём роль Member на сервере Discord
             member_role = discord.utils.get(ctx.guild.roles, name="Member")
             if member_role and member_role not in user.roles:
                 await user.add_roles(member_role)
@@ -208,7 +204,6 @@ class AuthCommands(commands.Cog):
                 target_player['id']
             )
             
-            # Выдаём роль на сервере
             role_name = "Mentor" if new_status == PlayerStatus.MENTOR.value else "Founder"
             discord_role = discord.utils.get(ctx.guild.roles, name=role_name)
             if discord_role and discord_role not in user.roles:
@@ -233,7 +228,6 @@ class AuthCommands(commands.Cog):
                 target_player['id']
             )
             
-            # Убираем роль на сервере
             old_role_name = "Founder" if target_player['status'] == PlayerStatus.FOUNDER.value else "Mentor"
             new_role_name = "Mentor" if new_status == PlayerStatus.MENTOR.value else "Member"
             old_role = discord.utils.get(ctx.guild.roles, name=old_role_name)

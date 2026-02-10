@@ -10,24 +10,37 @@ class MainMenuView(ui.View):
         super().__init__(timeout=300)
         self.bot = bot
     
-    @ui.button(label="📝 Создать тикет", style=discord.ButtonStyle.primary, row=0)
+    @ui.button(label="📝 Create Ticket", style=discord.ButtonStyle.primary, row=0)
     async def create_ticket(self, button: ui.Button, interaction: discord.Interaction):
         from commands.tickets import TicketModal
         player = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         if not player:
-            await interaction.response.send_message("❌ Сначала зарегистрируйтесь: `/register <код>`", ephemeral=True)
+            await interaction.response.send_message("❌ Please register first: `/register <code>`", ephemeral=True)
             return
         
         modal = TicketModal(self.bot, player['id'], player['guild_id'])
         await interaction.response.send_modal(modal)
     
-    @ui.button(label="📊 Моя статистика", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(label="📊 My Stats", style=discord.ButtonStyle.secondary, row=0)
     async def view_stats(self, button: ui.Button, interaction: discord.Interaction):
-        await interaction.response.send_message("📊 Используйте команду `/stats` для просмотра статистики.", ephemeral=True)
+        stats_cog = self.bot.get_cog("StatsCommands")
+        if stats_cog:
+            # We defer first because generating charts takes time
+            await interaction.response.defer(ephemeral=True)
+            # Create a mock context or just call the logic
+            # For simplicity, we'll just explain we're fetching data
+            await stats_cog.stats.callback(stats_cog, interaction, target=interaction.user)
+        else:
+            await interaction.response.send_message("❌ Stats system unavailable.", ephemeral=True)
     
-    @ui.button(label="🎫 Мои тикеты", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(label="🎫 My Tickets", style=discord.ButtonStyle.secondary, row=1)
     async def my_tickets(self, button: ui.Button, interaction: discord.Interaction):
-        await interaction.response.send_message("🎫 Используйте команду `/ticket list` для просмотра тикетов.", ephemeral=True)
+        tickets_cog = self.bot.get_cog("TicketsCommands")
+        if tickets_cog:
+            await interaction.response.defer(ephemeral=True)
+            await tickets_cog.ticket_list.callback(tickets_cog, interaction)
+        else:
+            await interaction.response.send_message("❌ Ticket system unavailable.", ephemeral=True)
 
 
 class MenuCommands(commands.Cog):
@@ -37,9 +50,9 @@ class MenuCommands(commands.Cog):
         self.bot = bot
         print("✓ MenuCommands initialized")
     
-    @discord.slash_command(name="menu", description="Открыть главное меню бота")
+    @discord.slash_command(name="menu", description="Open the main bot menu")
     async def menu(self, ctx: discord.ApplicationContext):
-        """Показывает главное меню с кнопками"""
+        """Shows the main menu with buttons"""
         embed = discord.Embed(
             title="🎮 Albion Analytics Bot - Main Menu",
             description="Choose an action below:",
