@@ -9,7 +9,7 @@ import matplotlib.font_manager as fm
 from PIL import Image, ImageDraw, ImageFont
 
 class ChartGenerator:
-    """Генерация графиков для статистики"""
+    """Generates charts for statistics"""
     
     def __init__(self):
         self.colors = {
@@ -25,7 +25,7 @@ class ChartGenerator:
         os.makedirs('temp/charts', exist_ok=True)
     
     def generate_score_trend(self, weeks: List[str], scores: List[float], player_name: str) -> io.BytesIO:
-        """Генерация линейного графика тренда очков"""
+        """Generates a line chart for score trends"""
         plt.figure(figsize=(7, 4))
         plt.plot(weeks, scores, marker='o', linewidth=2.5, markersize=8, 
                 color=self.colors['primary'], label='Average Score')
@@ -54,11 +54,11 @@ class ChartGenerator:
         return buf
     
     def generate_role_scores(self, roles: List[str], scores: List[float], player_name: str) -> io.BytesIO:
-        """Генерация столбчатой диаграммы по ролям"""
+        """Generates a bar chart for scores by role"""
         plt.figure(figsize=(7, 4))
         bars = plt.bar(roles, scores, color=self.colors['primary'], edgecolor='white', linewidth=1.5)
         
-        # Добавление значений над столбцами
+        # Add values above the bars
         for bar in bars:
             height = bar.get_height()
             plt.text(bar.get_x() + bar.get_width()/2., height,
@@ -77,12 +77,12 @@ class ChartGenerator:
         return buf
     
     def generate_top_players(self, players: List[str], scores: List[float]) -> io.BytesIO:
-        """Генерация топ-10 игроков"""
+        """Generates a top-10 players chart"""
         plt.figure(figsize=(10, 6))
         y_pos = range(len(players))
         bars = plt.barh(y_pos, scores, color=self.colors['primary'], edgecolor='white', linewidth=1.5)
         
-        # Добавление имён и очков
+        # Add names and scores
         for i, (bar, player, score) in enumerate(zip(bars, players, scores)):
             plt.text(score + 0.15, i, f'{score:.2f}', va='center', fontsize=9)
             plt.text(0.15, i, f'#{i+1} {player}', va='center', fontsize=10, fontweight='bold')
@@ -90,7 +90,7 @@ class ChartGenerator:
         plt.title('Top 10 Alliance Players (Last 30 Days)', fontsize=16, pad=15)
         plt.xlabel('Average Score', fontsize=12)
         plt.xlim(0, max(scores) + 1 if scores else 11)
-        plt.yticks([])  # Скрываем стандартные метки оси Y
+        plt.yticks([])  # Hide standard Y-axis labels
         plt.grid(axis='x', alpha=0.3, linestyle='--')
         plt.tight_layout()
         
@@ -138,7 +138,7 @@ class ChartGenerator:
         return buf
 
     def cleanup_temp_files(self):
-        """Очистка временных файлов старше 1 часа"""
+        """Cleans up temporary files older than 1 hour"""
         import time
         now = time.time()
         for filename in os.listdir('temp/charts'):

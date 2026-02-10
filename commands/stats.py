@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from services.chart_generator import ChartGenerator
 
 class StatsCommands(commands.Cog):
-    """Команды для просмотра статистики"""
+    """Commands for viewing statistics"""
     
     def __init__(self, bot):
         self.bot = bot
@@ -16,14 +16,14 @@ class StatsCommands(commands.Cog):
     @option("target", description="Player to view stats for (leave empty for yourself)", required=False)
     @option("period", choices=["7 days", "30 days", "all time"], default="30 days")
     async def stats(self, ctx: discord.ApplicationContext, target: discord.Member = None, period: str = "30 days"):
-        """Просмотр статистики игрока"""
-        await ctx.defer()  # Сразу деферим, так как работа с БД и графиками долгая
+        """View player statistics"""
+        await ctx.defer()  # Defer immediately as DB work and chart generation takes time
         
-        # Определяем целевого игрока
+        # Determine target player
         if target is None:
             target = ctx.author
         
-        # Проверяем права доступа
+        # Check access permissions
         is_self = target.id == ctx.author.id
         is_mentor = await self.bot.permissions.require_mentor(ctx.author)
         
@@ -31,16 +31,16 @@ class StatsCommands(commands.Cog):
             await ctx.respond("❌ Only mentors and founders can view other players' statistics.", ephemeral=True)
             return
         
-        # Получаем данные игрока
+        # Fetch player data
         player = await self.bot.db.get_player_by_discord_id(target.id)
         if not player:
             await ctx.respond(f"❌ Player {target.mention} is not registered in the system.", ephemeral=True)
             return
         
-        # Определяем период
+        # Determine period
         days = 7 if "7" in period else 30 if "30" in period else None
         
-        # Получаем статистику
+        # Fetch statistics
         stats = await self._get_player_stats(player['id'], days)
         if not stats or stats['session_count'] == 0:
             await ctx.respond(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
@@ -57,15 +57,15 @@ class StatsCommands(commands.Cog):
         """, player['id'])
         current_rank = rank_data['rank'] if rank_data else "N/A"
         
-        # Генерируем графики
-        # 1. Тренд очков
+        # Generate charts
+        # 1. Score Trend
         trend_chart = self.chart_generator.generate_score_trend(
             stats['trend_weeks'], 
             stats['trend_scores'], 
             target.display_name
         )
         
-        # 2. Очки по ролям
+        # 2. Scores by Role
         role_chart = self.chart_generator.generate_role_scores(
             stats['role_names'],
             stats['role_scores'],
@@ -109,10 +109,10 @@ class StatsCommands(commands.Cog):
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):
-        """Просмотр топ-10 игроков альянса"""
+        """View top 10 players in the alliance"""
         await ctx.defer()
         
-        # Получаем топ-10 за последние 30 дней
+        # Fetch top 10 for the last 30 days
         start_date = datetime.utcnow() - timedelta(days=30)
         
         top_players = await self.bot.db.fetch("""
@@ -135,14 +135,14 @@ class StatsCommands(commands.Cog):
             await ctx.respond("❌ Not enough data to generate top players list.", ephemeral=True)
             return
         
-        # Подготавливаем данные для графика
+        # Prepare data for chart
         players = [p['nickname'] for p in top_players]
         scores = [float(p['avg_score']) for p in top_players]
         
-        # Генерируем график
+        # Generate chart
         chart = self.chart_generator.generate_top_players(players, scores)
         
-        # Создаём embed с таблицей
+        # Create embed with table
         embed = discord.Embed(
             title="🏆 Top 10 Alliance Players (Last 30 Days)",
             color=discord.Color.gold()
@@ -163,7 +163,7 @@ class StatsCommands(commands.Cog):
 
     @discord.slash_command(name="stats_seed_test", description="Seed database with test session data (Founder only)")
     async def stats_seed_test(self, ctx: discord.ApplicationContext):
-        """Команда для генерации тестовых данных статистики"""
+        """Command to generate test statistics data"""
         await ctx.defer(ephemeral=True)
         
         if not await self.bot.permissions.require_founder(ctx.author):
@@ -173,25 +173,25 @@ class StatsCommands(commands.Cog):
         import random
         from datetime import datetime, timedelta
         
-        # Получаем всех игроков
+        # Get all players
         players = await self.bot.db.fetch("SELECT id FROM players")
         if not players:
-            await ctx.respond("❌ Нет игроков для заполнения статистики.", ephemeral=True)
+            await ctx.respond("❌ No players found to seed stats for.", ephemeral=True)
             return
             
-        # Получаем типы контента
+        # Get content types
         content_types = await self.bot.db.fetch("SELECT id FROM content")
         if not content_types:
-            await ctx.respond("❌ Таблица контента пуста.", ephemeral=True)
+            await ctx.respond("❌ Content table is empty.", ephemeral=True)
             return
             
-        # Добавляем по 5 случайных сессий для каждого игрока
+        # Add 5 random sessions for each player
         sessions_added = 0
         roles = ['Tank', 'Healer', 'DPS', 'Support']
         
         for player in players:
             for _ in range(5):
-                # Случайная дата за последние 30 дней
+                # Random date in the last 30 days
                 random_days = random.randint(0, 30)
                 session_date = datetime.utcnow() - timedelta(days=random_days)
                 

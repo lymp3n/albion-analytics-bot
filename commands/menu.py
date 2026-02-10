@@ -4,7 +4,7 @@ from discord.ext import commands
 
 
 class MainMenuView(ui.View):
-    """Главное меню бота с кнопками"""
+    """Main bot menu with buttons"""
     
     def __init__(self, bot):
         super().__init__(timeout=300)
@@ -44,7 +44,7 @@ class MainMenuView(ui.View):
 
 
 class MenuCommands(commands.Cog):
-    """Команды меню"""
+    """Menu commands"""
     
     def __init__(self, bot):
         self.bot = bot

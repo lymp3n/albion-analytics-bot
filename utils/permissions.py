@@ -4,7 +4,7 @@ import yaml
 import os
 
 class Permissions:
-    """Система проверки прав доступа на основе ролей Discord"""
+    """Permissions checking system based on Discord roles"""
     
     def __init__(self, bot):
         self.bot = bot
@@ -17,13 +17,13 @@ class Permissions:
         self.founder_role_id = int(self.config['roles']['founder_id'])
     
     def has_role_id(self, member: discord.Member, role_id: int) -> bool:
-        """Проверка наличия конкретной роли по ID"""
+        """Check if a member has a specific role by ID"""
         return any(role.id == role_id for role in member.roles)
 
     async def require_member(self, member: discord.Member) -> bool:
         """
-        Проверка: является ли пользователь мембером.
-        Иерархия: Founder > Mentor > Member.
+        Check: if the user is a member.
+        Hierarchy: Founder > Mentor > Member.
         """
         if self.has_role_id(member, self.founder_role_id):
             return True
@@ -33,18 +33,18 @@ class Permissions:
     
     async def require_mentor(self, member: discord.Member) -> bool:
         """
-        Проверка: является ли пользователь ментором.
-        Иерархия: Founder > Mentor.
+        Check: if the user is a mentor.
+        Hierarchy: Founder > Mentor.
         """
         if self.has_role_id(member, self.founder_role_id):
             return True
         return self.has_role_id(member, self.mentor_role_id)
     
     async def require_founder(self, member: discord.Member) -> bool:
-        """Проверка: является ли пользователь фаундером"""
+        """Check: if the user is a founder"""
         return self.has_role_id(member, self.founder_role_id)
     
     async def get_guild_id(self, member: discord.Member) -> Optional[int]:
-        """Получение ID гильдии игрока из БД"""
+        """Gets player's guild ID from DB"""
         player = await self.bot.db.get_player_by_discord_id(member.id)
         return player['guild_id'] if player else None

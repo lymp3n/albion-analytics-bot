@@ -3,8 +3,8 @@ from typing import List
 
 class ErrorCategorizer:
     """
-    Простая правило-базированная категоризация ошибок без машинного обучения
-    Работает на ключевых словах без зависимостей от scikit-learn/nltk
+    Simple rule-based error categorization without machine learning.
+    Uses keywords and has no dependencies on scikit-learn/nltk.
     """
     
     CATEGORIES = {
@@ -63,8 +63,8 @@ class ErrorCategorizer:
     @classmethod
     def categorize(cls, text: str) -> List[str]:
         """
-        Категоризация текста ошибок на основе ключевых слов
-        Возвращает список категорий (максимум 3 наиболее релевантных)
+        Categorizes error text based on keywords.
+        Returns a list of categories (maximum 3 most relevant).
         """
         if not text or not text.strip():
             return []
@@ -72,13 +72,13 @@ class ErrorCategorizer:
         text_lower = text.lower()
         category_scores = {}
         
-        # Подсчёт совпадений по категориям
+        # Count keyword matches per category
         for category, keywords in cls.CATEGORIES.items():
             score = sum(1 for kw in keywords if kw in text_lower)
             if score > 0:
                 category_scores[category] = score
         
-        # Сортировка по релевантности и выбор топ-3
+        # Sort by relevance and select top-3
         sorted_categories = sorted(
             category_scores.items(),
             key=lambda x: x[1],
@@ -89,5 +89,5 @@ class ErrorCategorizer:
     
     @classmethod
     def get_all_categories(cls) -> List[str]:
-        """Получение списка всех категорий для селекта в модальном окне"""
+        """Get the list of all categories for selection in the modal window"""
         return list(cls.CATEGORIES.keys())

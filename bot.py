@@ -20,7 +20,7 @@ import yaml
 from database import Database
 from utils.permissions import Permissions
 
-# Настройка логирования
+# Logging configuration
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
@@ -30,7 +30,7 @@ logger = logging.getLogger('albion-bot')
 
 class AlbionBot(commands.Bot):
     def __init__(self):
-        # Загрузка конфигурации сначала, чтобы получить GUILD_ID
+        # Load configuration first to get GUILD_ID
         load_dotenv()
         self.token = os.getenv('DISCORD_TOKEN')
         self.database_url = os.getenv('DATABASE_URL')
@@ -41,7 +41,7 @@ class AlbionBot(commands.Bot):
         intents.members = True
         intents.message_content = True
         
-        # debug_guilds - мгновенная синхронизация команд для указанных серверов
+        # debug_guilds - instant command synchronization for specified servers
         super().__init__(
             command_prefix="!",
             intents=intents,
@@ -53,7 +53,7 @@ class AlbionBot(commands.Bot):
         with open('config.yaml', 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
         
-        # Инициализация компонентов
+        # Initialize components
         self.db = Database(self.database_url)
         self.permissions = None
         
@@ -65,8 +65,8 @@ class AlbionBot(commands.Bot):
             logger.error("❌ DATABASE_URL not found in environment variables!")
             sys.exit(1)
         
-        # КРИТИЧНО: Загружаем cogs ДО подключения к Discord!
-        # Это позволяет py-cord обнаружить slash-команды
+        # CRITICAL: Load cogs BEFORE connecting to Discord!
+        # This allows py-cord to discover slash commands
         logger.info("Loading command cogs...")
         try:
             self.load_extension("commands.auth")
@@ -83,7 +83,7 @@ class AlbionBot(commands.Bot):
             sys.exit(1)
     
     async def on_ready(self):
-        """Обработчик готовности бота"""
+        """Bot readiness handler"""
         if getattr(self, 'ready_check', False):
             return
         self.ready_check = True
@@ -91,19 +91,19 @@ class AlbionBot(commands.Bot):
         logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         
-        # 1. Инициализация системы прав
+        # 1. Initialize permissions system
         self.permissions = Permissions(self)
 
-        # 2. Подключение к БД (с обработкой ошибок)
+        # 2. Connect to DB (with error handling)
         try:
             await self.db.connect()
             logger.info("✓ Database connected")
         except Exception as e:
             logger.error(f"❌ Database connection failed: {e}")
             logger.error("Check DATABASE_URL in Render Environment Variables.")
-            # Не падаем полностью, чтобы бот мог хотя бы отвечать на ping
+            # Don't crash completely so the bot can at least respond to ping
         
-        # 3. Синхронизация слэш-команд
+        # 3. Sync slash commands
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
@@ -117,11 +117,11 @@ class AlbionBot(commands.Bot):
         except Exception as e:
              logger.error(f"❌ Command sync failed: {e}")
         
-        # Логируем
+        # Final logging
         cmds = self.application_commands
         logger.info(f"✓ Registered {len(cmds)} commands: {', '.join([c.name for c in cmds])}")
         
-        # Установка статуса
+        # Set status
         await self.change_presence(
             activity=discord.Game(name="Albion Analytics | !ping"),
             status=discord.Status.online
@@ -132,7 +132,7 @@ class AlbionBot(commands.Bot):
         await ctx.send("Pong! Bot is alive.")
     
     async def close(self):
-        """Корректное завершение работы"""
+        """Graceful shutdown"""
         logger.info(" Shutting down bot...")
         await self.db.close()
         await super().close()
@@ -141,7 +141,7 @@ class AlbionBot(commands.Bot):
 from keep_alive import keep_alive
 
 async def main():
-    """Точка входа приложения"""
+    """Application entry point"""
     logger.info("=" * 50)
     logger.info("🚀 Starting Albion Analytics Discord Bot")
     logger.info("=" * 50)

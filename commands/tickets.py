@@ -362,7 +362,7 @@ class TicketControlView(ui.View):
         embed.set_footer(text=f"Ticket ID: {ticket['id']} | Claimed by {interaction.user.display_name}")
         
         try:
-            # Отключаем кнопку Claim после успешного взятия
+            # Disable the Claim button after successful claiming
             button.disabled = True
             button.label = "Claimed"
             button.style = discord.ButtonStyle.secondary
@@ -389,7 +389,7 @@ class TicketControlView(ui.View):
         
         is_mentor = await self.bot.permissions.require_mentor(interaction.user)
         
-        # Находим внутреннего игрока для сравнения ID
+        # Find internal player ID to compare with mentor_id
         mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         is_owner = mentor and ticket['mentor_id'] == mentor['id']
         
@@ -467,8 +467,7 @@ class TicketsCommands(commands.Cog):
             
         embed = discord.Embed(title="🎫 Active Tickets", color=discord.Color.blue())
         for t in tickets[:10]:
-            emoji = "⏳" if t['status'] == 'available' else "BETA"
-            if t['status'] == 'in_progress': emoji = "🔍"
+            emoji = "⏳" if t['status'] == 'available' else "🔍"
             embed.add_field(
                 name=f"{emoji} #{t['id']} | {t['role']}",
                 value=f"By <@{(t['discord_id'])}>\nStatus: {t['status']}",
@@ -531,13 +530,13 @@ class TicketsCommands(commands.Cog):
     @ticket_group.command(name="info", description="View ticket details (Mentors only)")
     @option("ticket_id", description="Ticket ID to view")
     async def ticket_info(self, ctx: discord.ApplicationContext, ticket_id: int):
-        """Просмотр детальной информации о тикете (для менторов/фаундеров)"""
-        # Проверка прав ментора
+        """View detailed ticket information (for mentors/founders)"""
+        # Check mentor permissions
         if not await self.bot.permissions.require_mentor(ctx.author):
             await ctx.respond("❌ Only mentors and founders can view ticket details.", ephemeral=True)
             return
         
-        # Получение данных тикета
+        # Fetch ticket data
         ticket = await self.bot.db.fetchrow("""
             SELECT 
                 t.*,
@@ -557,7 +556,7 @@ class TicketsCommands(commands.Cog):
             await ctx.respond(f"❌ Ticket #{ticket_id} not found.", ephemeral=True)
             return
         
-        # Embed с детальной информацией
+        # Embed with detailed information
         embed = discord.Embed(
             title=f"🎫 Ticket #{ticket_id} Details",
             color=discord.Color.blue(),

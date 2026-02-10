@@ -2,20 +2,20 @@ from enum import Enum
 from typing import Optional
 
 class PlayerStatus(str, Enum):
-    """Статусы игроков в системе"""
-    PENDING = "pending"    # Ожидает одобрения
-    ACTIVE = "active"      # Обычный мембер
-    MENTOR = "mentor"      # Ментор
-    FOUNDER = "founder"    # Основатель гильдии
+    """Player statuses in the system"""
+    PENDING = "pending"    # Awaiting approval
+    ACTIVE = "active"      # Regular member
+    MENTOR = "mentor"      # Mentor
+    FOUNDER = "founder"    # Guild founder
 
 class TicketStatus(str, Enum):
-    """Статусы тикетов"""
-    AVAILABLE = "available"   # Доступен для оценки
-    IN_PROGRESS = "in_progress"  # В работе у ментора
-    CLOSED = "closed"         # Закрыт и оценён
+    """Ticket statuses"""
+    AVAILABLE = "available"   # Available for evaluation
+    IN_PROGRESS = "in_progress"  # In review by a mentor
+    CLOSED = "closed"         # Closed and evaluated
 
 class ContentTypes:
-    """Типы контента в Albion Online"""
+    """Content types in Albion Online"""
     CASTLES = "Castles"
     CRYSTAL_LEAGUE = "Crystal League"
     OPEN_WORLD = "Open World"
@@ -29,7 +29,7 @@ class ContentTypes:
                 cls.HG_5V5, cls.AVALON, cls.SCRIMS]
 
 class PlayerRoles:
-    """Роли в игре"""
+    """In-game roles"""
     DTANK = "D-Tank"
     ETANK = "E-Tank"
     HEALER = "Healer"

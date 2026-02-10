@@ -2,14 +2,14 @@ import re
 from typing import Optional, Tuple
 
 class ReplayValidator:
-    """Валидация ссылок на реплеи Albion Online"""
+    """Validation for Albion Online replay links"""
     
     ALBION_REPLAY_PATTERN = r'https?://(?:www\.)?albiononline\.com/(?:[^/]+/)?replay/([a-f0-9-]+)'
     
     @classmethod
     def validate_replay_url(cls, url: str) -> Tuple[bool, Optional[str]]:
         """
-        Валидация ссылки на реплей
+        Validates replay link
         Returns: (is_valid, error_message or None)
         """
         if not url or not url.strip():
@@ -17,15 +17,15 @@ class ReplayValidator:
         
         url = url.strip()
         
-        # Проверка базового формата URL
+        # Check basic URL format
         if not url.startswith(('http://', 'https://')):
             return False, "Invalid URL format (must start with http:// or https://)"
         
-        # Проверка домена Albion Online
+        # Check Albion Online domain
         if 'albiononline.com' not in url.lower():
             return False, "URL must be from albiononline.com domain"
         
-        # Проверка наличия идентификатора реплея
+        # Check for replay identifier presence
         match = re.search(cls.ALBION_REPLAY_PATTERN, url, re.IGNORECASE)
         if not match:
             return False, "Invalid replay URL format. Must contain replay ID (e.g., https://albiononline.com/en/replay/123e4567-e89b-12d3-a456-426614174000)"
@@ -34,13 +34,13 @@ class ReplayValidator:
     
     @classmethod
     def extract_replay_id(cls, url: str) -> Optional[str]:
-        """Извлечение идентификатора реплея из URL"""
+        """Extracts replay identifier from URL"""
         match = re.search(cls.ALBION_REPLAY_PATTERN, url, re.IGNORECASE)
         return match.group(1) if match else None
 
 
 class RoleValidator:
-    """Валидация игровых ролей"""
+    """Validation for in-game roles"""
     
     VALID_ROLES = {
         'D-Tank': ['dtank', 'd-tank', 'dark tank'],
@@ -53,7 +53,7 @@ class RoleValidator:
     
     @classmethod
     def normalize_role(cls, role_input: str) -> Optional[str]:
-        """Нормализация названия роли к каноническому виду"""
+        """Normalizes role name to canonical form"""
         if not role_input:
             return None
         
@@ -66,10 +66,10 @@ class RoleValidator:
     
     @classmethod
     def get_role_suggestions(cls, partial: str) -> list:
-        """Получение подсказок для ролей"""
+        """Gets suggestions for roles"""
         partial = partial.lower()
         suggestions = []
         for canonical in cls.VALID_ROLES.keys():
             if partial in canonical.lower():
                 suggestions.append(canonical)
-        return suggestions[:5]  # Максимум 5 подсказок
+        return suggestions[:5]  # Maximum 5 suggestions
