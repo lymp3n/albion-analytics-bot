@@ -11,13 +11,13 @@ guilds:
     founder_code: "FOUNDARTAB_UIO123" 
     mentor_code: "MENTORTAB_UIO942"
   
-  - name: "Grey Knights"
-    code: "GK456"
-    founder_code: "FOUNDERGK_XYZ789"
-    mentor_code: "MENTORGK_ABC123"
+  - name: "AltMetal"
+    code: "AM456"
+    founder_code: "FOUNDERAM_XYZ789"
+    mentor_code: "MENTORAM_ABC123"
 
 # Discord Roles (IDs)
 roles:
-  member_id: 1470393989072162856
-  mentor_id: 1470394066247221258
-  founder_id: 1470394116469821574
+  member_id: 1434197939068342302
+  mentor_id: 1471208796507603076
+  founder_id: 1431094365706649691
