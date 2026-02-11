@@ -19,121 +19,80 @@ class ChartGenerator:
             'danger': '#F47C7C',
             'warning': '#F7D6A0',
             'info': '#A1B0BC',
-            'dark': '#333D47',
-            'light': '#F6F8FA'
+            'dark': '#1A1C23',  # Darker background for dashboard
+            'light': '#F6F8FA',
+            'card': '#2D303E'   # Card background color
         }
+        self.font_path = 'assets/fonts/Montserrat-Regular.ttf'
+        self.font_bold_path = 'assets/fonts/Montserrat-Bold.ttf'
+        
+        # Configure Matplotlib fonts if available
+        if os.path.exists(self.font_path):
+            fm.fontManager.addfont(self.font_path)
+            fm.fontManager.addfont(self.font_bold_path)
+            plt.rcParams['font.family'] = 'Montserrat'
+            
         os.makedirs('temp/charts', exist_ok=True)
     
-    def generate_score_trend(self, weeks: List[str], scores: List[float], player_name: str) -> io.BytesIO:
-        """Generates a line chart for score trends"""
-        plt.figure(figsize=(7, 4))
-        plt.plot(weeks, scores, marker='o', linewidth=2.5, markersize=8, 
-                color=self.colors['primary'], label='Average Score')
-        plt.fill_between(range(len(weeks)), scores, alpha=0.25, color=self.colors['primary'])
+    def create_player_dashboard(self, stats: dict, player_name: str, rank: str) -> io.BytesIO:
+        """Generates a comprehensive single-image player dashboard"""
+        # Set dark theme for the whole figure
+        plt.style.use('dark_background')
+        fig = plt.figure(figsize=(10, 12), facecolor=self.colors['dark'])
         
-        plt.title(f'Score Trend: {player_name}', fontsize=12, pad=10)
-        plt.xlabel('Week (YYYY-WW)', fontsize=9)
-        plt.ylabel('Average Score', fontsize=9)
-        plt.ylim(0, 10.5)
+        # Grid specification: 3 rows, 2 columns
+        # Row 0: Header (merged)
+        # Row 1-2: Charts
+        gs = fig.add_gridspec(4, 2, height_ratios=[0.6, 1, 1, 1], hspace=0.4, wspace=0.3)
         
-        # Improvement for single-point cases
-        if len(weeks) == 1:
-            plt.xlim(-0.5, 0.5)
-            plt.xticks([0], [weeks[0]], rotation=45, ha='right', fontsize=8)
-        else:
-            plt.xticks(rotation=45, ha='right', fontsize=8)
-            
-        plt.grid(True, alpha=0.3, linestyle='--')
-        plt.legend()
-        plt.tight_layout()
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
-        plt.close()
-        buf.seek(0)
-        return buf
-    
-    def generate_role_scores(self, roles: List[str], scores: List[float], player_name: str) -> io.BytesIO:
-        """Generates a bar chart for scores by role"""
-        plt.figure(figsize=(7, 4))
-        bars = plt.bar(roles, scores, color=self.colors['primary'], edgecolor='white', linewidth=1.5)
-        
-        # Add values above the bars
-        for bar in bars:
-            height = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}', ha='center', va='bottom', fontsize=9)
-        
-        plt.title(f'Average Score by Role: {player_name}', fontsize=12, pad=10)
-        plt.ylabel('Average Score', fontsize=9)
-        plt.ylim(0, 10.5)
-        plt.grid(axis='y', alpha=0.3, linestyle='--')
-        plt.tight_layout()
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
-        plt.close()
-        buf.seek(0)
-        return buf
-    
-    def generate_top_players(self, players: List[str], scores: List[float]) -> io.BytesIO:
-        """Generates a top-10 players chart"""
-        plt.figure(figsize=(10, 6))
-        y_pos = range(len(players))
-        bars = plt.barh(y_pos, scores, color=self.colors['primary'], edgecolor='white', linewidth=1.5)
-        
-        # Add names and scores
-        for i, (bar, player, score) in enumerate(zip(bars, players, scores)):
-            plt.text(score + 0.15, i, f'{score:.2f}', va='center', fontsize=9)
-            plt.text(0.15, i, f'#{i+1} {player}', va='center', fontsize=10, fontweight='bold')
-        
-        plt.title('Top 10 Alliance Players (Last 30 Days)', fontsize=16, pad=15)
-        plt.xlabel('Average Score', fontsize=12)
-        plt.xlim(0, max(scores) + 1 if scores else 11)
-        plt.yticks([])  # Hide standard Y-axis labels
-        plt.grid(axis='x', alpha=0.3, linestyle='--')
-        plt.tight_layout()
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
-        plt.close()
-        buf.seek(0)
-        return buf
-    
-    def generate_content_performance(self, contents: List[str], scores: List[float], player_name: str) -> io.BytesIO:
-        """Generation of a bar chart for content performance"""
-        plt.figure(figsize=(7, 4))
-        bars = plt.barh(contents, scores, color=self.colors['secondary'], edgecolor='white', linewidth=1.2)
-        
-        for i, (bar, score) in enumerate(zip(bars, scores)):
-            plt.text(score + 0.1, i, f'{score:.1f}', va='center', fontsize=9)
-            
-        plt.title(f'Performance by Content: {player_name}', fontsize=12, pad=10)
-        plt.xlabel('Average Score', fontsize=9)
-        plt.xlim(0, 11)
-        plt.grid(axis='x', alpha=0.3, linestyle='--')
-        plt.tight_layout()
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
-        plt.close()
-        buf.seek(0)
-        return buf
+        # 1. Header Area (Manual Text using fig.text)
+        fig.text(0.5, 0.95, player_name, fontsize=32, fontweight='bold', color='white', ha='center')
+        fig.text(0.5, 0.92, f"Global Rank: #{rank} | Avg Score: {stats['avg_score']:.2f}/10 | Sessions: {stats['session_count']}", 
+                 fontsize=14, color=self.colors['secondary'], ha='center')
 
-    def generate_error_distribution(self, error_types: List[str], counts: List[int], player_name: str) -> io.BytesIO:
-        """Generation of a horizontal bar chart for error distribution"""
-        plt.figure(figsize=(7, 4))
-        y_pos = range(len(error_types))
-        plt.barh(y_pos, counts, color=self.colors['danger'], alpha=0.8)
-        
-        plt.yticks(y_pos, error_types, fontsize=8)
-        plt.title(f'Common Errors: {player_name}', fontsize=12, pad=10)
-        plt.xlabel('Occurrences', fontsize=9)
-        plt.tight_layout()
-        
+        # 2. Score Trend (Top Left)
+        ax1 = fig.add_subplot(gs[1, 0])
+        ax1.plot(stats['trend_weeks'], stats['trend_scores'], marker='o', linewidth=2, color=self.colors['primary'])
+        ax1.fill_between(range(len(stats['trend_weeks'])), stats['trend_scores'], alpha=0.2, color=self.colors['primary'])
+        ax1.set_title('Score Trend', fontsize=12, pad=10, color=self.colors['light'])
+        ax1.set_ylim(0, 10.5)
+        ax1.grid(True, alpha=0.1)
+        if len(stats['trend_weeks']) == 1: ax1.set_xlim(-0.5, 0.5)
+        plt.setp(ax1.get_xticklabels(), rotation=45, fontsize=8)
+
+        # 3. Role Mastery (Top Right)
+        ax2 = fig.add_subplot(gs[1, 1])
+        bars = ax2.bar(stats['role_names'], stats['role_scores'], color=self.colors['success'], alpha=0.8)
+        ax2.set_title('Role Performance', fontsize=12, pad=10, color=self.colors['light'])
+        ax2.set_ylim(0, 10.5)
+        for bar in bars:
+            ax2.text(bar.get_x() + bar.get_width()/2., bar.get_height(), f'{bar.get_height():.1f}', ha='center', va='bottom', fontsize=8)
+
+        # 4. Content Performance (Bottom Left)
+        ax3 = fig.add_subplot(gs[2, 0])
+        ax3.barh(stats['content_names'], stats['content_scores'], color=self.colors['secondary'], alpha=0.8)
+        ax3.set_title('Content Mastery', fontsize=12, pad=10, color=self.colors['light'])
+        ax3.set_xlim(0, 10.5)
+        ax3.invert_yaxis()
+
+        # 5. Error Distribution (Bottom Right)
+        ax4 = fig.add_subplot(gs[2, 1])
+        if stats['error_names']:
+            ax4.barh(stats['error_names'], stats['error_counts'], color=self.colors['danger'], alpha=0.8)
+            ax4.set_title('Common Errors', fontsize=12, pad=10, color=self.colors['light'])
+            ax4.invert_yaxis()
+        else:
+            ax4.text(0.5, 0.5, 'No error data yet', ha='center', va='center', color='gray')
+            ax4.set_title('Common Errors', fontsize=12, pad=10, color=self.colors['light'])
+
+        # 6. Footer
+        fig.text(0.5, 0.05, f"Generated on {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC | Albion Analytics", 
+                 fontsize=10, color='gray', ha='center', alpha=0.6)
+
+        # Save to buffer
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=90, bbox_inches='tight')
-        plt.close()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor=self.colors['dark'])
+        plt.close(fig)
         buf.seek(0)
         return buf
 

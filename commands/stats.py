@@ -57,55 +57,42 @@ class StatsCommands(commands.Cog):
         """, player['id'])
         current_rank = rank_data['rank'] if rank_data else "N/A"
         
-        # Generate charts
-        # 1. Score Trend
-        trend_chart = self.chart_generator.generate_score_trend(
-            stats['trend_weeks'], 
-            stats['trend_scores'], 
-            target.display_name
-        )
+        # Prepare data for dashboard
+        dashboard_data = {
+            'avg_score': stats['avg_score'],
+            'session_count': stats['session_count'],
+            'trend_weeks': stats['trend_weeks'],
+            'trend_scores': stats['trend_scores'],
+            'role_names': stats['role_names'],
+            'role_scores': stats['role_scores'],
+            'content_names': stats['content_names'],
+            'content_scores': stats['content_scores'],
+            'error_names': stats['error_names'],
+            'error_counts': stats['error_counts']
+        }
         
-        # 2. Scores by Role
-        role_chart = self.chart_generator.generate_role_scores(
-            stats['role_names'],
-            stats['role_scores'],
-            target.display_name
-        )
-
-        # 3. Content Performance
-        content_chart = self.chart_generator.generate_content_performance(
-            stats['content_names'],
-            stats['content_scores'],
-            target.display_name
-        )
-
-        # 4. Error Distribution
-        error_chart = self.chart_generator.generate_error_distribution(
-            stats['error_names'],
-            stats['error_counts'],
-            target.display_name
+        # Generate Dashboard Card
+        dashboard_image = self.chart_generator.create_player_dashboard(
+            dashboard_data,
+            target.display_name,
+            str(current_rank)
         )
         
         # Send Results
         embed = discord.Embed(
-            title=f"📊 Statistics for {target.display_name}",
-            description=f"Period: {period}",
-            color=discord.Color.green()
+            title=f"📊 Player Statistics: {target.display_name}",
+            description=f"Performance snapshot for the last **{period}**",
+            color=discord.Color.blue()
         )
-        embed.add_field(name="Average Score", value=f"{stats['avg_score']:.2f}/10", inline=True)
-        embed.add_field(name="Total Sessions", value=stats['session_count'], inline=True)
         embed.add_field(name="Global Rank", value=f"#{current_rank}", inline=True)
-        embed.add_field(name="Best Role", value=stats['best_role'] or "N/A", inline=True)
-        embed.add_field(name="Most Played Content", value=stats['top_content'] or "N/A", inline=True)
+        embed.add_field(name="Average Score", value=f"{stats['avg_score']:.2f}", inline=True)
+        embed.add_field(name="Total Sessions", value=f"{stats['session_count']}", inline=True)
         
-        await ctx.respond(embed=embed)
+        # Attach the dashboard image to the embed
+        file = discord.File(dashboard_image, filename="dashboard.png")
+        embed.set_image(url="attachment://dashboard.png")
         
-        # Send charts one by one
-        await ctx.send(file=discord.File(trend_chart, filename="score_trend.png"))
-        await ctx.send(file=discord.File(role_chart, filename="role_scores.png"))
-        await ctx.send(file=discord.File(content_chart, filename="content_perf.png"))
-        if stats['error_names']:
-            await ctx.send(file=discord.File(error_chart, filename="errors.png"))
+        await ctx.respond(embed=embed, file=file)
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):

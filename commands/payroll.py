@@ -21,55 +21,73 @@ class PayrollCommands(commands.Cog):
             await ctx.respond("❌ Only Founders can calculate payroll.", ephemeral=True)
             return
 
-        # Calculate date range
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=days)
+        # Calculate date ranges
+        now = datetime.utcnow()
+        date_7d = now - timedelta(days=7)
+        date_14d = now - timedelta(days=14)
         
-        # Fetch session counts per mentor
+        # Fetch session counts per mentor with multiple time windows
         rows = await self.bot.db.fetch("""
             SELECT 
                 p.discord_id,
                 p.nickname,
-                COUNT(s.id) as session_count
-            FROM sessions s
-            JOIN players p ON p.id = s.mentor_id
-            WHERE s.session_date >= $1
+                COUNT(s.id) as total_sessions,
+                COUNT(CASE WHEN s.session_date >= $1 THEN 1 END) as sessions_14d,
+                COUNT(CASE WHEN s.session_date >= $2 THEN 1 END) as sessions_7d
+            FROM players p
+            JOIN sessions s ON s.mentor_id = p.id
             GROUP BY p.id, p.discord_id, p.nickname
-            ORDER BY session_count DESC
-        """, start_date)
+            ORDER BY sessions_14d DESC
+        """, date_14d, date_7d)
         
         if not rows:
-            await ctx.respond(f"📉 No sessions found in the last {days} days.", ephemeral=True)
+            await ctx.respond("📉 No sessions found in the database.", ephemeral=True)
             return
             
-        total_sessions = sum(row['session_count'] for row in rows)
+        # We calculate payout based on the 14-day window as the standard
+        # but the user can see other stats.
+        total_sessions_14d = sum(row['sessions_14d'] for row in rows)
         
-        if total_sessions == 0:
-            await ctx.respond("📉 Total sessions is 0.", ephemeral=True)
+        if total_sessions_14d == 0:
+            await ctx.respond("📉 No sessions found in the last 14 days to calculate payout.", ephemeral=True)
             return
             
         # Generate Report
         embed = discord.Embed(
-            title="💰 Payroll Calculation",
-            description=f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({days} days)\nTotal Budget: {total_amount:,} Silver",
+            title="💰 Mentor Payroll Dashboard",
+            description=f"Budget: **{total_amount:,} Silver** (Distributed by last 14 days activity)",
             color=discord.Color.gold(),
             timestamp=datetime.utcnow()
         )
         
-        embed.add_field(name="Total Sessions", value=str(total_sessions), inline=False)
+        embed.add_field(name="Total Sessions (14d)", value=str(total_sessions_14d), inline=True)
+        embed.add_field(name="Active Mentors", value=str(len([r for r in rows if r['sessions_14d'] > 0])), inline=True)
         
         report_lines = []
         for row in rows:
-            count = row['session_count']
-            share_percent = count / total_sessions
+            count_14d = row['sessions_14d']
+            if count_14d == 0 and row['total_sessions'] == 0:
+                continue
+                
+            share_percent = count_14d / total_sessions_14d if total_sessions_14d > 0 else 0
             payout = int(total_amount * share_percent)
             
+            # Format: Nickname | 7d: X | 14d: Y | All: Z | Payout
             report_lines.append(
-                f"**{row['nickname']}** (<@{row['discord_id']}>): "
-                f"{count} sessions ({share_percent:.1%}) -> **{payout:,}**"
+                f"**{row['nickname']}** (<@{row['discord_id']}>)\n"
+                f"└ 7d: `{row['sessions_7d']}` | 14d: `{count_14d}` | All: `{row['total_sessions']}`\n"
+                f"└ Share: `{share_percent:.1%}` → **{payout:,} Silver**"
             )
             
-        embed.add_field(name="Payout Breakdown", value="\n".join(report_lines), inline=False)
+        # Split report into multiple fields if it's too long
+        full_report = "\n".join(report_lines)
+        if len(full_report) > 1024:
+            # Simple split for now, could be more robust
+            embed.add_field(name="Payout Breakdown (Part 1)", value="\n".join(report_lines[:len(report_lines)//2]), inline=False)
+            embed.add_field(name="Payout Breakdown (Part 2)", value="\n".join(report_lines[len(report_lines)//2:]), inline=False)
+        else:
+            embed.add_field(name="Payout Breakdown", value=full_report, inline=False)
+            
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         
         await ctx.respond(embed=embed)
