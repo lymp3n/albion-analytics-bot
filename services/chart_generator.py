@@ -66,7 +66,7 @@ class ChartGenerator:
 
         # 3. Role Mastery
         ax2 = fig.add_subplot(gs[2])
-        bars = ax2.bar(stats['role_names'], stats['role_scores'], color=self.colors['success'], edgeColor='white', alpha=0.8, width=0.6)
+        bars = ax2.bar(stats['role_names'], stats['role_scores'], color=self.colors['success'], edgecolor='white', alpha=0.8, width=0.6)
         ax2.set_title('Performance by Role', fontsize=16, pad=20, color=self.colors['light'])
         ax2.set_ylim(0, 10.5)
         ax2.grid(axis='y', alpha=0.1, linestyle='--')
@@ -131,16 +131,16 @@ class ChartGenerator:
             ax.text(score + 0.1, i, f'{score:.2f}', va='center', fontsize=14, color=self.colors['secondary'])
         
         ax.set_title('Top 10 Players (Total Score + Quality)', fontsize=22, pad=30, fontweight='bold', color='white')
-        ax.set_xlabel('Average Score', fontsize=14, color=self.colors['light'])
+        ax.set_xlabel('Average Score', fontsize=14, color=self.colors['light'], labelpad=20)
         ax.set_xlim(0, max(scores) + 1.5 if scores else 11)
         ax.set_yticks([]) # Hide Y ticks
         ax.grid(axis='x', alpha=0.1, linestyle='--')
         
         # Footer
-        fig.text(0.5, 0.02, f"Global Rankings | {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC", 
+        fig.text(0.5, 0.01, f"Global Rankings | {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC", 
                  fontsize=10, color='gray', ha='center', alpha=0.6)
         
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
         
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor=self.colors['dark'])
