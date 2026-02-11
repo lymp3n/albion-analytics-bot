@@ -17,24 +17,38 @@ class StatsCommands(commands.Cog):
     @option("period", choices=["7 days", "30 days", "all time"], default="30 days")
     async def stats(self, ctx: discord.ApplicationContext, target: discord.Member = None, period: str = "30 days"):
         """View player statistics"""
-        await ctx.defer()  # Defer immediately as DB work and chart generation takes time
+        # Handle both Context and Interaction
+        is_interaction = isinstance(ctx, discord.Interaction)
+        author = ctx.user if is_interaction else ctx.author
+        
+        if is_interaction:
+            if not ctx.response.is_done():
+                await ctx.response.defer(ephemeral=False)
+            # Assign author for easier use
+            ctx.author = author 
+        else:
+            await ctx.defer()
         
         # Determine target player
         if target is None:
-            target = ctx.author
+            target = author
         
         # Check access permissions
-        is_self = target.id == ctx.author.id
-        is_mentor = await self.bot.permissions.require_mentor(ctx.author)
+        is_self = target.id == author.id
+        is_mentor = await self.bot.permissions.require_mentor(author)
         
         if not is_self and not is_mentor:
-            await ctx.respond("❌ Only mentors and founders can view other players' statistics.", ephemeral=True)
+            msg = "❌ Only mentors and founders can view other players' statistics."
+            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
+            else: await ctx.respond(msg, ephemeral=True)
             return
         
         # Fetch player data
         player = await self.bot.db.get_player_by_discord_id(target.id)
         if not player:
-            await ctx.respond(f"❌ Player {target.mention} is not registered in the system.", ephemeral=True)
+            msg = f"❌ Player {target.mention} is not registered in the system."
+            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
+            else: await ctx.respond(msg, ephemeral=True)
             return
         
         # Determine period
@@ -43,7 +57,9 @@ class StatsCommands(commands.Cog):
         # Fetch statistics
         stats = await self._get_player_stats(player['id'], days)
         if not stats or stats['session_count'] == 0:
-            await ctx.respond(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
+            msg = f"📊 {target.mention} has no recorded sessions yet."
+            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
+            else: await ctx.respond(msg, ephemeral=True)
             return
             
         # Get Global Rank
@@ -92,7 +108,10 @@ class StatsCommands(commands.Cog):
         file = discord.File(dashboard_image, filename="dashboard.png")
         embed.set_image(url="attachment://dashboard.png")
         
-        await ctx.respond(embed=embed, file=file)
+        if is_interaction:
+            await ctx.followup.send(embed=embed, file=file)
+        else:
+            await ctx.respond(embed=embed, file=file)
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):
@@ -126,26 +145,9 @@ class StatsCommands(commands.Cog):
         players = [p['nickname'] for p in top_players]
         scores = [float(p['avg_score']) for p in top_players]
         
+        await ctx.respond(embed=embed)
         # Generate chart
         chart = self.chart_generator.generate_top_players(players, scores)
-        
-        # Create embed with table
-        embed = discord.Embed(
-            title="🏆 Top 10 Alliance Players (Last 30 Days)",
-            color=discord.Color.gold()
-        )
-        
-        table_text = "```\n#  Player             Score  Sessions\n"
-        table_text += "-" * 40 + "\n"
-        for i, player in enumerate(top_players, 1):
-            table_text += f"{i:2d}. {player['nickname'][:18]:18s} {float(player['avg_score']):5.2f}  {player['session_count']:8d}\n"
-        table_text += "```"
-        
-        embed.description = table_text
-        # embed.set_image(url="attachment://top_players.png") # Убираем картинку из эмбеда
-        embed.set_footer(text="Ranking based on total score (Volume + Quality)")
-        
-        await ctx.respond(embed=embed)
         await ctx.send(file=discord.File(chart, filename="top_players.png"))
 
     @discord.slash_command(name="stats_seed_test", description="Seed database with test session data (Founder only)")

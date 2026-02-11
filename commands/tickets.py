@@ -437,13 +437,19 @@ class TicketsCommands(commands.Cog):
 
     @ticket_group.command(name="list", description="List active tickets")
     async def ticket_list(self, ctx: discord.ApplicationContext):
-        if not await self.bot.permissions.require_member(ctx.author):
-            await ctx.respond("❌ Access denied.", ephemeral=True)
+        # Handle both Context and Interaction
+        is_interaction = isinstance(ctx, discord.Interaction)
+        author = ctx.user if is_interaction else ctx.author
+        
+        if not await self.bot.permissions.require_member(author):
+            msg = "❌ Access denied."
+            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
+            else: await ctx.respond(msg, ephemeral=True)
             return
             
-        guild_id = await self.bot.permissions.get_guild_id(ctx.author)
-        mentor = await self.bot.db.get_player_by_discord_id(ctx.author.id)
-        is_mentor = await self.bot.permissions.require_mentor(ctx.author)
+        guild_id = await self.bot.permissions.get_guild_id(author)
+        mentor = await self.bot.db.get_player_by_discord_id(author.id)
+        is_mentor = await self.bot.permissions.require_mentor(author)
         
         if is_mentor and mentor:
             tickets = await self.bot.db.fetch("""
@@ -459,10 +465,12 @@ class TicketsCommands(commands.Cog):
             FROM tickets t JOIN players p ON p.id = t.player_id
             WHERE p.discord_id = $1 AND t.status != 'closed'
             ORDER BY t.created_at DESC
-            """, ctx.author.id)
+            """, author.id)
             
         if not tickets:
-            await ctx.respond("📭 No active tickets found.", ephemeral=True)
+            msg = "📭 No active tickets found."
+            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
+            else: await ctx.respond(msg, ephemeral=True)
             return
             
         embed = discord.Embed(title="🎫 Active Tickets", color=discord.Color.blue())
@@ -470,10 +478,14 @@ class TicketsCommands(commands.Cog):
             emoji = "⏳" if t['status'] == 'available' else "🔍"
             embed.add_field(
                 name=f"{emoji} #{t['id']} | {t['role']}",
-                value=f"By <@{(t['discord_id'])}>\nStatus: {t['status']}",
+                value=f"By <@{t['discord_id']}>\nStatus: {t['status']}",
                 inline=False
             )
-        await ctx.respond(embed=embed, ephemeral=True)
+        
+        if is_interaction:
+            await ctx.followup.send(embed=embed, ephemeral=True)
+        else:
+            await ctx.respond(embed=embed, ephemeral=True)
 
     @ticket_group.command(name="claim", description="Claim a ticket (Mentors only)")
     @option("ticket_id", description="ID of the ticket to claim")
