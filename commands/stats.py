@@ -24,8 +24,6 @@ class StatsCommands(commands.Cog):
         if is_interaction:
             if not ctx.response.is_done():
                 await ctx.response.defer(ephemeral=False)
-            # Assign author for easier use
-            ctx.author = author 
         else:
             await ctx.defer()
         
@@ -144,6 +142,21 @@ class StatsCommands(commands.Cog):
         # Prepare data for chart
         players = [p['nickname'] for p in top_players]
         scores = [float(p['avg_score']) for p in top_players]
+        
+        # Create embed with table
+        embed = discord.Embed(
+            title="🏆 Top 10 Alliance Players (Last 30 Days)",
+            color=discord.Color.gold()
+        )
+        
+        table_text = "```\n#  Player             Score  Sessions\n"
+        table_text += "-" * 40 + "\n"
+        for i, player in enumerate(top_players, 1):
+            table_text += f"{i:2d}. {player['nickname'][:18]:18s} {float(player['avg_score']):5.2f}  {player['session_count']:8d}\n"
+        table_text += "```"
+        
+        embed.description = table_text
+        embed.set_footer(text="Ranking based on total score (Volume + Quality)")
         
         await ctx.respond(embed=embed)
         # Generate chart
