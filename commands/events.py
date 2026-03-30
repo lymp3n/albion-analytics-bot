@@ -6,9 +6,9 @@ from discord.ext import commands
 from datetime import datetime
 
 def get_templates():
-    """Читает шаблоны из event_templates.txt."""
+    """Читает шаблоны из events_templates.txt."""
     templates = {}
-    filepath = "event_templates.txt"
+    filepath = "events_templates.txt"
     
     if not os.path.exists(filepath):
         # Создаем дефолтный файл, если его нет
@@ -106,9 +106,18 @@ class SlotSelectView(ui.View):
         )
         
         # Обновляем основное сообщение
-        embed = await build_event_embed(self.bot, self.event_id)
-        await interaction.message.edit(embed=embed) # Редактируем сообщение с кнопками
-        await interaction.followup.send(f"✅ Вы заняли слот №{slot_num}!", ephemeral=True)
+        event = await self.bot.db.fetchrow("SELECT discord_channel_id, discord_message_id FROM events WHERE id = $1", self.event_id)
+        if event:
+            try:
+                channel = self.bot.get_channel(event['discord_channel_id'])
+                if channel:
+                    original_msg = await channel.fetch_message(event['discord_message_id'])
+                    embed = await build_event_embed(self.bot, self.event_id)
+                    await original_msg.edit(embed=embed)
+            except Exception as e:
+                print(f"Error editing original message: {e}")
+
+        await interaction.edit_original_response(content=f"✅ Вы заняли слот №{slot_num}!", view=None)
 
 class EventControlView(ui.View):
     """Постоянные кнопки под постом события"""
@@ -149,23 +158,37 @@ class EventControlView(ui.View):
 
     @ui.button(label="Покинуть", style=discord.ButtonStyle.danger, custom_id="evt_leave")
     async def leave(self, button: ui.Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         player = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE discord_message_id = $1", interaction.message.id)
         
-        if event and event['status'] == 'closed':
-            return await interaction.response.send_message("❌ Сбор уже закрыт, отказаться нельзя!", ephemeral=True)
+        if not event:
+            return await interaction.followup.send("❌ Событие не найдено.", ephemeral=True)
+            
+        if event['status'] == 'closed':
+            return await interaction.followup.send("❌ Сбор уже закрыт, отказаться нельзя!", ephemeral=True)
 
-        if player and event:
-            res = await self.bot.db.execute(
+        if player:
+            # Проверка: записан ли уже
+            existing = await self.bot.db.fetchrow(
+                "SELECT slot_number FROM event_signups WHERE event_id = $1 AND player_id = $2",
+                event['id'], player['id']
+            )
+            
+            if not existing:
+                return await interaction.followup.send("❌ Вас нет в списке участников.", ephemeral=True)
+                
+            await self.bot.db.execute(
                 "UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id = $2",
                 event['id'], player['id']
             )
-            if "UPDATE 0" not in res:
-                embed = await build_event_embed(self.bot, event['id'])
-                await interaction.message.edit(embed=embed)
-                await interaction.response.send_message("✅ Вы покинули группу.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Вас нет в списке.", ephemeral=True)
+            
+            # Обновление сообщения
+            embed = await build_event_embed(self.bot, event['id'])
+            await interaction.message.edit(embed=embed)
+            await interaction.followup.send("✅ Вы покинули группу.", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Вы не зарегистрированы.", ephemeral=True)
 
 class EventCommands(commands.Cog):
     def __init__(self, bot):
