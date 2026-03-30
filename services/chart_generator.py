@@ -58,7 +58,7 @@ class ChartGenerator:
             box = mpatches.FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.02,rounding_size=0.03", 
                                           facecolor=self.colors['card'], edgecolor=color, linewidth=1.5)
             ax.add_patch(box)
-            ax.text(x + width/2, y + height*0.75, title1, fontsize=11, color=self.colors['info'], ha='center', va='center', textwrap=True)
+            ax.text(x + width/2, y + height*0.75, title1, fontsize=11, color=self.colors['info'], ha='center', va='center')
             ax.text(x + width/2, y + height*0.50, str(val1), fontsize=22, fontweight='bold', color='white', ha='center', va='center')
             ax.text(x + width/2, y + height*0.25, title2, fontsize=11, color=self.colors['info'], ha='center', va='center')
             ax.text(x + width/2, y + height*0.08, str(val2), fontsize=15, fontweight='bold', color='white', ha='center', va='center')
