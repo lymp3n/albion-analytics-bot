@@ -51,7 +51,7 @@ class ChartGenerator:
         
         # Title
         ax_header.text(0.5, 0.85, player_name, fontsize=36, fontweight='bold', color='white', ha='center', va='center')
-        ax_header.text(0.5, 0.60, f"GLOBAL RANK: #{rank}", fontsize=14, color=self.colors['warning'], ha='center', va='center', fontweight='bold', letter_spacing=2)
+        ax_header.text(0.5, 0.60, f"G L O B A L   R A N K :  #{rank}", fontsize=14, color=self.colors['warning'], ha='center', va='center', fontweight='bold')
         
         import matplotlib.patches as mpatches
         def draw_metric_card(ax, x, y, width, height, title1, val1, title2, val2, color):

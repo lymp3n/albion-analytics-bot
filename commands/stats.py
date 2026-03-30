@@ -87,8 +87,10 @@ class StatsCommands(commands.Cog):
             'attended_events': stats.get('attended_events', 0)
         }
         
-        # Generate Dashboard Card
-        dashboard_image = self.chart_generator.create_player_dashboard(
+        # Generate Dashboard Card asynchronously to avoid blocking the Discord bot thread
+        import asyncio
+        dashboard_image = await asyncio.to_thread(
+            self.chart_generator.create_player_dashboard,
             dashboard_data,
             target.display_name,
             str(current_rank)
