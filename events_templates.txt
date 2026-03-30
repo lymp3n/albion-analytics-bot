@@ -10,12 +10,12 @@
 9. 1H arcane
 10. GA
 11. Occult
-12. Rootbound
+12. Rootbound/Cobra
 13. Rift
 14. Rift
 15. Dawnsong
 16. Spiked
-17. Perma
-18. Permafrost (main)
+17. Perma (fake)
+18. Perma (main)
 19. RB
 20. SH/Lifecurse
