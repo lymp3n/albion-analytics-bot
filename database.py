@@ -9,17 +9,15 @@ import yaml
 from enum import Enum
 
 class PlayerStatus(str, Enum):
-    """Player statuses in the system"""
-    PENDING = "pending"    # Awaiting approval
-    ACTIVE = "active"      # Regular member
-    MENTOR = "mentor"      # Mentor
-    FOUNDER = "founder"    # Guild founder
+    PENDING = "pending"
+    ACTIVE = "active"
+    MENTOR = "mentor"
+    FOUNDER = "founder"
 
 class TicketStatus(str, Enum):
-    """Ticket statuses"""
-    AVAILABLE = "available"     # Available for evaluation
-    IN_PROGRESS = "in_progress" # In review by a mentor
-    CLOSED = "closed"           # Closed and evaluated
+    AVAILABLE = "available"
+    IN_PROGRESS = "in_progress"
+    CLOSED = "closed"
 
 class Database:
     def __init__(self, database_url: str):
@@ -29,9 +27,7 @@ class Database:
         self.is_sqlite = database_url.startswith('sqlite://')
         
     async def connect(self):
-        """Database connection initialization"""
         if self.is_sqlite:
-            # SQLite: create folder if it doesn't exist
             db_path = self.database_url.replace('sqlite:///', '')
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
             
@@ -39,8 +35,6 @@ class Database:
             await self.conn.execute("PRAGMA foreign_keys = ON")
             await self.conn.execute("PRAGMA journal_mode = WAL")
         else:
-            # PostgreSQL
-            # Fix Render's "postgres://" scheme which asyncpg doesn't like
             if self.database_url.startswith("postgres://"):
                 self.database_url = self.database_url.replace("postgres://", "postgresql://", 1)
             
@@ -61,22 +55,18 @@ class Database:
         await self.seed_initial_data()
     
     async def close(self):
-        """Closing the connection"""
         if self.is_sqlite and self.conn:
             await self.conn.close()
         elif self.pool:
             await self.pool.close()
     
     async def execute(self, query: str, *args) -> Optional[int]:
-        """Execute a query"""
-        # If a tuple is passed as a single argument, unpack it
         if len(args) == 1 and isinstance(args[0], (list, tuple)):
             clean_args = args[0]
         else:
             clean_args = args
 
         if self.is_sqlite:
-            # For SQLite, replace $1, $2 with ? and convert types
             placeholders = query.count('$')
             for i in range(placeholders, 0, -1):
                 query = query.replace(f'${i}', '?')
@@ -89,20 +79,15 @@ class Database:
                 query_upper = query_trimmed.upper()
                 
                 if query_upper.startswith("INSERT"):
-                    # Ensure we get the ID via RETURNING id
                     if "RETURNING" not in query_upper:
-                        # Remove possible trailing semicolon and add RETURNING
                         query_trimmed = query_trimmed.rstrip('; \t\n\r')
                         query_trimmed += " RETURNING id"
-                    
                     return await conn.fetchval(query_trimmed, *clean_args)
                 else:
-                    # For UPDATE/DELETE/CREATE etc.
                     await conn.execute(query, *clean_args)
                     return None
     
     async def fetch(self, query: str, *args) -> list:
-        """Fetch data"""
         if len(args) == 1 and isinstance(args[0], (list, tuple)):
             clean_args = args[0]
         else:
@@ -122,7 +107,6 @@ class Database:
                 return [dict(row) for row in rows]
     
     async def fetchrow(self, query: str, *args) -> Optional[Dict[str, Any]]:
-        """Fetch a single row"""
         if len(args) == 1 and isinstance(args[0], (list, tuple)):
             clean_args = args[0]
         else:
@@ -144,8 +128,6 @@ class Database:
                 return dict(row) if row else None
     
     async def initialize_schema(self):
-        """Creating tables with SQLite and PostgreSQL support"""
-        # Define syntax based on DB type
         if self.is_sqlite:
             pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
             bigint_type = "BIGINT"
@@ -170,8 +152,6 @@ class Database:
             )
         """)
         
-        # If DB is PostgreSQL, drop UNIQUE constraint from discord_id just in case,
-        # so multiple guilds can have ID 0 during initialization
         if not self.is_sqlite:
             try:
                 await self.execute("ALTER TABLE guilds DROP CONSTRAINT IF EXISTS guilds_discord_id_key")
@@ -267,13 +247,40 @@ class Database:
                 FOREIGN KEY (metric_content_id) REFERENCES content(id) ON DELETE SET NULL
             )
         """)
+
+        # Events table
+        await self.execute(f"""
+            CREATE TABLE IF NOT EXISTS events (
+                id {pk_type},
+                discord_message_id {bigint_type} UNIQUE,
+                discord_channel_id {bigint_type},
+                guild_id INTEGER,
+                content_name TEXT NOT NULL,
+                event_time TEXT NOT NULL,
+                created_by INTEGER,
+                created_at {timestamp_default}
+            )
+        """)
+
+        # Event Signups table
+        await self.execute(f"""
+            CREATE TABLE IF NOT EXISTS event_signups (
+                id {pk_type},
+                event_id INTEGER NOT NULL,
+                slot_number INTEGER NOT NULL,
+                role_name TEXT NOT NULL,
+                player_id INTEGER,
+                FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+                FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
+            )
+        """)
         
         # Indices
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_sessions_player_date ON sessions(player_id, session_date)")
+        await self.execute("CREATE INDEX IF NOT EXISTS idx_events_message ON events(discord_message_id)")
         
-        # Trigger to update updated_at (SQLite only)
         if self.is_sqlite:
             await self.execute("""
                 CREATE TRIGGER IF NOT EXISTS update_tickets_updated_at
@@ -285,8 +292,6 @@ class Database:
             """)
     
     async def seed_initial_data(self):
-        """Seed initial data"""
-        # Check if data already exists
         guilds_count = await self.fetch("SELECT COUNT(*) as count FROM guilds")
         if guilds_count[0]['count'] > 0:
             return
@@ -298,7 +303,6 @@ class Database:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         
-        # Seed guilds
         for guild_data in config.get('guilds', []):
             hashed_code = hashlib.sha256(guild_data['code'].encode()).hexdigest()
             hashed_founder = hashlib.sha256(guild_data['founder_code'].encode()).hexdigest()
@@ -311,7 +315,6 @@ class Database:
                 0, guild_data['name'], hashed_code, hashed_founder, hashed_mentor
             )
     
-        # Seed content types
         content_types = ['Castles', 'Crystal League', 'Open World', 'HG 5v5', 'Avalon', 'Scrims']
         for content in content_types:
             await self.execute(
@@ -320,13 +323,11 @@ class Database:
             )
     
     async def update_guild_discord_id(self, guild_name: str, discord_guild_id: int):
-        """Update Guild Discord ID"""
         await self.execute(
             "UPDATE guilds SET discord_id = $1 WHERE name = $2 AND discord_id = 0",
             discord_guild_id, guild_name
         )
     
-    # Player utility methods
     async def get_player_by_discord_id(self, discord_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(
             "SELECT * FROM players WHERE discord_id = $1", 
