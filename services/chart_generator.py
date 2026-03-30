@@ -37,7 +37,7 @@ class ChartGenerator:
     def create_player_dashboard(self, stats: dict, player_name: str, rank: str) -> io.BytesIO:
         """Generates a comprehensive single-image player dashboard with vertical layout"""
         # Calculate dynamic height based on content
-        num_charts = 4
+        num_charts = 5
         base_height = 4  # Header/Footer space
         chart_height = 4
         total_height = base_height + (num_charts * chart_height)
@@ -100,7 +100,30 @@ class ChartGenerator:
             ax4.set_title('Common Errors', fontsize=16, pad=20, color=self.colors['light'])
             ax4.set_axis_off()
 
-        # 6. Footer
+        # 6. Event Participation
+        ax5 = fig.add_subplot(gs[5])
+        total_ev = stats.get('total_events', 0)
+        att_ev = stats.get('attended_events', 0)
+        missed_ev = max(0, total_ev - att_ev)
+        
+        if total_ev > 0:
+            percentage = (att_ev / total_ev) * 100
+            categories = ['Attended', 'Missed']
+            counts = [att_ev, missed_ev]
+            colors = [self.colors['success'], self.colors['danger']]
+            
+            bars5 = ax5.barh(categories, counts, color=colors, alpha=0.8)
+            ax5.set_title(f'Event Attendance ({percentage:.1f}%)', fontsize=16, pad=20, color=self.colors['light'])
+            ax5.grid(axis='x', alpha=0.1, linestyle='--')
+            
+            for i, bar in enumerate(bars5):
+                ax5.text(bar.get_width() + 0.1, i, f' {int(bar.get_width())}', va='center', fontsize=12, color=self.colors['light'])
+        else:
+            ax5.text(0.5, 0.5, 'No events recorded for this period', ha='center', va='center', color='gray', fontsize=14)
+            ax5.set_title('Event Attendance', fontsize=16, pad=20, color=self.colors['light'])
+            ax5.set_axis_off()
+
+        # 7. Footer
         fig.text(0.5, 0.02, f"Dashboard Generated on {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC | Powered by Albion Analytics", 
                  fontsize=12, color='gray', ha='center', alpha=0.6)
 

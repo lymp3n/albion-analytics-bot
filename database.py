@@ -258,9 +258,18 @@ class Database:
                 content_name TEXT NOT NULL,
                 event_time TEXT NOT NULL,
                 created_by INTEGER,
+                status TEXT DEFAULT 'open',
                 created_at {timestamp_default}
             )
         """)
+
+        # Add `status` column to events if it doesn't exist (backward compatibility migration)
+        try:
+            await self.execute("ALTER TABLE events ADD COLUMN status TEXT DEFAULT 'open'")
+        except Exception:
+            # Column already exists
+            pass
+
 
         # Event Signups table
         await self.execute(f"""

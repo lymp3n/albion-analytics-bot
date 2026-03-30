@@ -82,7 +82,9 @@ class StatsCommands(commands.Cog):
             'content_names': stats['content_names'],
             'content_scores': stats['content_scores'],
             'error_names': stats['error_names'],
-            'error_counts': stats['error_counts']
+            'error_counts': stats['error_counts'],
+            'total_events': stats.get('total_events', 0),
+            'attended_events': stats.get('attended_events', 0)
         }
         
         # Generate Dashboard Card
@@ -215,6 +217,7 @@ class StatsCommands(commands.Cog):
                 sessions_added += 1
                 
         await ctx.respond(f"✅ Added {sessions_added} test sessions for {len(players)} players!", ephemeral=True)
+
     
     async def _get_player_stats(self, player_id: int, days: int = None):
         """Fetches player statistics from the database"""
@@ -306,6 +309,32 @@ class StatsCommands(commands.Cog):
                 for e in row['error_types'].split(','):
                     error_counts[e.strip()] += 1
         
+        # Event Participation
+        events_where_clauses = ["status = 'closed'"]
+        events_params = []
+        if days:
+            events_where_clauses.append("created_at >= $1")
+            events_params.append(start_date)
+
+        events_where_str = " AND ".join(events_where_clauses)
+        
+        # Total closed events
+        total_events_query = f"SELECT COUNT(id) as total FROM events WHERE {events_where_str}"
+        total_ev_data = await self.bot.db.fetchrow(total_events_query, *events_params)
+        total_events_count = total_ev_data['total'] if total_ev_data else 0
+        
+        # Player attended events
+        attended_events_query = f"""
+            SELECT COUNT(DISTINCT e.id) as attended
+            FROM events e
+            JOIN event_signups es ON es.event_id = e.id
+            WHERE {events_where_str.replace('status', 'e.status')} 
+            AND es.player_id = ${len(events_params) + 1}
+        """
+        att_params = list(events_params) + [player_id]
+        att_ev_data = await self.bot.db.fetchrow(attended_events_query, *att_params)
+        attended_events_count = att_ev_data['attended'] if att_ev_data else 0
+
         sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:5]
         
         return {
@@ -322,7 +351,9 @@ class StatsCommands(commands.Cog):
             'content_names': [r['name'] for r in content_perf_data],
             'content_scores': [float(r['avg_score']) for r in content_perf_data],
             'error_names': [e[0] for e in sorted_errors],
-            'error_counts': [e[1] for e in sorted_errors]
+            'error_counts': [e[1] for e in sorted_errors],
+            'total_events': total_events_count,
+            'attended_events': attended_events_count
         }
 
 def setup(bot):

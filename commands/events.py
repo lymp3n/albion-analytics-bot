@@ -31,7 +31,7 @@ def get_templates():
 
 async def build_event_embed(bot, event_id: int):
     """Генерирует красивый Embed для поста события"""
-    event = await bot.db.fetchrow("SELECT content_name, event_time FROM events WHERE id = $1", event_id)
+    event = await bot.db.fetchrow("SELECT content_name, event_time, status FROM events WHERE id = $1", event_id)
     if not event:
         return discord.Embed(description="❌ Событие не найдено."), None
         
@@ -56,7 +56,14 @@ async def build_event_embed(bot, event_id: int):
         roster_text += f"`{s['slot_number']}.` **{s['role_name']}**{mention}\n"
     
     embed.description += f"\n{roster_text}"
-    embed.set_footer(text="Нажмите 'Участвовать', чтобы выбрать номер слота")
+    status_text = " (Закрыто)" if event.get('status') == 'closed' else ""
+    embed.title += status_text
+
+    if event.get('status') == 'closed':
+        embed.color = discord.Color.dark_grey()
+        embed.set_footer(text=f"Сбор закрыт | ID события: {event_id}")
+    else:
+        embed.set_footer(text=f"Нажмите 'Участвовать' | ID события: {event_id}")
     
     return embed
 
@@ -115,8 +122,10 @@ class EventControlView(ui.View):
         if not player:
             return await interaction.response.send_message("❌ Сначала зарегистрируйтесь!", ephemeral=True)
             
-        event = await self.bot.db.fetchrow("SELECT id FROM events WHERE discord_message_id = $1", interaction.message.id)
+        event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE discord_message_id = $1", interaction.message.id)
         if not event: return
+        if event['status'] == 'closed':
+            return await interaction.response.send_message("❌ Сбор уже закрыт!", ephemeral=True)
         
         # Проверка: не записан ли уже
         existing = await self.bot.db.fetchrow(
@@ -141,8 +150,11 @@ class EventControlView(ui.View):
     @ui.button(label="Покинуть", style=discord.ButtonStyle.danger, custom_id="evt_leave")
     async def leave(self, button: ui.Button, interaction: discord.Interaction):
         player = await self.bot.db.get_player_by_discord_id(interaction.user.id)
-        event = await self.bot.db.fetchrow("SELECT id FROM events WHERE discord_message_id = $1", interaction.message.id)
+        event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE discord_message_id = $1", interaction.message.id)
         
+        if event and event['status'] == 'closed':
+            return await interaction.response.send_message("❌ Сбор уже закрыт, отказаться нельзя!", ephemeral=True)
+
         if player and event:
             res = await self.bot.db.execute(
                 "UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id = $2",
@@ -203,5 +215,37 @@ class EventCommands(commands.Cog):
         await self.bot.db.execute("UPDATE events SET discord_message_id = $1 WHERE id = $2", msg.id, event_id)
         await ctx.respond(f"✅ Сбор опубликован в {channel.mention}")
 
+    @event_group.command(name="close", description="Закрыть сбор и зафиксировать посещаемость")
+    @option("event_id", description="ID события (указан внизу под постом о сборе)")
+    async def close_event(self, ctx: discord.ApplicationContext, event_id: int):
+        if not await self.bot.permissions.require_mentor(ctx.author):
+            return await ctx.respond("❌ Нет прав.", ephemeral=True)
+            
+        await ctx.defer(ephemeral=True)
+        event = await self.bot.db.fetchrow("SELECT id, discord_channel_id, discord_message_id, status FROM events WHERE id = $1", event_id)
+        
+        if not event:
+            return await ctx.respond("❌ Событие не найдено.", ephemeral=True)
+            
+        if event['status'] == 'closed':
+            return await ctx.respond("❌ Это событие уже закрыто.", ephemeral=True)
+            
+        # Маркируем как closed
+        await self.bot.db.execute("UPDATE events SET status = 'closed' WHERE id = $1", event_id)
+        
+        # Обновляем пост (меняем цвет и убираем кнопки)
+        try:
+            channel = self.bot.get_channel(event['discord_channel_id'])
+            if channel:
+                msg = await channel.fetch_message(event['discord_message_id'])
+                embed = await build_event_embed(self.bot, event_id)
+                # clear buttons
+                class EmptyView(ui.View): pass
+                await msg.edit(embed=embed, view=EmptyView())
+        except Exception:
+            pass
+            
+        await ctx.respond(f"✅ Событие #{event_id} успешно закрыто. Состав участников зафиксирован для статистики.")
+
 def setup(bot):
-    bot.add_cog(Event(bot))
+    bot.add_cog(EventCommands(bot))
