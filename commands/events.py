@@ -204,4 +204,4 @@ class EventCommands(commands.Cog):
         await ctx.respond(f"✅ Сбор опубликован в {channel.mention}")
 
 def setup(bot):
-    bot.add_cog(EventCommands(bot))
+    bot.add_cog(Event(bot))
