@@ -190,6 +190,32 @@ class EventControlView(ui.View):
         else:
             await interaction.followup.send("❌ Вы не зарегистрированы.", ephemeral=True)
 
+    @ui.button(label="Завершить", style=discord.ButtonStyle.secondary, custom_id="evt_close", row=1)
+    async def close_event_btn(self, button: ui.Button, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        # Check permissions: role 1488301094609096744 or Founder
+        has_role = any(r.id == 1488301094609096744 for r in interaction.user.roles)
+        is_founder = await self.bot.permissions.require_founder(interaction.user)
+        
+        if not (has_role or is_founder):
+            return await interaction.followup.send("❌ Только модератор контента может завершить сбор.", ephemeral=True)
+
+        event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE discord_message_id = $1", interaction.message.id)
+        if not event:
+            return await interaction.followup.send("❌ Событие не найдено.", ephemeral=True)
+            
+        if event['status'] == 'closed':
+            return await interaction.followup.send("❌ Это событие уже закрыто.", ephemeral=True)
+            
+        # Маркируем как closed
+        await self.bot.db.execute("UPDATE events SET status = 'closed' WHERE id = $1", event['id'])
+        
+        # Обновляем пост (меняем цвет и убираем кнопки)
+        embed = await build_event_embed(self.bot, event['id'])
+        self.clear_items()
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.followup.send(f"✅ Участники зафиксированы и событие завершено.", ephemeral=True)
+
 class EventCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
