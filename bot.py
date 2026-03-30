@@ -74,6 +74,7 @@ class AlbionBot(commands.Bot):
             self.load_extension("commands.tickets")
             self.load_extension("commands.payroll")
             self.load_extension("commands.menu")
+            self.load_extension("commands.events") # <-- ДОБАВЛЕНО: Загрузка нового функционала
             logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
             logger.info(f"✓ Found {len(self.application_commands)} application commands")
         except Exception as e:
