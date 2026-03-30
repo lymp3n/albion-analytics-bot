@@ -13,8 +13,6 @@ from services.nlp import ErrorCategorizer
 # --- Ticket Creation Modal ---
 
 class TicketModal(ui.Modal):
-    """Modal for creating a ticket (Replay + Role)"""
-    
     def __init__(self, bot, player_id: int, guild_id: int):
         super().__init__(title="Create Session Ticket")
         self.bot = bot
@@ -48,7 +46,6 @@ class TicketModal(ui.Modal):
         self.add_item(self.description)
     
     async def callback(self, interaction: discord.Interaction):
-        # Validate Role
         normalized_role = RoleValidator.normalize_role(self.role.value)
         if not normalized_role:
             suggestions = RoleValidator.get_role_suggestions(self.role.value)
@@ -59,7 +56,6 @@ class TicketModal(ui.Modal):
             )
             return
         
-        # Create Channel Logic
         category_id = self.bot.tickets_category_id or self.bot.config.get('tickets_category_id')
         category = discord.utils.get(interaction.guild.categories, id=category_id)
         
@@ -75,7 +71,6 @@ class TicketModal(ui.Modal):
             interaction.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
         
-        # Add permissions for Mentors and Founders based on Role IDs
         mentor_role_id = self.bot.permissions.mentor_role_id
         founder_role_id = self.bot.permissions.founder_role_id
         
@@ -97,7 +92,6 @@ class TicketModal(ui.Modal):
             await interaction.response.send_message(f"❌ Failed to create channel: {str(e)}", ephemeral=True)
             return
             
-        # Save to DB
         ticket_id = await self.bot.db.execute("""
             INSERT INTO tickets (
                 discord_channel_id, player_id, replay_link, session_date, 
@@ -108,7 +102,6 @@ class TicketModal(ui.Modal):
            normalized_role, self.description.value.strip() if self.description.value else None,
            TicketStatus.AVAILABLE.value)
            
-        # Initial Message
         embed = discord.Embed(
             title="🎫 New Session Ticket Created",
             description="Please wait for a mentor to review your session.",
@@ -130,8 +123,6 @@ class TicketModal(ui.Modal):
         try:
             await interaction.response.send_message(f"✅ Ticket created: {channel.mention}", ephemeral=True)
         except Exception as e:
-            print(f"⚠️ Failed to send modal success message: {e}")
-            # fall back if already acknowledged
             try: await interaction.followup.send(f"✅ Ticket created: {channel.mention}", ephemeral=True)
             except: pass
 
@@ -139,8 +130,6 @@ class TicketModal(ui.Modal):
 # --- Rating Flow (Selects + Modal) ---
 
 class RatingSelectView(ui.View):
-    """Step 1 of Rating: Select Content, Role, Score, Errors"""
-    
     def __init__(self, bot, ticket_id: int, player_id: int, mentor_id: int, replay_link: str):
         super().__init__(timeout=300)
         self.bot = bot
@@ -155,25 +144,21 @@ class RatingSelectView(ui.View):
             "errors": []
         }
         
-        # Content Select
         content_options = [discord.SelectOption(label=c) for c in ContentTypes.all()]
         self.content_select = ui.Select(placeholder="Select Content Type", options=content_options, min_values=1, max_values=1, row=0)
         self.content_select.callback = self.content_callback
         self.add_item(self.content_select)
         
-        # Role Select
         role_options = [discord.SelectOption(label=r) for r in PlayerRoles.all()]
         self.role_select = ui.Select(placeholder="Select Player Role", options=role_options, min_values=1, max_values=1, row=1)
         self.role_select.callback = self.role_callback
         self.add_item(self.role_select)
         
-        # Score Select
         score_options = [discord.SelectOption(label=str(i), description=f"{i}/10") for i in range(1, 11)]
         self.score_select = ui.Select(placeholder="Select Score (1-10)", options=score_options, min_values=1, max_values=1, row=2)
         self.score_select.callback = self.score_callback
         self.add_item(self.score_select)
         
-        # Error Select
         error_options = [discord.SelectOption(label=cat) for cat in ErrorCategorizer.get_all_categories()]
         self.error_select = ui.Select(placeholder="Select Error Categories (Optional)", options=error_options, min_values=0, max_values=len(error_options), row=3)
         self.error_select.callback = self.error_callback
@@ -206,8 +191,6 @@ class RatingSelectView(ui.View):
 
 
 class FeedbackModal(ui.Modal):
-    """Step 2 of Rating: Work On + Comments"""
-    
     def __init__(self, bot, ticket_id, player_id, mentor_id, replay_link, selections):
         super().__init__(title="Session Feedback")
         self.bot = bot
@@ -223,7 +206,6 @@ class FeedbackModal(ui.Modal):
         self.add_item(self.comments)
         
     async def callback(self, interaction: discord.Interaction):
-        # Save Session Logic
         content_name = self.selections['content']
         role_name = self.selections['role']
         score = self.selections['score']
@@ -248,7 +230,6 @@ class FeedbackModal(ui.Modal):
                 UPDATE tickets SET status = $1, mentor_id = $2, closed_at = $3 WHERE id = $4
             """, TicketStatus.CLOSED.value, self.mentor_id, datetime.utcnow(), self.ticket_id)
             
-            # Send DM to Player
             player_data = await self.bot.db.get_player_by_id(self.player_id)
             if player_data:
                 player_user = self.bot.get_user(player_data['discord_id']) or await self.bot.fetch_user(player_data['discord_id'])
@@ -264,7 +245,6 @@ class FeedbackModal(ui.Modal):
                     try: await player_user.send(embed=embed)
                     except: pass
             
-            # Send to history-of-tickets channel
             try:
                 guild = interaction.guild
                 history_channel = discord.utils.get(guild.text_channels, name="history-of-tickets")
@@ -288,7 +268,6 @@ class FeedbackModal(ui.Modal):
                 try: await interaction.followup.send("✅ Evaluation submitted! This channel will be deleted in 10 seconds.", ephemeral=True)
                 except: pass
 
-            # Wait 10 seconds and delete the channel
             await asyncio.sleep(10)
             try:
                 if interaction.channel:
@@ -297,17 +276,11 @@ class FeedbackModal(ui.Modal):
                 print(f"⚠️ Failed to delete ticket channel: {delete_error}")
             
         except Exception as e:
-            print(f"❌ Error in FeedbackModal callback: {e}")
-            try:
-                await interaction.response.send_message(f"❌ Error saving results: {e}", ephemeral=True)
-            except:
-                try: await interaction.followup.send(f"❌ Error saving results: {e}", ephemeral=True)
-                except: pass
+            try: await interaction.response.send_message(f"❌ Error saving results: {e}", ephemeral=True)
+            except: pass
 
 
 class TicketControlView(ui.View):
-    """Control buttons in ticket channel (Stateless for persistence)"""
-    
     def __init__(self, bot):
         super().__init__(timeout=None)
         self.bot = bot
@@ -315,7 +288,6 @@ class TicketControlView(ui.View):
     @ui.button(label="Claim Ticket", style=discord.ButtonStyle.primary, emoji="🔍", custom_id="claim_ticket")
     async def claim_ticket(self, button: ui.Button, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        # Use new permissions check
         if not await self.bot.permissions.require_mentor(interaction.user):
             await interaction.followup.send("❌ Only mentors can claim tickets.", ephemeral=True)
             return
@@ -330,49 +302,63 @@ class TicketControlView(ui.View):
             await interaction.followup.send("❌ You are not registered in the system.", ephemeral=True)
             return
 
-        if ticket['status'] != TicketStatus.AVAILABLE.value:
-            if ticket['mentor_id'] == mentor['id']:
-                await interaction.followup.send("✅ You already claimed this.", ephemeral=True)
-            else:
-                await interaction.followup.send("❌ Already claimed by someone else.", ephemeral=True)
-            return
-            
-        await self.bot.db.execute("""
-            UPDATE tickets SET status = $1, mentor_id = $2, updated_at = $3 WHERE id = $4
-        """, TicketStatus.IN_PROGRESS.value, mentor['id'], datetime.utcnow(), ticket['id'])
-        
-        # Update Embed
-        embed = discord.Embed(
-            title="🎫 Session Ticket",
-            description=f"Mentor {interaction.user.mention} is reviewing your session.",
-            color=discord.Color.orange(),
-            timestamp=datetime.utcnow()
-        )
         t_data = await self.bot.db.fetchrow("""
             SELECT t.replay_link, t.role, t.description, p.nickname 
             FROM tickets t JOIN players p ON p.id = t.player_id WHERE t.id = $1
         """, ticket['id'])
-        
+
+        embed = discord.Embed(timestamp=datetime.utcnow())
         embed.add_field(name="Player", value=t_data['nickname'], inline=True)
         embed.add_field(name="Role", value=t_data['role'], inline=True)
-        embed.add_field(name="Status", value="🔍 In Progress", inline=True)
+        # 3rd field is Status, we will replace it below
+        embed.add_field(name="Status", value="...", inline=True)
         embed.add_field(name="Replay", value=f"[View Replay]({t_data['replay_link']})", inline=False)
         if t_data['description']:
             embed.add_field(name="Description", value=t_data['description'], inline=False)
-        embed.set_footer(text=f"Ticket ID: {ticket['id']} | Claimed by {interaction.user.display_name}")
+
+        if ticket['status'] == TicketStatus.AVAILABLE.value:
+            # CLAIM TICKET
+            await self.bot.db.execute("""
+                UPDATE tickets SET status = $1, mentor_id = $2, updated_at = $3 WHERE id = $4
+            """, TicketStatus.IN_PROGRESS.value, mentor['id'], datetime.utcnow(), ticket['id'])
+            
+            embed.title = "🎫 Session Ticket"
+            embed.description = f"Mentor {interaction.user.mention} is reviewing your session."
+            embed.color = discord.Color.orange()
+            embed.set_field_at(2, name="Status", value="🔍 In Progress", inline=True)
+            embed.set_footer(text=f"Ticket ID: {ticket['id']} | Claimed by {interaction.user.display_name}")
+            
+            button.label = "Unclaim Ticket"
+            button.style = discord.ButtonStyle.danger
+            button.emoji = "❌"
+            await interaction.followup.send(f"✅ Claimed by {interaction.user.mention}! Use `/ticket rate` to evaluate.", ephemeral=False)
+
+        elif ticket['status'] == TicketStatus.IN_PROGRESS.value and ticket['mentor_id'] == mentor['id']:
+            # UNCLAIM TICKET
+            await self.bot.db.execute("""
+                UPDATE tickets SET status = $1, mentor_id = NULL, updated_at = $2 WHERE id = $3
+            """, TicketStatus.AVAILABLE.value, datetime.utcnow(), ticket['id'])
+            
+            embed.title = "🎫 Session Ticket Created"
+            embed.description = "Please wait for a mentor to review your session."
+            embed.color = discord.Color.blue()
+            embed.set_field_at(2, name="Status", value="⏳ Awaiting Mentor", inline=True)
+            embed.set_footer(text=f"Ticket ID: {ticket['id']} | Unclaimed by {interaction.user.display_name}")
+            
+            button.label = "Claim Ticket"
+            button.style = discord.ButtonStyle.primary
+            button.emoji = "🔍"
+            await interaction.followup.send(f"✅ You have unclaimed this ticket.", ephemeral=True)
+            
+        else:
+            await interaction.followup.send("❌ This ticket is already claimed by someone else.", ephemeral=True)
+            return
         
         try:
-            # Disable the Claim button after successful claiming
-            button.disabled = True
-            button.label = "Claimed"
-            button.style = discord.ButtonStyle.secondary
-            
             msg = await interaction.channel.fetch_message(ticket['discord_message_id'])
             await msg.edit(embed=embed, view=self)
         except Exception as e:
             print(f"⚠️ Failed to update ticket message: {e}")
-        
-        await interaction.followup.send(f"✅ Claimed by {interaction.user.mention}! Use `/ticket rate` to evaluate.", ephemeral=False)
     
     @ui.button(label="Rate Session", style=discord.ButtonStyle.green, emoji="⭐", custom_id="rate_session")
     async def rate_session(self, button: ui.Button, interaction: discord.Interaction):
@@ -388,8 +374,6 @@ class TicketControlView(ui.View):
             return
         
         is_mentor = await self.bot.permissions.require_mentor(interaction.user)
-        
-        # Find internal player ID to compare with mentor_id
         mentor = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         is_owner = mentor and ticket['mentor_id'] == mentor['id']
         
@@ -416,7 +400,6 @@ class TicketsCommands(commands.Cog):
     
     @commands.Cog.listener()
     async def on_ready(self):
-        """Register persistent view"""
         self.bot.add_view(TicketControlView(self.bot))
 
     ticket_group = discord.SlashCommandGroup("ticket", "Manage tickets")
@@ -437,7 +420,6 @@ class TicketsCommands(commands.Cog):
 
     @ticket_group.command(name="list", description="List active tickets")
     async def ticket_list(self, ctx: discord.ApplicationContext):
-        # Handle both Context and Interaction
         is_interaction = isinstance(ctx, discord.Interaction)
         author = ctx.user if is_interaction else ctx.author
         
@@ -542,13 +524,10 @@ class TicketsCommands(commands.Cog):
     @ticket_group.command(name="info", description="View ticket details (Mentors only)")
     @option("ticket_id", description="Ticket ID to view")
     async def ticket_info(self, ctx: discord.ApplicationContext, ticket_id: int):
-        """View detailed ticket information (for mentors/founders)"""
-        # Check mentor permissions
         if not await self.bot.permissions.require_mentor(ctx.author):
             await ctx.respond("❌ Only mentors and founders can view ticket details.", ephemeral=True)
             return
         
-        # Fetch ticket data
         ticket = await self.bot.db.fetchrow("""
             SELECT 
                 t.*,
@@ -568,7 +547,6 @@ class TicketsCommands(commands.Cog):
             await ctx.respond(f"❌ Ticket #{ticket_id} not found.", ephemeral=True)
             return
         
-        # Embed with detailed information
         embed = discord.Embed(
             title=f"🎫 Ticket #{ticket_id} Details",
             color=discord.Color.blue(),
