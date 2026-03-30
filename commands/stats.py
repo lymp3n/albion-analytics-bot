@@ -84,7 +84,10 @@ class StatsCommands(commands.Cog):
             'error_names': stats['error_names'],
             'error_counts': stats['error_counts'],
             'total_events': stats.get('total_events', 0),
-            'attended_events': stats.get('attended_events', 0)
+            'attended_events': stats.get('attended_events', 0),
+            'best_role': stats.get('best_role'),
+            'top_content': stats.get('top_content'),
+            'last_session': stats.get('last_session')
         }
         
         # Generate Dashboard Card asynchronously to avoid blocking the Discord bot thread
