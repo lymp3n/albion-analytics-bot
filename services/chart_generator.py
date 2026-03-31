@@ -41,27 +41,27 @@ class ChartGenerator:
         fig = plt.figure(figsize=(16, 10), facecolor=self.colors['dark'])
         
         # Grid specification: Header + 2 rows of charts
-        gs = fig.add_gridspec(3, 2, height_ratios=[0.45, 1, 1], hspace=0.3, wspace=0.2)
+        gs = fig.add_gridspec(3, 2, height_ratios=[0.7, 1, 1], hspace=0.3, wspace=0.2)
         
         # 1. Header Area & Metric Cards
         ax_header = fig.add_subplot(gs[0, :])
         ax_header.set_axis_off()
         ax_header.set_xlim(0, 1)
-        ax_header.set_ylim(0, 1)
+        ax_header.set_ylim(-0.1, 1.1)  # Increase vertical room
         
         # Title
-        ax_header.text(0.5, 0.85, player_name, fontsize=36, fontweight='bold', color='white', ha='center', va='center')
-        ax_header.text(0.5, 0.60, f"G L O B A L   R A N K :  #{rank}", fontsize=14, color=self.colors['warning'], ha='center', va='center', fontweight='bold')
+        ax_header.text(0.5, 0.95, player_name, fontsize=36, fontweight='bold', color='white', ha='center', va='center')
+        ax_header.text(0.5, 0.78, f"G L O B A L   R A N K :  #{rank}", fontsize=14, color=self.colors['warning'], ha='center', va='center', fontweight='bold')
         
         import matplotlib.patches as mpatches
         def draw_metric_card(ax, x, y, width, height, title1, val1, title2, val2, color):
-            box = mpatches.FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.02,rounding_size=0.03", 
+            box = mpatches.FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.03,rounding_size=0.03", 
                                           facecolor=self.colors['card'], edgecolor=color, linewidth=1.5)
             ax.add_patch(box)
-            ax.text(x + width/2, y + height*0.75, title1, fontsize=11, color=self.colors['info'], ha='center', va='center')
-            ax.text(x + width/2, y + height*0.50, str(val1), fontsize=22, fontweight='bold', color='white', ha='center', va='center')
-            ax.text(x + width/2, y + height*0.25, title2, fontsize=11, color=self.colors['info'], ha='center', va='center')
-            ax.text(x + width/2, y + height*0.08, str(val2), fontsize=15, fontweight='bold', color='white', ha='center', va='center')
+            ax.text(x + width/2, y + height*0.82, title1, fontsize=11, color=self.colors['info'], ha='center', va='center')
+            ax.text(x + width/2, y + height*0.55, str(val1), fontsize=20, fontweight='bold', color='white', ha='center', va='center')
+            ax.text(x + width/2, y + height*0.28, title2, fontsize=11, color=self.colors['info'], ha='center', va='center')
+            ax.text(x + width/2, y + height*0.06, str(val2), fontsize=15, fontweight='bold', color='white', ha='center', va='center')
 
         # Calculations
         total_ev = stats.get('total_events', 0)
@@ -72,7 +72,7 @@ class ChartGenerator:
         if hasattr(last_s, 'strftime'): last_s = last_s.strftime('%Y-%m-%d')
         
         # Draw 4 Cards
-        card_w, card_h = 0.22, 0.38
+        card_w, card_h = 0.22, 0.65
         draw_metric_card(ax_header, 0.03, 0.0, card_w, card_h, "TOTAL SESSIONS", stats['session_count'], "AVERAGE SCORE", f"{stats['avg_score']:.2f}", self.colors['primary'])
         draw_metric_card(ax_header, 0.28, 0.0, card_w, card_h, "EVENTS ATTENDED", f"{att_ev} / {total_ev}", "ATTENDANCE RATE", f"{att_pct:.1f}%", self.colors['success'])
         draw_metric_card(ax_header, 0.53, 0.0, card_w, card_h, "BEST ROLE", stats['best_role'] or 'N/A', "TOP CONTENT", stats['top_content'] or 'None', self.colors['secondary'])
