@@ -41,12 +41,11 @@ class AlbionBot(commands.Bot):
         intents.members = True
         intents.message_content = True
         
-        # debug_guilds - instant command synchronization for specified servers
+        # Register commands globally (works on all servers)
         super().__init__(
             command_prefix="!",
             intents=intents,
             help_command=None,
-            debug_guilds=[self.guild_id] if self.guild_id else None
         )
         
         # Load YAML config
