@@ -76,7 +76,17 @@ class StatsCommands(commands.Cog):
             'attended_events': stats.get('attended_events', 0),
             'best_role': stats.get('best_role'),
             'top_content': stats.get('top_content'),
-            'last_session': stats.get('last_session')
+            'last_session': stats.get('last_session'),
+            'content_coverage_pct': stats.get('content_coverage_pct', 0.0),
+            'distinct_content_count': stats.get('distinct_content_count', 0),
+            'total_content_count': stats.get('total_content_count', 0),
+            'error_score_points': stats.get('error_score_points', []),
+            'event_content_names': stats.get('event_content_names', []),
+            'event_content_counts': stats.get('event_content_counts', []),
+            'guild_role_names': stats.get('guild_role_names', []),
+            'guild_role_counts': stats.get('guild_role_counts', []),
+            'guild_error_names': stats.get('guild_error_names', []),
+            'guild_error_counts': stats.get('guild_error_counts', []),
         }
         
         # Generate dashboard in a worker thread to avoid blocking the event loop.
@@ -235,7 +245,7 @@ class StatsCommands(commands.Cog):
                 MAX(s.session_date) as last_session,
                 (SELECT role FROM sessions s2
                  WHERE {where_str.replace('s.', 's2.')} 
-                 GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) as best_role,
+                 GROUP BY role ORDER BY AVG(s2.score) DESC, COUNT(*) DESC LIMIT 1) as best_role,
                 (SELECT c.name FROM sessions s3 
                  JOIN content c ON c.id = s3.content_id 
                  WHERE {where_str.replace('s.', 's3.')} 
@@ -303,6 +313,20 @@ class StatsCommands(commands.Cog):
             if row['error_types']:
                 for e in row['error_types'].split(','):
                     error_counts[e.strip()] += 1
+
+        # Error-score correlation points
+        correlation_rows = await self.bot.db.fetch(
+            f"SELECT score, error_types FROM sessions s WHERE {where_str}",
+            *params
+        )
+        error_score_points = []
+        for row in correlation_rows:
+            raw = (row.get('error_types') or "").strip()
+            err_count = len([e for e in raw.split(',') if e.strip()]) if raw else 0
+            error_score_points.append({
+                'errors': err_count,
+                'score': float(row['score']) if row.get('score') is not None else 0.0
+            })
         
         # Event Participation
         events_where_clauses = ["status = 'closed'"]
@@ -330,6 +354,66 @@ class StatsCommands(commands.Cog):
         att_ev_data = await self.bot.db.fetchrow(attended_events_query, *att_params)
         attended_events_count = att_ev_data['attended'] if att_ev_data else 0
 
+        # Content coverage (distinct reviewed content / total content types)
+        total_content_row = await self.bot.db.fetchrow("SELECT COUNT(*) as total FROM content")
+        total_content_count = int(total_content_row['total']) if total_content_row and total_content_row.get('total') is not None else 0
+        distinct_content_row = await self.bot.db.fetchrow(
+            f"SELECT COUNT(DISTINCT s.content_id) as total FROM sessions s WHERE {where_str}",
+            *params
+        )
+        distinct_content_count = int(distinct_content_row['total']) if distinct_content_row and distinct_content_row.get('total') is not None else 0
+        content_coverage_pct = (distinct_content_count / total_content_count * 100) if total_content_count else 0.0
+
+        # Closed-event attendance frequency by content
+        event_content_rows = await self.bot.db.fetch(
+            """
+            SELECT e.content_name, COUNT(*) as cnt
+            FROM events e
+            JOIN event_signups es ON es.event_id = e.id
+            WHERE e.status = 'closed' AND es.player_id = $1
+            GROUP BY e.content_name
+            ORDER BY cnt DESC, e.content_name ASC
+            """,
+            player_id
+        )
+
+        # Guild-wide role distribution
+        player_guild_row = await self.bot.db.fetchrow(
+            "SELECT guild_id FROM players WHERE id = $1",
+            player_id
+        )
+        player_guild_id = player_guild_row['guild_id'] if player_guild_row else None
+
+        guild_role_rows = await self.bot.db.fetch(
+            """
+            SELECT s.role, COUNT(*) as cnt
+            FROM sessions s
+            JOIN players p ON p.id = s.player_id
+            WHERE p.guild_id = $1
+            GROUP BY s.role
+            ORDER BY cnt DESC, s.role ASC
+            """,
+            player_guild_id
+        )
+
+        # Guild-wide top error types
+        guild_error_rows = await self.bot.db.fetch(
+            """
+            SELECT s.error_types
+            FROM sessions s
+            JOIN players p ON p.id = s.player_id
+            WHERE p.guild_id = $1 AND s.error_types IS NOT NULL AND s.error_types != ''
+            """,
+            player_guild_id
+        )
+        guild_error_counter = defaultdict(int)
+        for row in guild_error_rows:
+            for err in (row.get('error_types') or "").split(','):
+                err = err.strip()
+                if err:
+                    guild_error_counter[err] += 1
+        guild_error_top = sorted(guild_error_counter.items(), key=lambda x: x[1], reverse=True)[:5]
+
         sorted_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:5]
         
         return {
@@ -348,7 +432,17 @@ class StatsCommands(commands.Cog):
             'error_names': [e[0] for e in sorted_errors],
             'error_counts': [e[1] for e in sorted_errors],
             'total_events': total_events_count,
-            'attended_events': attended_events_count
+            'attended_events': attended_events_count,
+            'content_coverage_pct': content_coverage_pct,
+            'distinct_content_count': distinct_content_count,
+            'total_content_count': total_content_count,
+            'error_score_points': error_score_points,
+            'event_content_names': [r['content_name'] for r in event_content_rows],
+            'event_content_counts': [int(r['cnt']) for r in event_content_rows],
+            'guild_role_names': [r['role'] for r in guild_role_rows],
+            'guild_role_counts': [int(r['cnt']) for r in guild_role_rows],
+            'guild_error_names': [e[0] for e in guild_error_top],
+            'guild_error_counts': [e[1] for e in guild_error_top],
         }
 
 def setup(bot):
