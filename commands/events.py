@@ -233,9 +233,9 @@ class EventCommands(commands.Cog):
     async def get_template_choices(self, ctx: discord.AutocompleteContext):
         return list(get_templates().keys())
 
-    @event_group.command(name="create", description="Create a new event")
+    @event_group.command(name="create", description="Create a new event in this channel or thread")
     @option("template", description="Role template", autocomplete=get_template_choices)
-    async def create(self, ctx: discord.ApplicationContext, channel: Union[discord.TextChannel, discord.Thread], content: str, time: str, template: str):
+    async def create(self, ctx: discord.ApplicationContext, content: str, time: str, template: str):
         if not await self.bot.permissions.require_mentor(ctx.author):
             return await ctx.respond("❌ No permission.", ephemeral=True)
             
@@ -245,6 +245,9 @@ class EventCommands(commands.Cog):
             
         await ctx.defer(ephemeral=True)
         player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
+        
+        # Use the current channel or thread where the command was called
+        channel = ctx.channel
         
         # 1. Create event in DB
         event_id = await self.bot.db.execute("""
@@ -259,14 +262,14 @@ class EventCommands(commands.Cog):
                 event_id, i, role
             )
             
-        # 3. Publish message
+        # 3. Publish message in this channel/thread
         embed = await build_event_embed(self.bot, event_id)
         view = EventControlView(self.bot)
         msg = await channel.send(embed=embed, view=view)
         
         # 4. Attach message ID
         await self.bot.db.execute("UPDATE events SET discord_message_id = $1 WHERE id = $2", msg.id, event_id)
-        await ctx.respond(f"✅ Event published in {channel.mention}")
+        await ctx.respond(f"✅ Event published here!")
 
     @event_group.command(name="close", description="Close an event and lock attendance")
     @option("event_id", description="Event ID (found at the bottom of the post)")
