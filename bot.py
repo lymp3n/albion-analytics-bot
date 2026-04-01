@@ -160,28 +160,20 @@ class AlbionBot(commands.Bot):
                     f"{extra_connected}"
                 )
 
-            # Step 1: wipe stale guild-specific commands ONLY where bot has access
-            for gid in target_guild_ids:
-                try:
-                    await self.http.bulk_upsert_guild_commands(self.user.id, gid, [])
-                    logger.info(f"✓ Cleared stale guild commands from guild {gid}")
-                except discord.Forbidden as e:
-                    logger.warning(f"⚠️ No access to clear guild commands for {gid}: {e}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed clearing guild commands for {gid}: {e}")
-
-            # Step 2: sync commands (prefer guild sync for instant propagation)
+            # Sync commands (prefer guild sync for instant propagation).
+            # Avoid aggressive clear+force on every startup: it can trigger rate limits
+            # and lead to temporary "Unknown Integration" on stale client-side command IDs.
             if target_guild_ids:
                 try:
-                    await self.sync_commands(guild_ids=target_guild_ids, force=True)
+                    await self.sync_commands(guild_ids=target_guild_ids, force=False)
                     logger.info(f"✓ Commands synced to guilds: {target_guild_ids}")
                 except discord.Forbidden as e:
                     logger.error(f"❌ Guild command sync forbidden: {e}")
                     # fallback to global sync so at least commands exist
-                    await self.sync_commands(force=True)
+                    await self.sync_commands(force=False)
                     logger.info("✓ Fallback: global slash commands synced")
             else:
-                await self.sync_commands(force=True)
+                await self.sync_commands(force=False)
                 logger.info("✓ Global slash commands synced")
         except Exception as e:
             logger.error(f"❌ Command sync failed: {e}")
