@@ -17,15 +17,9 @@ class StatsCommands(commands.Cog):
     @option("period", choices=["7 days", "30 days", "all time"], default="30 days")
     async def stats(self, ctx: discord.ApplicationContext, target: discord.Member = None, period: str = "30 days"):
         """View player statistics"""
-        # Handle both Context and Interaction
-        is_interaction = isinstance(ctx, discord.Interaction)
-        author = ctx.user if is_interaction else ctx.author
+        await ctx.defer()
         
-        if is_interaction:
-            if not ctx.response.is_done():
-                await ctx.response.defer(ephemeral=False)
-        else:
-            await ctx.defer()
+        author = ctx.author
         
         # Determine target player
         if target is None:
@@ -36,18 +30,12 @@ class StatsCommands(commands.Cog):
         is_mentor = await self.bot.permissions.require_mentor(author)
         
         if not is_self and not is_mentor:
-            msg = "❌ Only mentors and founders can view other players' statistics."
-            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
-            else: await ctx.respond(msg, ephemeral=True)
-            return
+            return await ctx.respond("❌ Only mentors and founders can view other players' statistics.", ephemeral=True)
         
         # Fetch player data
         player = await self.bot.db.get_player_by_discord_id(target.id)
         if not player:
-            msg = f"❌ Player {target.mention} is not registered in the system."
-            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
-            else: await ctx.respond(msg, ephemeral=True)
-            return
+            return await ctx.respond(f"❌ Player {target.mention} is not registered in the system.", ephemeral=True)
         
         # Determine period
         days = 7 if "7" in period else 30 if "30" in period else None
@@ -55,10 +43,7 @@ class StatsCommands(commands.Cog):
         # Fetch statistics
         stats = await self._get_player_stats(player['id'], days)
         if not stats or stats['session_count'] == 0:
-            msg = f"📊 {target.mention} has no recorded sessions yet."
-            if is_interaction: await ctx.followup.send(msg, ephemeral=True)
-            else: await ctx.respond(msg, ephemeral=True)
-            return
+            return await ctx.respond(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
             
         # Get Global Rank
         rank_data = await self.bot.db.fetchrow("""
@@ -90,7 +75,7 @@ class StatsCommands(commands.Cog):
             'last_session': stats.get('last_session')
         }
         
-        # Generate Dashboard Card asynchronously to avoid blocking the Discord bot thread
+        # Generate Dashboard Card asynchronously to avoid blocking
         import asyncio
         dashboard_image = await asyncio.to_thread(
             self.chart_generator.create_player_dashboard,
@@ -109,14 +94,10 @@ class StatsCommands(commands.Cog):
         embed.add_field(name="Average Score", value=f"{stats['avg_score']:.2f}", inline=True)
         embed.add_field(name="Total Sessions", value=f"{stats['session_count']}", inline=True)
         
-        # Attach the dashboard image to the embed
         file = discord.File(dashboard_image, filename="dashboard.png")
         embed.set_image(url="attachment://dashboard.png")
         
-        if is_interaction:
-            await ctx.followup.send(embed=embed, file=file)
-        else:
-            await ctx.respond(embed=embed, file=file)
+        await ctx.respond(embed=embed, file=file)
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):

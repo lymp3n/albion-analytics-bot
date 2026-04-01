@@ -107,7 +107,12 @@ class AlbionBot(commands.Bot):
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
-            # Always sync globally — guild-specific sync alongside debug_guilds caused duplicates
+            # First, clear any stale guild-specific commands (old cache from debug_guilds era)
+            if self.guild_id:
+                await self.sync_commands(guild_ids=[self.guild_id], delete_existing=True, force=True)
+                logger.info(f"✓ Cleared stale guild commands from {self.guild_id}")
+            
+            # Now sync globally — works on all servers
             await self.sync_commands(force=True)
             logger.info("✓ Global slash commands synced")
         except Exception as e:
