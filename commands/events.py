@@ -141,14 +141,46 @@ class EventControlView(ui.View):
         
     @ui.button(label="Join", style=discord.ButtonStyle.success, custom_id="evt_join")
     async def join(self, button: ui.Button, interaction: discord.Interaction):
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.NotFound:
+            return
+
+        event = await self.bot.db.fetchrow("SELECT id, status, guild_id FROM events WHERE discord_message_id = $1", interaction.message.id)
+        if not event:
+            return await interaction.followup.send("❌ Event not found.", ephemeral=True)
+        if event['status'] == 'closed':
+            return await interaction.followup.send("❌ Event is already closed!", ephemeral=True)
+
+        # Allow everyone to sign up. If user is not in players table yet,
+        # create a lightweight active profile automatically.
         player = await self.bot.db.get_player_by_discord_id(interaction.user.id)
         if not player:
-            return await interaction.response.send_message("❌ Register first!", ephemeral=True)
-            
-        event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE discord_message_id = $1", interaction.message.id)
-        if not event: return
-        if event['status'] == 'closed':
-            return await interaction.response.send_message("❌ Event is already closed!", ephemeral=True)
+            guild_id = event.get('guild_id')
+            if not guild_id and interaction.guild:
+                guild = await self.bot.db.get_guild_by_discord_id(interaction.guild.id)
+                guild_id = guild['id'] if guild else None
+
+            if not guild_id:
+                return await interaction.followup.send(
+                    "❌ Cannot determine guild for this event. Ask founder to register guild first.",
+                    ephemeral=True
+                )
+
+            display_name = getattr(interaction.user, "display_name", interaction.user.name)
+            await self.bot.db.execute(
+                """
+                INSERT INTO players (discord_id, discord_username, nickname, guild_id, status)
+                VALUES ($1, $2, $3, $4, 'active')
+                """,
+                interaction.user.id,
+                interaction.user.name,
+                display_name[:64],
+                guild_id
+            )
+            player = await self.bot.db.get_player_by_discord_id(interaction.user.id)
+            if not player:
+                return await interaction.followup.send("❌ Failed to create player profile.", ephemeral=True)
         
         # Check if already registered
         existing = await self.bot.db.fetchrow(
@@ -156,7 +188,7 @@ class EventControlView(ui.View):
             event['id'], player['id']
         )
         if existing:
-            return await interaction.response.send_message(f"❌ You already occupy slot #{existing['slot_number']}.", ephemeral=True)
+            return await interaction.followup.send(f"❌ You already occupy slot #{existing['slot_number']}.", ephemeral=True)
             
         # Get free slots
         free_slots = await self.bot.db.fetch(
@@ -165,10 +197,10 @@ class EventControlView(ui.View):
         )
         
         if not free_slots:
-            return await interaction.response.send_message("❌ No available slots!", ephemeral=True)
+            return await interaction.followup.send("❌ No available slots!", ephemeral=True)
             
         view = SlotSelectView(self.bot, event['id'], player['id'], free_slots)
-        await interaction.response.send_message("Select an available slot:", view=view, ephemeral=True)
+        await interaction.followup.send("Select an available slot:", view=view, ephemeral=True)
 
     @ui.button(label="Leave", style=discord.ButtonStyle.danger, custom_id="evt_leave")
     async def leave(self, button: ui.Button, interaction: discord.Interaction):

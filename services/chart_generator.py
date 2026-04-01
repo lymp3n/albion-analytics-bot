@@ -70,8 +70,6 @@ class ChartGenerator:
         last_s = stats.get('last_session', 'N/A')
         if hasattr(last_s, 'strftime'): last_s = last_s.strftime('%Y-%m-%d')
         coverage_pct = float(stats.get('content_coverage_pct', 0.0))
-        covered_cnt = int(stats.get('distinct_content_count', 0))
-        total_cnt = int(stats.get('total_content_count', 0))
         
         # Draw 4 Cards
         card_w, card_h = 0.22, 0.65
@@ -79,7 +77,6 @@ class ChartGenerator:
         draw_metric_card(ax_header, 0.28, 0.0, card_w, card_h, "EVENTS ATTENDED", f"{att_ev} / {total_ev}", "ATTENDANCE RATE", f"{att_pct:.1f}%", self.colors['success'])
         draw_metric_card(ax_header, 0.53, 0.0, card_w, card_h, "BEST ROLE (BY SCORE)", stats['best_role'] or 'N/A', "CONTENT COVERAGE", f"{coverage_pct:.1f}%", self.colors['secondary'])
         draw_metric_card(ax_header, 0.78, 0.0, card_w, card_h, "MISTAKES LOGGED", str(total_errors), "LAST SESSION", str(last_s), self.colors['danger'])
-        ax_header.text(0.64, -0.05, f"Covered: {covered_cnt}/{total_cnt} content types", fontsize=10, color=self.colors['info'], ha='center')
 
         # 1) Trend average score by week
         ax1 = fig.add_subplot(gs[1, 0])
