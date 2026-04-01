@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 import yaml
 from database import Database
 from utils.permissions import Permissions
+from typing import List, Set
 
 # Logging configuration
 logging.basicConfig(
@@ -39,7 +40,8 @@ class AlbionBot(commands.Bot):
         self.tickets_category_id = int(os.getenv('TICKETS_CATEGORY_ID', '0'))
         
         # Collect all configured guild IDs (for instant command sync)
-        self.guild_ids = [g for g in [self.guild_id, self.guild_id2] if g]
+        # Supports legacy GUILD_ID/GUILD_ID2 and a new comma/space separated GUILD_IDS.
+        self.guild_ids = self._parse_guild_ids()
         
         intents = discord.Intents.default()
         intents.members = True
@@ -85,6 +87,36 @@ class AlbionBot(commands.Bot):
             import traceback
             traceback.print_exc()
             sys.exit(1)
+
+    def _parse_guild_ids(self) -> List[int]:
+        raw = os.getenv("GUILD_IDS", "") or ""
+        parsed: List[int] = []
+
+        # legacy single/dual vars
+        for v in (self.guild_id, self.guild_id2):
+            if v:
+                parsed.append(v)
+
+        # new list var
+        for part in raw.replace(";", ",").replace(" ", ",").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                gid = int(part)
+                if gid:
+                    parsed.append(gid)
+            except ValueError:
+                logger.warning(f"⚠️ Invalid guild id in GUILD_IDS: {part!r}")
+
+        # de-dup while keeping order
+        seen: Set[int] = set()
+        out: List[int] = []
+        for gid in parsed:
+            if gid not in seen:
+                seen.add(gid)
+                out.append(gid)
+        return out
     
     async def on_ready(self):
         """Bot readiness handler"""
@@ -111,19 +143,37 @@ class AlbionBot(commands.Bot):
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
-            # Step 1: Wipe stale guild-specific commands from ALL known guilds
-            # (leftovers from the old debug_guilds era — empty list = delete all guild commands)
-            for gid in self.guild_ids:
-                await self.http.bulk_upsert_guild_commands(self.user.id, gid, [])
-                logger.info(f"✓ Cleared stale guild commands from guild {gid}")
-            
-            # Step 2: Register commands as guild-specific on both servers for INSTANT propagation
-            # (unlike global commands which can take up to 1 hour to propagate)
-            if self.guild_ids:
-                await self.sync_commands(guild_ids=self.guild_ids, force=True)
-                logger.info(f"✓ Commands synced to guilds: {self.guild_ids}")
+            connected_guild_ids = {g.id for g in self.guilds}
+            target_guild_ids = [gid for gid in self.guild_ids if gid in connected_guild_ids]
+            skipped_guild_ids = [gid for gid in self.guild_ids if gid not in connected_guild_ids]
+
+            if skipped_guild_ids:
+                logger.warning(
+                    "⚠️ Skipping command sync for guild(s) the bot is not in: "
+                    f"{skipped_guild_ids}. Invite the bot first or remove them from env."
+                )
+
+            # Step 1: wipe stale guild-specific commands ONLY where bot has access
+            for gid in target_guild_ids:
+                try:
+                    await self.http.bulk_upsert_guild_commands(self.user.id, gid, [])
+                    logger.info(f"✓ Cleared stale guild commands from guild {gid}")
+                except discord.Forbidden as e:
+                    logger.warning(f"⚠️ No access to clear guild commands for {gid}: {e}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed clearing guild commands for {gid}: {e}")
+
+            # Step 2: sync commands (prefer guild sync for instant propagation)
+            if target_guild_ids:
+                try:
+                    await self.sync_commands(guild_ids=target_guild_ids, force=True)
+                    logger.info(f"✓ Commands synced to guilds: {target_guild_ids}")
+                except discord.Forbidden as e:
+                    logger.error(f"❌ Guild command sync forbidden: {e}")
+                    # fallback to global sync so at least commands exist
+                    await self.sync_commands(force=True)
+                    logger.info("✓ Fallback: global slash commands synced")
             else:
-                # Fallback: global sync if no guild IDs configured
                 await self.sync_commands(force=True)
                 logger.info("✓ Global slash commands synced")
         except Exception as e:

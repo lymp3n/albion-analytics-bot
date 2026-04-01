@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 from typing import Union
 import discord
 from discord import ui, option
@@ -9,24 +10,33 @@ from datetime import datetime
 def get_templates():
     """Reads templates from events_templates.txt."""
     templates = {}
-    filepath = "events_templates.txt"
+    # Use a stable path regardless of current working directory (Render can differ).
+    # Keep file in repo root (one level above /commands).
+    filepath = (Path(__file__).resolve().parent.parent / "events_templates.txt")
     
-    if not os.path.exists(filepath):
-        # Create default file if not exists
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write("[Castle]\n1. Caller\n2. Healer\n3. DPS\n\n[Open World]\n1. Tank\n2. DPS\n")
-            
-    with open(filepath, "r", encoding="utf-8") as f:
-        current_template = None
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            if line.startswith('[') and line.endswith(']'):
-                current_template = line[1:-1]
-                templates[current_template] = []
-            elif current_template:
-                role_name = re.sub(r'^\d+\.\s*', '', line)
-                templates[current_template].append(role_name)
+    default_text = "[Castle]\n1. Caller\n2. Healer\n3. DPS\n\n[Open World]\n1. Tank\n2. DPS\n"
+
+    try:
+        if not filepath.exists():
+            # Create default file if not exists
+            filepath.write_text(default_text, encoding="utf-8")
+
+        content = filepath.read_text(encoding="utf-8")
+    except Exception:
+        # If filesystem is read-only/unavailable, fall back to defaults in-memory.
+        content = default_text
+
+    current_template = None
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            current_template = line[1:-1]
+            templates[current_template] = []
+        elif current_template:
+            role_name = re.sub(r'^\d+\.\s*', '', line)
+            templates[current_template].append(role_name)
                 
     return templates
 
