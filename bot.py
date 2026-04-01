@@ -30,12 +30,16 @@ logger = logging.getLogger('albion-bot')
 
 class AlbionBot(commands.Bot):
     def __init__(self):
-        # Load configuration first to get GUILD_ID
+        # Load configuration first
         load_dotenv()
         self.token = os.getenv('DISCORD_TOKEN')
         self.database_url = os.getenv('DATABASE_URL')
         self.guild_id = int(os.getenv('GUILD_ID', '0'))
+        self.guild_id2 = int(os.getenv('GUILD_ID2', '0'))
         self.tickets_category_id = int(os.getenv('TICKETS_CATEGORY_ID', '0'))
+        
+        # Collect all configured guild IDs (for instant command sync)
+        self.guild_ids = [g for g in [self.guild_id, self.guild_id2] if g]
         
         intents = discord.Intents.default()
         intents.members = True
@@ -73,7 +77,7 @@ class AlbionBot(commands.Bot):
             self.load_extension("commands.tickets")
             self.load_extension("commands.payroll")
             self.load_extension("commands.menu")
-            self.load_extension("commands.events") # <-- ДОБАВЛЕНО: Загрузка нового функционала
+            self.load_extension("commands.events")  # Event management
             logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
             logger.info(f"✓ Found {len(self.application_commands)} application commands")
         except Exception as e:
@@ -107,17 +111,23 @@ class AlbionBot(commands.Bot):
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
-            # Delete stale guild-specific commands via Discord HTTP API (empty list = wipe)
-            # This clears the leftover guild commands from the old debug_guilds era
-            if self.guild_id:
-                await self.http.bulk_upsert_guild_commands(self.user.id, self.guild_id, [])
-                logger.info(f"✓ Cleared stale guild-specific commands from guild {self.guild_id}")
+            # Step 1: Wipe stale guild-specific commands from ALL known guilds
+            # (leftovers from the old debug_guilds era — empty list = delete all guild commands)
+            for gid in self.guild_ids:
+                await self.http.bulk_upsert_guild_commands(self.user.id, gid, [])
+                logger.info(f"✓ Cleared stale guild commands from guild {gid}")
             
-            # Now sync all commands globally so they work on every server
-            await self.sync_commands(force=True)
-            logger.info("✓ Global slash commands synced")
+            # Step 2: Register commands as guild-specific on both servers for INSTANT propagation
+            # (unlike global commands which can take up to 1 hour to propagate)
+            if self.guild_ids:
+                await self.sync_commands(guild_ids=self.guild_ids, force=True)
+                logger.info(f"✓ Commands synced to guilds: {self.guild_ids}")
+            else:
+                # Fallback: global sync if no guild IDs configured
+                await self.sync_commands(force=True)
+                logger.info("✓ Global slash commands synced")
         except Exception as e:
-             logger.error(f"❌ Command sync failed: {e}")
+            logger.error(f"❌ Command sync failed: {e}")
         
         # Final logging
         cmds = self.application_commands
