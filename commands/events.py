@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Union
 import discord
 from discord import ui, option
 from discord.ext import commands
@@ -110,6 +111,9 @@ class SlotSelectView(ui.View):
         if event:
             try:
                 channel = self.bot.get_channel(event['discord_channel_id'])
+                if not channel:
+                    channel = await self.bot.fetch_channel(event['discord_channel_id'])
+                    
                 if channel:
                     original_msg = await channel.fetch_message(event['discord_message_id'])
                     embed = await build_event_embed(self.bot, self.event_id)
@@ -231,7 +235,7 @@ class EventCommands(commands.Cog):
 
     @event_group.command(name="create", description="Create a new event")
     @option("template", description="Role template", autocomplete=get_template_choices)
-    async def create(self, ctx: discord.ApplicationContext, channel: discord.TextChannel, content: str, time: str, template: str):
+    async def create(self, ctx: discord.ApplicationContext, channel: Union[discord.TextChannel, discord.Thread], content: str, time: str, template: str):
         if not await self.bot.permissions.require_mentor(ctx.author):
             return await ctx.respond("❌ No permission.", ephemeral=True)
             
@@ -285,6 +289,9 @@ class EventCommands(commands.Cog):
         # Update post (change color and remove buttons)
         try:
             channel = self.bot.get_channel(event['discord_channel_id'])
+            if not channel:
+                channel = await self.bot.fetch_channel(event['discord_channel_id'])
+                
             if channel:
                 msg = await channel.fetch_message(event['discord_message_id'])
                 embed = await build_event_embed(self.bot, event_id)
