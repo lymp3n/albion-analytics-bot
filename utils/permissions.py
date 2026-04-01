@@ -20,11 +20,18 @@ class Permissions:
         """Check if a member has a specific role by ID"""
         return any(role.id == role_id for role in member.roles)
 
+    def is_server_admin(self, member: discord.Member) -> bool:
+        """Allow Discord server administrators to pass bot permission checks."""
+        perms = getattr(member, "guild_permissions", None)
+        return bool(perms and perms.administrator)
+
     async def require_member(self, member: discord.Member) -> bool:
         """
         Check: if the user is a member.
         Hierarchy: Founder > Mentor > Member.
         """
+        if self.is_server_admin(member):
+            return True
         if self.has_role_id(member, self.founder_role_id):
             return True
         if self.has_role_id(member, self.mentor_role_id):
@@ -36,12 +43,16 @@ class Permissions:
         Check: if the user is a mentor.
         Hierarchy: Founder > Mentor.
         """
+        if self.is_server_admin(member):
+            return True
         if self.has_role_id(member, self.founder_role_id):
             return True
         return self.has_role_id(member, self.mentor_role_id)
     
     async def require_founder(self, member: discord.Member) -> bool:
         """Check: if the user is a founder"""
+        if self.is_server_admin(member):
+            return True
         return self.has_role_id(member, self.founder_role_id)
     
     async def get_guild_id(self, member: discord.Member) -> Optional[int]:
