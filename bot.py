@@ -144,13 +144,20 @@ class AlbionBot(commands.Bot):
         
         try:
             connected_guild_ids = {g.id for g in self.guilds}
-            target_guild_ids = [gid for gid in self.guild_ids if gid in connected_guild_ids]
+            target_guild_ids = sorted(connected_guild_ids)
             skipped_guild_ids = [gid for gid in self.guild_ids if gid not in connected_guild_ids]
 
             if skipped_guild_ids:
                 logger.warning(
                     "⚠️ Skipping command sync for guild(s) the bot is not in: "
                     f"{skipped_guild_ids}. Invite the bot first or remove them from env."
+                )
+
+            extra_connected = [gid for gid in target_guild_ids if gid not in self.guild_ids]
+            if extra_connected:
+                logger.info(
+                    "ℹ️ Bot is connected to guild(s) not listed in env and will sync there too: "
+                    f"{extra_connected}"
                 )
 
             # Step 1: wipe stale guild-specific commands ONLY where bot has access
