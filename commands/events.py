@@ -381,6 +381,18 @@ class ManageRemoveModal(ui.Modal):
 
         target_member, candidates = await resolve_member_or_candidates(self.bot, interaction, self.user_input.value)
         if candidates:
+            player_rows = await self.bot.db.fetch(
+                """
+                SELECT p.discord_id
+                FROM event_signups s
+                JOIN players p ON p.id = s.player_id
+                WHERE s.event_id = $1
+                  AND s.player_id IS NOT NULL
+                """,
+                self.event_id,
+            )
+            event_member_ids = {int(r["discord_id"]) for r in player_rows if r.get("discord_id")}
+            candidates.sort(key=lambda m: (m.id not in event_member_ids, m.display_name.casefold()))
             return await interaction.followup.send(
                 "⚠️ Found multiple users. Choose one:",
                 view=MemberDisambiguationView(candidates, remove_for_member),
