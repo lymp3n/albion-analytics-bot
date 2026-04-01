@@ -105,6 +105,54 @@ async def get_or_create_player_profile(bot, member: Union[discord.Member, discor
     return await bot.db.get_player_by_discord_id(member.id)
 
 
+async def resolve_member_input(
+    bot,
+    interaction: discord.Interaction,
+    raw_value: str,
+) -> Union[discord.Member, discord.User, None]:
+    value = (raw_value or "").strip()
+    if not value:
+        return None
+
+    mention_match = re.fullmatch(r"<@!?(\d+)>", value)
+    id_candidate = mention_match.group(1) if mention_match else (value if value.isdigit() else None)
+    if id_candidate:
+        target_id = int(id_candidate)
+        target_member = interaction.guild.get_member(target_id) if interaction.guild else None
+        if target_member:
+            return target_member
+        try:
+            return await bot.fetch_user(target_id)
+        except Exception:
+            return None
+
+    query = value.casefold()
+    guild = interaction.guild
+    if not guild:
+        return None
+
+    # Prefer exact display name (server nickname), then global username/name.
+    for member in guild.members:
+        if member.display_name and member.display_name.casefold() == query:
+            return member
+    for member in guild.members:
+        if member.global_name and member.global_name.casefold() == query:
+            return member
+        if member.name and member.name.casefold() == query:
+            return member
+
+    # Fallback to partial match to avoid forcing exact input.
+    for member in guild.members:
+        if member.display_name and query in member.display_name.casefold():
+            return member
+        if member.global_name and query in member.global_name.casefold():
+            return member
+        if member.name and query in member.name.casefold():
+            return member
+
+    return None
+
+
 async def refresh_event_message(bot, event_id: int):
     event_row = await bot.db.fetchrow("SELECT discord_channel_id, discord_message_id FROM events WHERE id = $1", event_id)
     if not event_row:
@@ -173,29 +221,25 @@ class ManageAddModal(ui.Modal):
         super().__init__(title="Manage Event: Add/Move")
         self.bot = bot
         self.event_id = event_id
-        self.user_id = ui.InputText(label="User ID", placeholder="Discord user ID", required=True)
+        self.user_input = ui.InputText(label="User", placeholder="Server nickname / username / mention / ID", required=True)
         self.slot_number = ui.InputText(label="Slot Number", placeholder="e.g. 3", required=True)
-        self.add_item(self.user_id)
+        self.add_item(self.user_input)
         self.add_item(self.slot_number)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         try:
-            target_id = int(self.user_id.value.strip())
             slot = int(self.slot_number.value.strip())
         except ValueError:
-            return await interaction.followup.send("❌ User ID and Slot must be numbers.", ephemeral=True)
+            return await interaction.followup.send("❌ Slot must be a number.", ephemeral=True)
 
         event = await self.bot.db.fetchrow("SELECT id, status, guild_id FROM events WHERE id = $1", self.event_id)
         if not event or event["status"] == "closed":
             return await interaction.followup.send("❌ Event is not available.", ephemeral=True)
 
-        target_member = interaction.guild.get_member(target_id) if interaction.guild else None
+        target_member = await resolve_member_input(self.bot, interaction, self.user_input.value)
         if not target_member:
-            try:
-                target_member = await self.bot.fetch_user(target_id)
-            except Exception:
-                return await interaction.followup.send("❌ User not found.", ephemeral=True)
+            return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
 
         player = await get_or_create_player_profile(self.bot, target_member, event=event, guild=interaction.guild)
         if not player:
@@ -221,8 +265,8 @@ class ManageAddModal(ui.Modal):
             slot,
         )
         await refresh_event_message(self.bot, self.event_id)
-        logger.info("manage_modal_add_move event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_id, slot, interaction.user.id)
-        await interaction.followup.send(f"✅ Assigned <@{target_id}> to slot #{slot}.", ephemeral=True)
+        logger.info("manage_modal_add_move event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_member.id, slot, interaction.user.id)
+        await interaction.followup.send(f"✅ Assigned <@{target_member.id}> to slot #{slot}.", ephemeral=True)
 
 
 class ManageRemoveModal(ui.Modal):
@@ -230,17 +274,16 @@ class ManageRemoveModal(ui.Modal):
         super().__init__(title="Manage Event: Remove")
         self.bot = bot
         self.event_id = event_id
-        self.user_id = ui.InputText(label="User ID", placeholder="Discord user ID", required=True)
-        self.add_item(self.user_id)
+        self.user_input = ui.InputText(label="User", placeholder="Server nickname / username / mention / ID", required=True)
+        self.add_item(self.user_input)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        try:
-            target_id = int(self.user_id.value.strip())
-        except ValueError:
-            return await interaction.followup.send("❌ User ID must be a number.", ephemeral=True)
+        target_member = await resolve_member_input(self.bot, interaction, self.user_input.value)
+        if not target_member:
+            return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
 
-        player = await self.bot.db.get_player_by_discord_id(target_id)
+        player = await self.bot.db.get_player_by_discord_id(target_member.id)
         if not player:
             return await interaction.followup.send("❌ Player profile not found.", ephemeral=True)
 
@@ -262,8 +305,8 @@ class ManageRemoveModal(ui.Modal):
             player["id"],
         )
         await refresh_event_message(self.bot, self.event_id)
-        logger.info("manage_modal_remove event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_id, existing['slot_number'], interaction.user.id)
-        await interaction.followup.send(f"✅ Removed <@{target_id}> from slot #{existing['slot_number']}.", ephemeral=True)
+        logger.info("manage_modal_remove event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_member.id, existing['slot_number'], interaction.user.id)
+        await interaction.followup.send(f"✅ Removed <@{target_member.id}> from slot #{existing['slot_number']}.", ephemeral=True)
 
 
 class ManageAddExtraModal(ui.Modal):
@@ -271,18 +314,13 @@ class ManageAddExtraModal(ui.Modal):
         super().__init__(title="Manage Event: Add Extra Slot")
         self.bot = bot
         self.event_id = event_id
-        self.user_id = ui.InputText(label="User ID", placeholder="Discord user ID", required=True)
+        self.user_input = ui.InputText(label="User", placeholder="Server nickname / username / mention / ID", required=True)
         self.role_name = ui.InputText(label="Role Name", placeholder="e.g. Flex DPS", required=True, max_length=50)
-        self.add_item(self.user_id)
+        self.add_item(self.user_input)
         self.add_item(self.role_name)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        try:
-            target_id = int(self.user_id.value.strip())
-        except ValueError:
-            return await interaction.followup.send("❌ User ID must be a number.", ephemeral=True)
-
         role_name = self.role_name.value.strip()
         if not role_name:
             return await interaction.followup.send("❌ Role Name is required.", ephemeral=True)
@@ -291,12 +329,9 @@ class ManageAddExtraModal(ui.Modal):
         if not event or event["status"] == "closed":
             return await interaction.followup.send("❌ Event is not available.", ephemeral=True)
 
-        target_member = interaction.guild.get_member(target_id) if interaction.guild else None
+        target_member = await resolve_member_input(self.bot, interaction, self.user_input.value)
         if not target_member:
-            try:
-                target_member = await self.bot.fetch_user(target_id)
-            except Exception:
-                return await interaction.followup.send("❌ User not found.", ephemeral=True)
+            return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
 
         player = await get_or_create_player_profile(self.bot, target_member, event=event, guild=interaction.guild)
         if not player:
@@ -321,9 +356,9 @@ class ManageAddExtraModal(ui.Modal):
             player["id"],
         )
         await refresh_event_message(self.bot, self.event_id)
-        logger.info("manage_modal_add_extra event_id=%s target_id=%s new_slot=%s role=%s by=%s", self.event_id, target_id, next_slot, role_name, interaction.user.id)
+        logger.info("manage_modal_add_extra event_id=%s target_id=%s new_slot=%s role=%s by=%s", self.event_id, target_member.id, next_slot, role_name, interaction.user.id)
         await interaction.followup.send(
-            f"✅ Added extra slot #{next_slot} ({role_name}) for <@{target_id}>.",
+            f"✅ Added extra slot #{next_slot} ({role_name}) for <@{target_member.id}>.",
             ephemeral=True,
         )
 
@@ -440,28 +475,84 @@ class EventControlView(ui.View):
 
     @ui.button(label="Manage", style=discord.ButtonStyle.primary, custom_id="evt_manage", row=1)
     async def manage_event_btn(self, button: ui.Button, interaction: discord.Interaction):
+        if interaction.response.is_done():
+            return
         if not await can_manage_event(self.bot, interaction.user):
-            return await interaction.response.send_message(
-                "❌ Only Shotcaller, Mentor, or Founder can manage event roster.",
-                ephemeral=True,
-            )
+            try:
+                return await interaction.response.send_message(
+                    "❌ Only Shotcaller, Mentor, or Founder can manage event roster.",
+                    ephemeral=True,
+                )
+            except discord.NotFound:
+                return
 
         event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE discord_message_id = $1", interaction.message.id)
         if not event:
-            return await interaction.response.send_message("❌ Event not found.", ephemeral=True)
+            try:
+                return await interaction.response.send_message("❌ Event not found.", ephemeral=True)
+            except discord.NotFound:
+                return
         if event["status"] == "closed":
-            return await interaction.response.send_message("❌ Event is already closed.", ephemeral=True)
+            try:
+                return await interaction.response.send_message("❌ Event is already closed.", ephemeral=True)
+            except discord.NotFound:
+                return
 
-        await interaction.response.send_message(
-            "Manage roster: choose an action below.",
-            view=ManageEventView(self.bot, event["id"]),
-            ephemeral=True,
-        )
+        try:
+            await interaction.response.send_message(
+                "Manage roster: choose an action below.",
+                view=ManageEventView(self.bot, event["id"]),
+                ephemeral=True,
+            )
+        except discord.NotFound:
+            return
 
 
 async def get_template_choices(ctx: discord.AutocompleteContext):
     try:
         return list(get_templates().keys())[:25]
+    except Exception:
+        return []
+
+
+async def get_event_id_choices(ctx: discord.AutocompleteContext):
+    try:
+        raw_value = str(ctx.value).strip() if ctx.value is not None else ""
+        guild_id = ctx.interaction.guild_id if ctx.interaction else None
+        if not guild_id:
+            return []
+
+        # Limit to active events in this server; include content and time for quick recognition.
+        rows = await ctx.bot.db.fetch(
+            """
+            SELECT e.id, e.content_name, e.event_time
+            FROM events e
+            JOIN guilds g ON g.id = e.guild_id
+            WHERE g.discord_id = $1
+              AND e.status != 'closed'
+            ORDER BY e.id DESC
+            LIMIT 50
+            """,
+            guild_id,
+        )
+        if not rows:
+            return []
+
+        choices = []
+        value_lc = raw_value.casefold()
+        for row in rows:
+            event_id = int(row["id"])
+            content = (row.get("content_name") or "").strip()
+            event_time = (row.get("event_time") or "").strip()
+            label = f"#{event_id} | {content} | {event_time}"[:100]
+
+            searchable = f"{event_id} {content} {event_time}".casefold()
+            if value_lc and value_lc not in searchable:
+                continue
+            choices.append(discord.OptionChoice(name=label, value=event_id))
+            if len(choices) >= 25:
+                break
+        return choices
     except Exception:
         return []
 
@@ -526,7 +617,7 @@ class EventCommands(commands.Cog):
         await ctx.followup.send("✅ Event published here!", ephemeral=True)
 
     @event_group.command(name="close", description="Close an event and lock attendance")
-    @option("event_id", description="Event ID (found at the bottom of the post)")
+    @option("event_id", description="Event ID (found at the bottom of the post)", autocomplete=get_event_id_choices)
     async def close_event(self, ctx: discord.ApplicationContext, event_id: int):
         try:
             await ctx.defer(ephemeral=True)
@@ -562,7 +653,7 @@ class EventCommands(commands.Cog):
         await ctx.followup.send(f"✅ Event #{event_id} successfully closed. Participant list locked for statistics.", ephemeral=True)
 
     @event_group.command(name="add_player", description="Manually add/move player to a specific slot")
-    @option("event_id", description="Event ID")
+    @option("event_id", description="Event ID", autocomplete=get_event_id_choices)
     @option("user", description="User to place into slot")
     @option("slot", description="Target slot number")
     async def add_player(self, ctx: discord.ApplicationContext, event_id: int, user: discord.Member, slot: int):
@@ -601,7 +692,7 @@ class EventCommands(commands.Cog):
         await ctx.followup.send(f"✅ Assigned {user.mention} to slot #{slot}.", ephemeral=True)
 
     @event_group.command(name="remove_player", description="Remove player from event roster")
-    @option("event_id", description="Event ID")
+    @option("event_id", description="Event ID", autocomplete=get_event_id_choices)
     @option("user", description="User to remove")
     async def remove_player(self, ctx: discord.ApplicationContext, event_id: int, user: discord.Member):
         try:
@@ -633,7 +724,7 @@ class EventCommands(commands.Cog):
         await ctx.followup.send(f"✅ Removed {user.mention} from slot #{existing['slot_number']}.", ephemeral=True)
 
     @event_group.command(name="swap_players", description="Swap two players between their current slots")
-    @option("event_id", description="Event ID")
+    @option("event_id", description="Event ID", autocomplete=get_event_id_choices)
     @option("user_a", description="First user")
     @option("user_b", description="Second user")
     async def swap_players(self, ctx: discord.ApplicationContext, event_id: int, user_a: discord.Member, user_b: discord.Member):
@@ -671,7 +762,7 @@ class EventCommands(commands.Cog):
         )
 
     @event_group.command(name="add_extra", description="Add an extra slot and place a user there")
-    @option("event_id", description="Event ID")
+    @option("event_id", description="Event ID", autocomplete=get_event_id_choices)
     @option("user", description="User to add")
     @option("role_name", description="Role name for the extra slot")
     async def add_extra(self, ctx: discord.ApplicationContext, event_id: int, user: discord.Member, role_name: str):
