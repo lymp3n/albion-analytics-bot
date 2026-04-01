@@ -153,6 +153,88 @@ async def resolve_member_input(
     return None
 
 
+async def resolve_member_or_candidates(
+    bot,
+    interaction: discord.Interaction,
+    raw_value: str,
+) -> tuple[Union[discord.Member, discord.User, None], list[discord.Member]]:
+    value = (raw_value or "").strip()
+    if not value:
+        return None, []
+
+    mention_match = re.fullmatch(r"<@!?(\d+)>", value)
+    id_candidate = mention_match.group(1) if mention_match else (value if value.isdigit() else None)
+    if id_candidate:
+        return await resolve_member_input(bot, interaction, value), []
+
+    guild = interaction.guild
+    if not guild:
+        return None, []
+
+    query = value.casefold()
+    members = list(guild.members)
+
+    if not members:
+        try:
+            queried = await guild.query_members(query=value[:32], limit=25)
+            members = list(queried)
+        except Exception:
+            members = []
+
+    exact, partial = [], []
+    seen = set()
+    for member in members:
+        fields = [member.display_name or "", member.global_name or "", member.name or ""]
+        fields_cf = [f.casefold() for f in fields if f]
+        if any(f == query for f in fields_cf):
+            if member.id not in seen:
+                exact.append(member)
+                seen.add(member.id)
+            continue
+        if any(query in f for f in fields_cf):
+            if member.id not in seen:
+                partial.append(member)
+                seen.add(member.id)
+
+    candidates = (exact + partial)[:25]
+    if len(candidates) == 1:
+        return candidates[0], []
+    if len(candidates) > 1:
+        return None, candidates
+    return None, []
+
+
+class MemberDisambiguationView(ui.View):
+    def __init__(self, candidates: list[discord.Member], on_pick):
+        super().__init__(timeout=120)
+        self._candidates = {str(m.id): m for m in candidates}
+        self._on_pick = on_pick
+
+        options = []
+        for member in candidates[:25]:
+            label = (member.display_name or member.name or "Unknown")[:80]
+            username = (member.global_name or member.name or "")[:40]
+            options.append(
+                discord.SelectOption(
+                    label=label,
+                    description=f"@{username} | ID: {member.id}"[:100],
+                    value=str(member.id),
+                )
+            )
+
+        select = ui.Select(placeholder="Choose the correct user...", options=options)
+        select.callback = self._select_callback
+        self.add_item(select)
+
+    async def _select_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        chosen_id = interaction.data["values"][0]
+        member = self._candidates.get(chosen_id)
+        if not member:
+            return await interaction.followup.send("❌ Selected user is no longer available.", ephemeral=True)
+        await self._on_pick(interaction, member)
+
+
 async def refresh_event_message(bot, event_id: int):
     event_row = await bot.db.fetchrow("SELECT discord_channel_id, discord_message_id FROM events WHERE id = $1", event_id)
     if not event_row:
@@ -237,10 +319,21 @@ class ManageAddModal(ui.Modal):
         if not event or event["status"] == "closed":
             return await interaction.followup.send("❌ Event is not available.", ephemeral=True)
 
-        target_member = await resolve_member_input(self.bot, interaction, self.user_input.value)
+        async def apply_for_member(action_interaction: discord.Interaction, target_member):
+            await self._assign_player_to_slot(action_interaction, event, target_member, slot)
+
+        target_member, candidates = await resolve_member_or_candidates(self.bot, interaction, self.user_input.value)
+        if candidates:
+            return await interaction.followup.send(
+                "⚠️ Found multiple users. Choose one:",
+                view=MemberDisambiguationView(candidates, apply_for_member),
+                ephemeral=True,
+            )
         if not target_member:
             return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
+        await self._assign_player_to_slot(interaction, event, target_member, slot)
 
+    async def _assign_player_to_slot(self, interaction: discord.Interaction, event: dict, target_member, slot: int):
         player = await get_or_create_player_profile(self.bot, target_member, event=event, guild=interaction.guild)
         if not player:
             return await interaction.followup.send("❌ Failed to create/get player profile.", ephemeral=True)
@@ -279,17 +372,28 @@ class ManageRemoveModal(ui.Modal):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        target_member = await resolve_member_input(self.bot, interaction, self.user_input.value)
-        if not target_member:
-            return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
-
-        player = await self.bot.db.get_player_by_discord_id(target_member.id)
-        if not player:
-            return await interaction.followup.send("❌ Player profile not found.", ephemeral=True)
-
         event = await self.bot.db.fetchrow("SELECT id, status FROM events WHERE id = $1", self.event_id)
         if not event or event["status"] == "closed":
             return await interaction.followup.send("❌ Event is not available.", ephemeral=True)
+
+        async def remove_for_member(action_interaction: discord.Interaction, target_member):
+            await self._remove_player_from_event(action_interaction, target_member)
+
+        target_member, candidates = await resolve_member_or_candidates(self.bot, interaction, self.user_input.value)
+        if candidates:
+            return await interaction.followup.send(
+                "⚠️ Found multiple users. Choose one:",
+                view=MemberDisambiguationView(candidates, remove_for_member),
+                ephemeral=True,
+            )
+        if not target_member:
+            return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
+        await self._remove_player_from_event(interaction, target_member)
+
+    async def _remove_player_from_event(self, interaction: discord.Interaction, target_member):
+        player = await self.bot.db.get_player_by_discord_id(target_member.id)
+        if not player:
+            return await interaction.followup.send("❌ Player profile not found.", ephemeral=True)
 
         existing = await self.bot.db.fetchrow(
             "SELECT slot_number FROM event_signups WHERE event_id = $1 AND player_id = $2",
@@ -329,10 +433,21 @@ class ManageAddExtraModal(ui.Modal):
         if not event or event["status"] == "closed":
             return await interaction.followup.send("❌ Event is not available.", ephemeral=True)
 
-        target_member = await resolve_member_input(self.bot, interaction, self.user_input.value)
+        async def add_extra_for_member(action_interaction: discord.Interaction, target_member):
+            await self._add_extra_for_member(action_interaction, event, target_member, role_name)
+
+        target_member, candidates = await resolve_member_or_candidates(self.bot, interaction, self.user_input.value)
+        if candidates:
+            return await interaction.followup.send(
+                "⚠️ Found multiple users. Choose one:",
+                view=MemberDisambiguationView(candidates, add_extra_for_member),
+                ephemeral=True,
+            )
         if not target_member:
             return await interaction.followup.send("❌ User not found. Try server nickname, username, mention, or ID.", ephemeral=True)
+        await self._add_extra_for_member(interaction, event, target_member, role_name)
 
+    async def _add_extra_for_member(self, interaction: discord.Interaction, event: dict, target_member, role_name: str):
         player = await get_or_create_player_profile(self.bot, target_member, event=event, guild=interaction.guild)
         if not player:
             return await interaction.followup.send("❌ Failed to create/get player profile.", ephemeral=True)
@@ -520,6 +635,8 @@ async def get_event_id_choices(ctx: discord.AutocompleteContext):
         raw_value = str(ctx.value).strip() if ctx.value is not None else ""
         guild_id = ctx.interaction.guild_id if ctx.interaction else None
         if not guild_id:
+            return []
+        if not hasattr(ctx, "bot") or not getattr(ctx.bot, "db", None):
             return []
 
         # Limit to active events in this server; include content and time for quick recognition.
