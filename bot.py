@@ -107,12 +107,13 @@ class AlbionBot(commands.Bot):
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
-            # First, clear any stale guild-specific commands (old cache from debug_guilds era)
+            # Delete stale guild-specific commands via Discord HTTP API (empty list = wipe)
+            # This clears the leftover guild commands from the old debug_guilds era
             if self.guild_id:
-                await self.sync_commands(guild_ids=[self.guild_id], delete_existing=True, force=True)
-                logger.info(f"✓ Cleared stale guild commands from {self.guild_id}")
+                await self.http.bulk_upsert_guild_commands(self.user.id, self.guild_id, [])
+                logger.info(f"✓ Cleared stale guild-specific commands from guild {self.guild_id}")
             
-            # Now sync globally — works on all servers
+            # Now sync all commands globally so they work on every server
             await self.sync_commands(force=True)
             logger.info("✓ Global slash commands synced")
         except Exception as e:

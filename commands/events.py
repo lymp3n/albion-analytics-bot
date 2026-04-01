@@ -220,6 +220,12 @@ class EventControlView(ui.View):
         await interaction.message.edit(embed=embed, view=self)
         await interaction.followup.send(f"✅ Participants locked and event closed.", ephemeral=True)
 
+# Standalone autocomplete function — must be outside the class.
+# py-cord calls autocomplete handlers as plain functions with only (ctx: AutocompleteContext).
+# If defined as a class method (self, ctx), py-cord passes ctx as self and never passes ctx — silent failure.
+async def get_template_choices(ctx: discord.AutocompleteContext):
+    return list(get_templates().keys())
+
 class EventCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -229,9 +235,6 @@ class EventCommands(commands.Cog):
         self.bot.add_view(EventControlView(self.bot))
 
     event_group = discord.SlashCommandGroup("event", "Manage events")
-
-    async def get_template_choices(self, ctx: discord.AutocompleteContext):
-        return list(get_templates().keys())
 
     @event_group.command(name="create", description="Create a new event in this channel or thread")
     @option("template", description="Role template", autocomplete=get_template_choices)
