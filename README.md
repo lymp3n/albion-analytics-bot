@@ -58,6 +58,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 - `/event swap_players` — поменять двух игроков местами.
 - `/event add_extra` — добавить extra-слот и назначить игрока.
 - Кнопки под постом события: `Join`, `Leave`, `Close Event`, `Manage`.
+- Важно: если событие фактически не состоялось, его **нельзя закрывать**. Удалите сообщение события, чтобы фейковая статистика не сохранялась в базе.
 
 #### Статистика и выплаты
 - `/stats` — персональная или целевая статистика игрока.
@@ -120,6 +121,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 - `/event swap_players` — swap two players.
 - `/event add_extra` — add extra slot and assign a player.
 - Event message buttons: `Join`, `Leave`, `Close Event`, `Manage`.
+- Important: if an event did not actually happen, do **not** close it. Delete the event message so fake stats are not written to the database.
 
 #### Analytics and Payroll
 - `/stats` — personal or target player statistics.
