@@ -6,8 +6,10 @@ import discord
 from discord import option, ui
 from discord.ext import commands
 from datetime import datetime
+import logging
 
 SHOTCALLER_ROLE_IDS = {1469711597827260679, 1488301094609096744}
+logger = logging.getLogger("albion-bot")
 
 
 def get_templates():
@@ -219,6 +221,7 @@ class ManageAddModal(ui.Modal):
             slot,
         )
         await refresh_event_message(self.bot, self.event_id)
+        logger.info("manage_modal_add_move event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_id, slot, interaction.user.id)
         await interaction.followup.send(f"✅ Assigned <@{target_id}> to slot #{slot}.", ephemeral=True)
 
 
@@ -259,6 +262,7 @@ class ManageRemoveModal(ui.Modal):
             player["id"],
         )
         await refresh_event_message(self.bot, self.event_id)
+        logger.info("manage_modal_remove event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_id, existing['slot_number'], interaction.user.id)
         await interaction.followup.send(f"✅ Removed <@{target_id}> from slot #{existing['slot_number']}.", ephemeral=True)
 
 
@@ -317,6 +321,7 @@ class ManageAddExtraModal(ui.Modal):
             player["id"],
         )
         await refresh_event_message(self.bot, self.event_id)
+        logger.info("manage_modal_add_extra event_id=%s target_id=%s new_slot=%s role=%s by=%s", self.event_id, target_id, next_slot, role_name, interaction.user.id)
         await interaction.followup.send(
             f"✅ Added extra slot #{next_slot} ({role_name}) for <@{target_id}>.",
             ephemeral=True,
@@ -383,6 +388,7 @@ class EventControlView(ui.View):
             return await interaction.followup.send("❌ No available slots!", ephemeral=True)
 
         view = SlotSelectView(self.bot, event["id"], player["id"], free_slots)
+        logger.info("event_join_open_slots event_id=%s user_id=%s slots=%s", event["id"], interaction.user.id, len(free_slots))
         await interaction.followup.send("Select an available slot:", view=view, ephemeral=True)
 
     @ui.button(label="Leave", style=discord.ButtonStyle.danger, custom_id="evt_leave")
@@ -591,6 +597,7 @@ class EventCommands(commands.Cog):
             slot,
         )
         await refresh_event_message(self.bot, event_id)
+        logger.info("slash_add_player event_id=%s target=%s slot=%s by=%s", event_id, user.id, slot, ctx.author.id)
         await ctx.followup.send(f"✅ Assigned {user.mention} to slot #{slot}.", ephemeral=True)
 
     @event_group.command(name="remove_player", description="Remove player from event roster")
@@ -622,6 +629,7 @@ class EventCommands(commands.Cog):
 
         await self.bot.db.execute("UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id = $2", event_id, player["id"])
         await refresh_event_message(self.bot, event_id)
+        logger.info("slash_remove_player event_id=%s target=%s slot=%s by=%s", event_id, user.id, existing['slot_number'], ctx.author.id)
         await ctx.followup.send(f"✅ Removed {user.mention} from slot #{existing['slot_number']}.", ephemeral=True)
 
     @event_group.command(name="swap_players", description="Swap two players between their current slots")
@@ -656,6 +664,7 @@ class EventCommands(commands.Cog):
         await self.bot.db.execute("UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3", p1["id"], event_id, s2["slot_number"])
         await self.bot.db.execute("UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3", p2["id"], event_id, s1["slot_number"])
         await refresh_event_message(self.bot, event_id)
+        logger.info("slash_swap_players event_id=%s user_a=%s slot_a=%s user_b=%s slot_b=%s by=%s", event_id, user_a.id, s1['slot_number'], user_b.id, s2['slot_number'], ctx.author.id)
         await ctx.followup.send(
             f"✅ Swapped {user_a.mention} (slot #{s1['slot_number']}) and {user_b.mention} (slot #{s2['slot_number']}).",
             ephemeral=True,
@@ -700,6 +709,7 @@ class EventCommands(commands.Cog):
             player["id"],
         )
         await refresh_event_message(self.bot, event_id)
+        logger.info("slash_add_extra event_id=%s target=%s new_slot=%s role=%s by=%s", event_id, user.id, next_slot, role_name, ctx.author.id)
         await ctx.followup.send(f"✅ Added extra slot #{next_slot} ({role_name}) for {user.mention}.", ephemeral=True)
 
 

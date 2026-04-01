@@ -4,6 +4,9 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 from services.chart_generator import ChartGenerator
 import asyncio
+import logging
+
+logger = logging.getLogger("albion-bot")
 
 class StatsCommands(commands.Cog):
     """Commands for viewing statistics"""
@@ -21,6 +24,7 @@ class StatsCommands(commands.Cog):
         try:
             await ctx.defer()
         except discord.NotFound:
+            logger.warning("stats defer failed: unknown interaction user_id=%s", ctx.author.id)
             return
         
         author = ctx.author
@@ -118,6 +122,7 @@ class StatsCommands(commands.Cog):
         try:
             await ctx.defer()
         except discord.NotFound:
+            logger.warning("stats_top defer failed: unknown interaction user_id=%s", ctx.author.id)
             return
         
         # Fetch top 10 for the last 30 days
@@ -173,6 +178,7 @@ class StatsCommands(commands.Cog):
         try:
             await ctx.defer(ephemeral=True)
         except discord.NotFound:
+            logger.warning("stats_seed_test defer failed: unknown interaction user_id=%s", ctx.author.id)
             return
         
         if not await self.bot.permissions.require_founder(ctx.author):

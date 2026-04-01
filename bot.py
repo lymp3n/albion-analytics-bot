@@ -188,6 +188,19 @@ class AlbionBot(commands.Bot):
             status=discord.Status.online
         )
     
+    async def on_application_command_error(self, ctx, error):
+        logger.exception("Application command error: %s", error)
+        try:
+            if hasattr(ctx, "response") and not ctx.response.is_done():
+                await ctx.respond("❌ Internal error while executing command.", ephemeral=True)
+            else:
+                await ctx.followup.send("❌ Internal error while executing command.", ephemeral=True)
+        except Exception:
+            pass
+
+    async def on_error(self, event_method, *args, **kwargs):
+        logger.exception("Discord event error in %s", event_method)
+
     @commands.command()
     async def ping(self, ctx):
         await ctx.send("Pong! Bot is alive.")
