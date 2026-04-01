@@ -3,6 +3,7 @@ from discord import option
 from discord.ext import commands
 from datetime import datetime, timedelta
 from services.chart_generator import ChartGenerator
+import asyncio
 
 class StatsCommands(commands.Cog):
     """Commands for viewing statistics"""
@@ -17,7 +18,10 @@ class StatsCommands(commands.Cog):
     @option("period", choices=["7 days", "30 days", "all time"], default="30 days")
     async def stats(self, ctx: discord.ApplicationContext, target: discord.Member = None, period: str = "30 days"):
         """View player statistics"""
-        await ctx.defer()
+        try:
+            await ctx.defer()
+        except discord.NotFound:
+            return
         
         author = ctx.author
         
@@ -30,12 +34,12 @@ class StatsCommands(commands.Cog):
         is_mentor = await self.bot.permissions.require_mentor(author)
         
         if not is_self and not is_mentor:
-            return await ctx.respond("❌ Only mentors and founders can view other players' statistics.", ephemeral=True)
+            return await ctx.followup.send("❌ Only mentors and founders can view other players' statistics.", ephemeral=True)
         
         # Fetch player data
         player = await self.bot.db.get_player_by_discord_id(target.id)
         if not player:
-            return await ctx.respond(f"❌ Player {target.mention} is not registered in the system.", ephemeral=True)
+            return await ctx.followup.send(f"❌ Player {target.mention} is not registered in the system.", ephemeral=True)
         
         # Determine period
         days = 7 if "7" in period else 30 if "30" in period else None
@@ -43,7 +47,7 @@ class StatsCommands(commands.Cog):
         # Fetch statistics
         stats = await self._get_player_stats(player['id'], days)
         if not stats or stats['session_count'] == 0:
-            return await ctx.respond(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
+            return await ctx.followup.send(f"📊 {target.mention} has no recorded sessions yet.", ephemeral=True)
             
         # Get Global Rank
         rank_data = await self.bot.db.fetchrow("""
@@ -75,8 +79,7 @@ class StatsCommands(commands.Cog):
             'last_session': stats.get('last_session')
         }
         
-        # Generate Dashboard Card asynchronously to avoid blocking
-        import asyncio
+        # Generate dashboard in a worker thread to avoid blocking the event loop.
         dashboard_image = await asyncio.to_thread(
             self.chart_generator.create_player_dashboard,
             dashboard_data,
@@ -97,12 +100,15 @@ class StatsCommands(commands.Cog):
         file = discord.File(dashboard_image, filename="dashboard.png")
         embed.set_image(url="attachment://dashboard.png")
         
-        await ctx.respond(embed=embed, file=file)
+        await ctx.followup.send(embed=embed, file=file)
     
     @discord.slash_command(name="stats_top", description="View top 10 players in the alliance")
     async def stats_top(self, ctx: discord.ApplicationContext):
         """View top 10 players in the alliance"""
-        await ctx.defer()
+        try:
+            await ctx.defer()
+        except discord.NotFound:
+            return
         
         # Fetch top 10 for the last 30 days
         start_date = datetime.utcnow() - timedelta(days=30)
@@ -124,7 +130,7 @@ class StatsCommands(commands.Cog):
         """, start_date)
         
         if not top_players:
-            await ctx.respond("❌ Not enough data to generate top players list.", ephemeral=True)
+            await ctx.followup.send("❌ Not enough data to generate top players list.", ephemeral=True)
             return
         
         # Prepare data for chart
@@ -146,18 +152,21 @@ class StatsCommands(commands.Cog):
         embed.description = table_text
         embed.set_footer(text="Ranking based on total score (Volume + Quality)")
         
-        await ctx.respond(embed=embed)
-        # Generate chart
-        chart = self.chart_generator.generate_top_players(players, scores)
+        await ctx.followup.send(embed=embed)
+        # Generate chart in a worker thread to avoid interaction timeouts in other commands.
+        chart = await asyncio.to_thread(self.chart_generator.generate_top_players, players, scores)
         await ctx.send(file=discord.File(chart, filename="top_players.png"))
 
     @discord.slash_command(name="stats_seed_test", description="Seed database with test session data (Founder only)")
     async def stats_seed_test(self, ctx: discord.ApplicationContext):
         """Command to generate test statistics data"""
-        await ctx.defer(ephemeral=True)
+        try:
+            await ctx.defer(ephemeral=True)
+        except discord.NotFound:
+            return
         
         if not await self.bot.permissions.require_founder(ctx.author):
-            await ctx.respond("❌ Only founders can use this command.", ephemeral=True)
+            await ctx.followup.send("❌ Only founders can use this command.", ephemeral=True)
             return
             
         import random
@@ -166,13 +175,13 @@ class StatsCommands(commands.Cog):
         # Get all players
         players = await self.bot.db.fetch("SELECT id FROM players")
         if not players:
-            await ctx.respond("❌ No players found to seed stats for.", ephemeral=True)
+            await ctx.followup.send("❌ No players found to seed stats for.", ephemeral=True)
             return
             
         # Get content types
         content_types = await self.bot.db.fetch("SELECT id FROM content")
         if not content_types:
-            await ctx.respond("❌ Content table is empty.", ephemeral=True)
+            await ctx.followup.send("❌ Content table is empty.", ephemeral=True)
             return
             
         # Add 5 random sessions for each player
@@ -202,7 +211,7 @@ class StatsCommands(commands.Cog):
                 )
                 sessions_added += 1
                 
-        await ctx.respond(f"✅ Added {sessions_added} test sessions for {len(players)} players!", ephemeral=True)
+        await ctx.followup.send(f"✅ Added {sessions_added} test sessions for {len(players)} players!", ephemeral=True)
 
     
     async def _get_player_stats(self, player_id: int, days: int = None):

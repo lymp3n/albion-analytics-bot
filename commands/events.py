@@ -249,14 +249,18 @@ class EventCommands(commands.Cog):
     @event_group.command(name="create", description="Create a new event in this channel or thread")
     @option("template", description="Role template", autocomplete=get_template_choices)
     async def create(self, ctx: discord.ApplicationContext, content: str, time: str, template: str):
+        try:
+            await ctx.defer(ephemeral=True)
+        except discord.NotFound:
+            return
+
         if not await self.bot.permissions.require_mentor(ctx.author):
-            return await ctx.respond("❌ No permission.", ephemeral=True)
+            return await ctx.followup.send("❌ No permission.", ephemeral=True)
             
         templates = get_templates()
         if template not in templates:
-            return await ctx.respond("❌ Template not found.", ephemeral=True)
-            
-        await ctx.defer(ephemeral=True)
+            return await ctx.followup.send("❌ Template not found.", ephemeral=True)
+
         player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         
         # Use the current channel or thread where the command was called
@@ -282,22 +286,26 @@ class EventCommands(commands.Cog):
         
         # 4. Attach message ID
         await self.bot.db.execute("UPDATE events SET discord_message_id = $1 WHERE id = $2", msg.id, event_id)
-        await ctx.respond(f"✅ Event published here!")
+        await ctx.followup.send("✅ Event published here!", ephemeral=True)
 
     @event_group.command(name="close", description="Close an event and lock attendance")
     @option("event_id", description="Event ID (found at the bottom of the post)")
     async def close_event(self, ctx: discord.ApplicationContext, event_id: int):
+        try:
+            await ctx.defer(ephemeral=True)
+        except discord.NotFound:
+            return
+
         if not await self.bot.permissions.require_mentor(ctx.author):
-            return await ctx.respond("❌ No permission.", ephemeral=True)
-            
-        await ctx.defer(ephemeral=True)
+            return await ctx.followup.send("❌ No permission.", ephemeral=True)
+
         event = await self.bot.db.fetchrow("SELECT id, discord_channel_id, discord_message_id, status FROM events WHERE id = $1", event_id)
         
         if not event:
-            return await ctx.respond("❌ Event not found.", ephemeral=True)
+            return await ctx.followup.send("❌ Event not found.", ephemeral=True)
             
         if event['status'] == 'closed':
-            return await ctx.respond("❌ This event is already closed.", ephemeral=True)
+            return await ctx.followup.send("❌ This event is already closed.", ephemeral=True)
             
         # Mark as closed
         await self.bot.db.execute("UPDATE events SET status = 'closed' WHERE id = $1", event_id)
@@ -317,7 +325,7 @@ class EventCommands(commands.Cog):
         except Exception:
             pass
             
-        await ctx.respond(f"✅ Event #{event_id} successfully closed. Participant list locked for statistics.")
+        await ctx.followup.send(f"✅ Event #{event_id} successfully closed. Participant list locked for statistics.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(EventCommands(bot))
