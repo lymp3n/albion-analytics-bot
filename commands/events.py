@@ -234,7 +234,11 @@ class EventControlView(ui.View):
 # py-cord calls autocomplete handlers as plain functions with only (ctx: AutocompleteContext).
 # If defined as a class method (self, ctx), py-cord passes ctx as self and never passes ctx — silent failure.
 async def get_template_choices(ctx: discord.AutocompleteContext):
-    return list(get_templates().keys())
+    try:
+        # Discord autocomplete supports max 25 choices.
+        return list(get_templates().keys())[:25]
+    except Exception:
+        return []
 
 class EventCommands(commands.Cog):
     def __init__(self, bot):
@@ -254,7 +258,8 @@ class EventCommands(commands.Cog):
         except discord.NotFound:
             return
 
-        if not await self.bot.permissions.require_mentor(ctx.author):
+        # Allow members as well (mentor/founder/admin still pass via hierarchy).
+        if not await self.bot.permissions.require_member(ctx.author):
             return await ctx.followup.send("❌ No permission.", ephemeral=True)
             
         templates = get_templates()
