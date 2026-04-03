@@ -53,7 +53,7 @@
 3. Hallow
 4. Hallow
 5. Hallow/Exalted/rampant
-6. Pole/cobra/locus
+6. Pole
 7. 1h arcane
 8. GA
 9. Bedrock
@@ -61,16 +61,16 @@
 11. Occult
 12. Rootbound
 13. Rift
-14. Rift
-15. Wailing
-16. Perma
+14. Rift/Dawnsong
+15. Perma (fake)
+16. Perma (main)
 17. Dawnsong
 18. Spiked
 19. Lifecurse
 20. Realmbreaker
 21. Fill healer rampant/hallowfall/fallen/exalted
 22. Fill Dtank oath/locus/GA/BMS
-23. Fill dps fake perma 
+23. Fill Dtank Hoarfrost
 24. Fill pierce SH/carving/incubus
 25. Fill Dtank setup GH/1H mace/golem/hoj
 
