@@ -73,3 +73,26 @@
 23. Fill dps fake perma 
 24. Fill pierce SH/carving/incubus
 25. Fill Dtank setup GH/1H mace/golem/hoj
+
+
+[Invis Golem comp]
+1. Golem
+2. Hallowfall
+3. Hallowfall
+4. Hallowfall
+5. Rampant/Blight
+6. Heavy Mace
+7. Bedrock
+8. Great Hammer/Pole
+9. Hoarfrost
+10. GA
+11. Rift
+12. Rift
+13. Dawnsong
+14. Dawnsong
+15. Spiked
+16. Perma
+17. Oathkeepers/Locus
+18. RB
+19. Carving
+20. Incube
