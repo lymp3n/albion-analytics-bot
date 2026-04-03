@@ -13,6 +13,7 @@ except ImportError:
 
 import asyncio
 import logging
+import random
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -221,17 +222,50 @@ async def main():
     logger.info("=" * 50)
     
     keep_alive()
-    
-    bot = AlbionBot()
+    attempt = 0
+    base_backoff = 30
+    max_backoff = 900
 
-    try:
-        await bot.start(bot.token)
-    except KeyboardInterrupt:
-        logger.info("\n⚠️  Shutdown requested by user")
-    except Exception as e:
-        logger.exception(f"❌ Fatal error: {e}")
-    finally:
-        await bot.close()
+    while True:
+        bot = AlbionBot()
+        try:
+            await bot.start(bot.token)
+            # Normal stop (rare in production) => break gracefully
+            break
+        except KeyboardInterrupt:
+            logger.info("\n⚠️  Shutdown requested by user")
+            break
+        except discord.GatewayNotFound as e:
+            attempt += 1
+            wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
+            wait_seconds += random.randint(0, 20)
+            logger.error(
+                "❌ Discord gateway unavailable (likely temporary rate limit / Cloudflare 1015): %s",
+                e,
+            )
+            logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
+            await asyncio.sleep(wait_seconds)
+        except discord.HTTPException as e:
+            # Handle startup-level 429/Cloudflare responses without crash loops.
+            err_text = str(e)
+            if e.status == 429 or "1015" in err_text:
+                attempt += 1
+                wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
+                wait_seconds += random.randint(0, 20)
+                logger.error("❌ Discord HTTP rate limit during startup: %s", e)
+                logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
+                await asyncio.sleep(wait_seconds)
+            else:
+                logger.exception(f"❌ Fatal HTTP error: {e}")
+                break
+        except Exception as e:
+            logger.exception(f"❌ Fatal error: {e}")
+            break
+        finally:
+            try:
+                await bot.close()
+            except Exception:
+                pass
 
 if __name__ == "__main__":
     asyncio.run(main())
