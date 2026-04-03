@@ -43,7 +43,7 @@ def get_templates():
 async def build_event_embed(bot, event_id: int):
     event = await bot.db.fetchrow("SELECT content_name, event_time, status FROM events WHERE id = $1", event_id)
     if not event:
-        return discord.Embed(description="❌ Event not found."), None
+        return discord.Embed(description="❌ Event not found.")
 
     signups = await bot.db.fetch(
         """
