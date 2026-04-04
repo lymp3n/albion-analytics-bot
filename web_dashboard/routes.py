@@ -301,7 +301,10 @@ def register_dashboard(app: Flask) -> None:
                     mimetype="application/json",
                 )
             return app.response_class(
-                response=json.dumps({"ok": True, "roles": roles, "discord_guild_id": discord_gid}, default=str),
+                response=json.dumps(
+                    {"ok": True, "roles": roles, "discord_guild_id": str(int(discord_gid))},
+                    default=str,
+                ),
                 mimetype="application/json",
             )
         except Exception as e:

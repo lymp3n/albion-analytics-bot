@@ -214,12 +214,12 @@
       <section class="ds-panel ds-tab-panel" data-panel="roles" hidden>
         <h2>Role assist</h2>
         <p class="ds-muted">
-          Map each Discord <strong>role ID</strong> to <strong>Basic</strong> (member), <strong>Staff</strong> (mentor), or <strong>Admin</strong> (founder).
-          Optional <strong>role name</strong> is for you (or load from Discord). Empty rows for a guild = <code>config.yaml</code> defaults.
-          Set the correct <strong>Discord server ID</strong> so the bot and “Load names” use the right server.
+          Map each Discord <strong>role ID</strong> to <strong>Basic</strong> / <strong>Staff</strong> / <strong>Admin</strong>.
+          Optional <strong>role name</strong> (manual or <strong>Load names from Discord</strong>). Empty table = <code>config.yaml</code> defaults.
+          Set <strong>Discord server ID</strong> and save before loading names.
         </p>
-        <div id="role-assist-catalog" class="ds-role-assist-catalog-mount" aria-label="Commands by permission tier"></div>
         <div id="guild-roles-mount"></div>
+        <div id="role-assist-catalog" class="ds-role-assist-catalog-mount" aria-label="Commands by permission tier"></div>
         <p class="ds-templates-status" id="guild-roles-status" aria-live="polite"></p>
       </section>
 
@@ -317,6 +317,16 @@
     }
   }
 
+  /** Normalize pasted Discord snowflakes (spaces, role-mention markup). */
+  function normalizeSnowflake(s) {
+    const t = String(s ?? "").trim();
+    if (!t) return "";
+    const noMention = t.replace(/[<@!&>]/g, "").replace(/\s+/g, "");
+    if (/^\d+$/.test(noMention)) return noMention;
+    const m = t.match(/\d{17,22}/);
+    return m ? m[0] : noMention;
+  }
+
   function setGuildRolesStatus(msg, kind) {
     const el = $("#guild-roles-status");
     if (!el) return;
@@ -372,7 +382,7 @@
       inp.onblur = () => {
         const map = card._discordRoleNamesById;
         if (!map) return;
-        const tid = String(inp.value || "").trim();
+        const tid = normalizeSnowflake(inp.value);
         const tr = inp.closest("tr");
         if (!tr || !tid) return;
         const li = tr.querySelector(".ds-role-label-input");
@@ -470,26 +480,17 @@
         mount.innerHTML = '<p class="ds-muted">' + esc(data.error || "Could not load command reference.") + "</p>";
         return;
       }
-      const secs = data.sections || [];
+      const rows = data.table || [];
       mount.innerHTML =
-        '<h3 class="ds-role-assist-h3">Commands by minimum access</h3>' +
-        '<p class="ds-muted ds-role-assist-lead">Match each row to <strong>Basic</strong> (member), <strong>Staff</strong> (mentor), or <strong>Admin</strong> (founder) in the table below.</p>' +
-        secs
+        '<h3 class="ds-role-assist-h3">Commands by access level</h3>' +
+        '<div class="ds-table-wrap"><table class="ds-table ds-role-assist-table"><thead><tr><th>Access</th><th>Commands</th></tr></thead><tbody>' +
+        rows
           .map(
-            (s) =>
-              `<section class="ds-role-assist-section" data-tier="${esc(s.id)}">` +
-              `<h4 class="ds-role-assist-tier-title">${esc(s.title)}</h4>` +
-              `<p class="ds-muted ds-role-assist-sub">${esc(s.subtitle || "")}</p>` +
-              `<div class="ds-table-wrap"><table class="ds-table ds-role-assist-table"><thead><tr><th>Command / action</th><th>Description</th></tr></thead><tbody>` +
-              (s.rows || [])
-                .map(
-                  (r) =>
-                    `<tr><td class="ds-role-assist-cmd">${esc(r.command)}</td><td>${esc(r.description)}</td></tr>`
-                )
-                .join("") +
-              `</tbody></table></div></section>`
+            (r) =>
+              `<tr><td class="ds-role-assist-tiercell">${esc(r.tier)}</td><td class="ds-role-assist-cmd">${esc(r.commands)}</td></tr>`
           )
-          .join("");
+          .join("") +
+        "</tbody></table></div>";
       __roleAssistCatalogLoaded = true;
     } catch (e) {
       mount.innerHTML = '<p class="ds-muted">' + esc(String(e)) + "</p>";
@@ -593,25 +594,38 @@
             setGuildRolesStatus("Loading Discord role names…", "");
             try {
               const gid = parseInt(card.getAttribute("data-guild-db-id"), 10);
-              const res = await fetch("/dashboard/api/discord-guild-roles?guild_id=" + gid, {
+              if (Number.isNaN(gid) || gid < 1) {
+                setGuildRolesStatus("Invalid guild id on card.", "err");
+                return;
+              }
+              const res = await fetch("/dashboard/api/discord-guild-roles?guild_id=" + encodeURIComponent(String(gid)), {
                 credentials: "same-origin",
+                headers: { Accept: "application/json" },
               });
               const data = await res.json().catch(() => ({}));
               if (!data.ok) {
-                setGuildRolesStatus(data.error || "Failed to load Discord roles.", "err");
+                setGuildRolesStatus(data.error || "Failed to load Discord roles (HTTP " + res.status + ").", "err");
                 return;
               }
-              const map = {};
+              const map = Object.create(null);
               (data.roles || []).forEach((r) => {
-                map[String(r.id)] = r.name;
+                const id = String(r.id);
+                map[id] = r.name;
               });
               card._discordRoleNamesById = map;
               card.querySelectorAll(".ds-role-access-tbody tr").forEach((tr) => {
-                const tid = String((tr.querySelector(".ds-role-id-input") || {}).value || "").trim();
+                const tid = normalizeSnowflake((tr.querySelector(".ds-role-id-input") || {}).value);
                 const li = tr.querySelector(".ds-role-label-input");
                 if (tid && map[tid] && li && !String(li.value || "").trim()) li.value = map[tid];
               });
-              setGuildRolesStatus("Role names loaded — empty labels filled where IDs match. Save to keep.", "ok");
+              setGuildRolesStatus(
+                "Loaded " +
+                  (data.roles || []).length +
+                  " roles (Discord server " +
+                  (data.discord_guild_id || "?") +
+                  "). Empty name cells filled where IDs match — save to keep.",
+                "ok"
+              );
             } catch (e) {
               setGuildRolesStatus(String(e), "err");
             }

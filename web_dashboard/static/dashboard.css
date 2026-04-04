@@ -421,7 +421,8 @@
 }
 
 .ds-role-assist-catalog-mount {
-  margin-bottom: 1.75rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.25rem;
 }
 
 .ds-role-assist-h3 {
@@ -430,31 +431,19 @@
   font-weight: 600;
 }
 
-.ds-role-assist-lead {
-  margin: 0 0 1rem;
-  font-size: 0.85rem;
-}
-
-.ds-role-assist-section {
-  margin-bottom: 1.25rem;
-}
-
-.ds-role-assist-tier-title {
-  margin: 0 0 0.25rem;
-  font-size: 0.95rem;
+.ds-role-assist-table .ds-role-assist-tiercell {
+  white-space: nowrap;
   font-weight: 600;
-  color: var(--ds-accent, #00f0ff);
-}
-
-.ds-role-assist-sub {
-  margin: 0 0 0.5rem;
-  font-size: 0.8rem;
+  color: var(--ds-muted);
+  width: 7rem;
+  vertical-align: top;
 }
 
 .ds-role-assist-table .ds-role-assist-cmd {
   font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   word-break: break-word;
+  vertical-align: top;
 }
 
 .ds-btn-tiny {

@@ -14,6 +14,8 @@ def fetch_discord_guild_roles(discord_guild_id: int) -> Tuple[List[Dict[str, Any
     error_message is None on success.
     """
     token = (os.environ.get("DISCORD_TOKEN") or os.environ.get("DISCORD_BOT_TOKEN") or "").strip()
+    if token.lower().startswith("bot "):
+        token = token[4:].strip()
     if not token:
         return [], "DISCORD_TOKEN is not set on the server; cannot load role names."
 
@@ -25,7 +27,9 @@ def fetch_discord_guild_roles(discord_guild_id: int) -> Tuple[List[Dict[str, Any
         url,
         headers={
             "Authorization": f"Bot {token}",
-            "User-Agent": "AlbionAnalyticsDashboard (urllib)",
+            # Discord rejects some generic agents; identify as a bot integration.
+            "User-Agent": "DiscordBot (https://github.com/lymp3n/albion-analytics-bot, 1.0)",
+            "Accept": "application/json",
         },
         method="GET",
     )

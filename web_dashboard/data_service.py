@@ -156,9 +156,11 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
             lbl = lbl.strip() or None
         else:
             lbl = None
+        # String IDs so JSON + JavaScript do not lose Discord snowflake precision.
+        rid_int = int(a["discord_role_id"])
         by_guild[int(a["guild_id"])].append(
             {
-                "discord_role_id": int(a["discord_role_id"]),
+                "discord_role_id": str(rid_int),
                 "tier": str(a["tier"]),
                 "role_label": lbl,
             }
@@ -167,7 +169,15 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
     for g in guilds:
         gid = int(g["id"])
         row = dict(g)
-        row["assignments"] = sorted(by_guild.get(gid, []), key=lambda x: (x["tier"], x["discord_role_id"]))
+        if row.get("discord_id") is not None:
+            try:
+                row["discord_id"] = str(int(row["discord_id"]))
+            except (TypeError, ValueError):
+                row["discord_id"] = str(row["discord_id"])
+        row["assignments"] = sorted(
+            by_guild.get(gid, []),
+            key=lambda x: (x["tier"], int(x["discord_role_id"])),
+        )
         row["legacy_override"] = ov_by.get(gid)
         row["has_explicit_assignments"] = len(row["assignments"]) > 0
         row["suggested_from_legacy"] = (
