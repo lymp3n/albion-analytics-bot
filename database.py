@@ -284,6 +284,17 @@ class Database:
             )
         """)
         
+        # Per-guild Discord role overrides (dashboard); NULL/blank column = inherit config.yaml + extras
+        await self.execute(f"""
+            CREATE TABLE IF NOT EXISTS guild_role_overrides (
+                guild_id INTEGER PRIMARY KEY,
+                member_role_ids TEXT,
+                mentor_role_ids TEXT,
+                founder_role_ids TEXT,
+                FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
+            )
+        """)
+
         # Indices
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
@@ -360,3 +371,50 @@ class Database:
             "SELECT * FROM guilds WHERE discord_id = $1", 
             discord_guild_id
         )
+
+    async def fetch_guild_role_overrides(self, guild_db_id: int) -> Optional[Dict[str, Any]]:
+        return await self.fetchrow(
+            "SELECT * FROM guild_role_overrides WHERE guild_id = $1",
+            guild_db_id,
+        )
+
+    async def delete_guild_role_overrides(self, guild_db_id: int) -> None:
+        await self.execute("DELETE FROM guild_role_overrides WHERE guild_id = $1", guild_db_id)
+
+    async def upsert_guild_role_overrides(
+        self,
+        guild_db_id: int,
+        member_role_ids: Optional[str],
+        mentor_role_ids: Optional[str],
+        founder_role_ids: Optional[str],
+    ) -> None:
+        if self.is_sqlite:
+            await self.execute(
+                """
+                INSERT INTO guild_role_overrides (guild_id, member_role_ids, mentor_role_ids, founder_role_ids)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    member_role_ids = excluded.member_role_ids,
+                    mentor_role_ids = excluded.mentor_role_ids,
+                    founder_role_ids = excluded.founder_role_ids
+                """,
+                guild_db_id,
+                member_role_ids,
+                mentor_role_ids,
+                founder_role_ids,
+            )
+        else:
+            await self.execute(
+                """
+                INSERT INTO guild_role_overrides (guild_id, member_role_ids, mentor_role_ids, founder_role_ids)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (guild_id) DO UPDATE SET
+                    member_role_ids = EXCLUDED.member_role_ids,
+                    mentor_role_ids = EXCLUDED.mentor_role_ids,
+                    founder_role_ids = EXCLUDED.founder_role_ids
+                """,
+                guild_db_id,
+                member_role_ids,
+                mentor_role_ids,
+                founder_role_ids,
+            )

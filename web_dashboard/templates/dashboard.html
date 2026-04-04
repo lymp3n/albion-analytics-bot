@@ -45,6 +45,7 @@
       <button type="button" class="ds-tab" data-tab="tickets">Tickets</button>
       <button type="button" class="ds-tab" data-tab="events">Events</button>
       <button type="button" class="ds-tab" data-tab="templates">Event templates</button>
+      <button type="button" class="ds-tab" data-tab="roles">Guild roles</button>
       <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
       <button type="button" class="ds-tab" data-tab="system">System</button>
     </nav>
@@ -210,6 +211,22 @@
         <p class="ds-templates-status" id="evt-templates-status" aria-live="polite"></p>
       </section>
 
+      <section class="ds-panel ds-tab-panel" data-panel="roles" hidden>
+        <h2>Guild role overrides</h2>
+        <p class="ds-muted">
+          Per <strong>database guild</strong> (linked Discord server). Leave a field empty to keep using
+          <code>config.yaml</code> defaults plus built-in extra IDs for that tier.
+          Saved values <strong>replace</strong> the default set for that tier on this guild only.
+          Clear all three fields and save to remove overrides. The bot applies changes on the next slash command (no redeploy).
+        </p>
+        <p class="ds-muted" style="margin-top:0.35rem;">
+          Use Discord role IDs (Developer Mode → right-click role → Copy ID). Separate with commas or spaces.
+          If <code>discord_id</code> for a guild is still <code>0</code>, link the server first — overrides match by Discord server ID.
+        </p>
+        <div id="guild-roles-mount"></div>
+        <p class="ds-templates-status" id="guild-roles-status" aria-live="polite"></p>
+      </section>
+
       <section class="ds-panel ds-tab-panel" data-panel="mentors" hidden>
         <h2>Mentors · fund split</h2>
         <p class="ds-muted">Share matches <code>/payroll</code> logic for the selected window (sessions mentored).</p>
@@ -301,6 +318,107 @@
       setTemplatesStatus("Loaded.", "ok");
     } catch (e) {
       setTemplatesStatus(String(e), "err");
+    }
+  }
+
+  function setGuildRolesStatus(msg, kind) {
+    const el = $("#guild-roles-status");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.remove("is-ok", "is-err");
+    if (kind === "ok") el.classList.add("is-ok");
+    if (kind === "err") el.classList.add("is-err");
+  }
+
+  async function loadGuildRoles() {
+    const mount = $("#guild-roles-mount");
+    if (!mount) return;
+    setGuildRolesStatus("Loading…", "");
+    try {
+      const res = await fetch("/dashboard/api/guild-roles", { credentials: "same-origin" });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) {
+        setGuildRolesStatus(data.error || "Failed to load guild roles.", "err");
+        return;
+      }
+      const rows = data.guilds || [];
+      mount.innerHTML = rows
+        .map((g) => {
+          const mid = esc(g.member_role_ids || "");
+          const ment = esc(g.mentor_role_ids || "");
+          const fnd = esc(g.founder_role_ids || "");
+          const did = g.discord_id != null ? esc(g.discord_id) : "";
+          return (
+            `<div class="ds-guild-role-card" data-guild-db-id="${esc(g.id)}">` +
+            `<h3 class="ds-muted" style="margin:0 0 0.5rem;font-size:0.85rem;text-transform:uppercase;">` +
+            esc(g.name || "Guild") + ` <span style="opacity:0.8">· db #${esc(g.id)} · Discord ${did || "—"}</span></h3>` +
+            `<div class="ds-guild-role-grid">` +
+            `<div class="ds-field"><label>Member-tier role IDs</label>` +
+            `<textarea class="ds-templates-editor ds-gr-textarea" data-field="member" rows="3" spellcheck="false">${mid}</textarea></div>` +
+            `<div class="ds-field"><label>Mentor-tier role IDs</label>` +
+            `<textarea class="ds-templates-editor ds-gr-textarea" data-field="mentor" rows="3" spellcheck="false">${ment}</textarea></div>` +
+            `<div class="ds-field"><label>Founder-tier role IDs</label>` +
+            `<textarea class="ds-templates-editor ds-gr-textarea" data-field="founder" rows="3" spellcheck="false">${fnd}</textarea></div>` +
+            `</div>` +
+            `<div class="ds-templates-toolbar">` +
+            `<button type="button" class="ds-btn ds-btn-primary btn-guild-roles-save">Save this guild</button>` +
+            `<button type="button" class="ds-btn ds-btn-ghost btn-guild-roles-clear">Clear overrides</button>` +
+            `</div></div>`
+          );
+        })
+        .join("") || '<p class="ds-muted">No guilds in database.</p>';
+      mount.querySelectorAll(".btn-guild-roles-save").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const card = btn.closest(".ds-guild-role-card");
+          if (!card) return;
+          saveOneGuildRoles(card, false);
+        });
+      });
+      mount.querySelectorAll(".btn-guild-roles-clear").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const card = btn.closest(".ds-guild-role-card");
+          if (!card) return;
+          card.querySelectorAll(".ds-gr-textarea").forEach((ta) => {
+            ta.value = "";
+          });
+          saveOneGuildRoles(card, true);
+        });
+      });
+      setGuildRolesStatus(rows.length ? "Loaded." : "No guilds.", "ok");
+    } catch (e) {
+      setGuildRolesStatus(String(e), "err");
+    }
+  }
+
+  async function saveOneGuildRoles(card, isClear) {
+    const gid = parseInt(card.getAttribute("data-guild-db-id"), 10);
+    if (Number.isNaN(gid)) return;
+    const ta = (name) => {
+      const el = card.querySelector(`.ds-gr-textarea[data-field="${name}"]`);
+      return el ? el.value : "";
+    };
+    setGuildRolesStatus(isClear ? "Clearing…" : "Saving…", "");
+    try {
+      const res = await fetch("/dashboard/api/guild-roles", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guild_id: gid,
+          member_role_ids: ta("member"),
+          mentor_role_ids: ta("mentor"),
+          founder_role_ids: ta("founder"),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) {
+        setGuildRolesStatus(data.error || "Save failed.", "err");
+        return;
+      }
+      setGuildRolesStatus(data.message || "Saved.", "ok");
+      await loadGuildRoles();
+    } catch (e) {
+      setGuildRolesStatus(String(e), "err");
     }
   }
 
@@ -492,6 +610,7 @@
         p.hidden = p.getAttribute("data-panel") !== id;
       });
       if (id === "templates") loadEventTemplates();
+      if (id === "roles") loadGuildRoles();
     });
   });
 

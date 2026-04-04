@@ -75,17 +75,16 @@ class TicketModal(ui.Modal):
             interaction.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
         
-        # Add permissions for Mentors and Founders based on Role IDs
-        mentor_role_id = self.bot.permissions.mentor_role_id
-        founder_role_id = self.bot.permissions.founder_role_id
-        
-        mentor_role = interaction.guild.get_role(mentor_role_id)
-        founder_role = interaction.guild.get_role(founder_role_id)
-        
-        if mentor_role:
-            overwrites[mentor_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-        if founder_role:
-            overwrites[founder_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        # Mentors and founders: all effective tier roles for this guild (dashboard overrides supported)
+        _, mentor_ids, founder_ids = await self.bot.permissions.effective_role_sets_for_interaction(interaction)
+        for rid in mentor_ids:
+            role = interaction.guild.get_role(rid)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        for rid in founder_ids:
+            role = interaction.guild.get_role(rid)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
             
         try:
             channel = await interaction.guild.create_text_channel(

@@ -45,6 +45,7 @@ def get_sync_connection() -> Generator[Tuple[Any, str], None, None]:
         path = url.replace("sqlite:///", "").replace("sqlite://", "")
         conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn, "sqlite"
         finally:

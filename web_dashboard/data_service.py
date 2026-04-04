@@ -20,6 +20,103 @@ def list_guilds(conn, backend: str) -> List[dict]:
     return fetch_all(conn, backend, "SELECT id, name, discord_id FROM guilds ORDER BY COALESCE(name, '')", ())
 
 
+def ensure_guild_role_overrides_table(conn, backend: str) -> None:
+    """Create table if missing (e.g. dashboard opened before bot ran migrations)."""
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS guild_role_overrides (
+                guild_id INTEGER PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+                member_role_ids TEXT,
+                mentor_role_ids TEXT,
+                founder_role_ids TEXT
+            )
+            """
+        )
+    else:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS guild_role_overrides (
+                guild_id INTEGER PRIMARY KEY,
+                member_role_ids TEXT,
+                mentor_role_ids TEXT,
+                founder_role_ids TEXT,
+                FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
+            )
+            """
+        )
+    conn.commit()
+
+
+def list_guild_roles_panel(conn, backend: str) -> List[dict]:
+    return fetch_all(
+        conn,
+        backend,
+        """
+        SELECT g.id, g.name, g.discord_id,
+               o.member_role_ids, o.mentor_role_ids, o.founder_role_ids
+        FROM guilds g
+        LEFT JOIN guild_role_overrides o ON o.guild_id = g.id
+        ORDER BY COALESCE(g.name, '')
+        """,
+        (),
+    )
+
+
+def delete_guild_role_overrides_row(conn, backend: str, guild_db_id: int) -> None:
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute("DELETE FROM guild_role_overrides WHERE guild_id = %s", (guild_db_id,))
+    else:
+        cur.execute("DELETE FROM guild_role_overrides WHERE guild_id = ?", (guild_db_id,))
+    conn.commit()
+
+
+def upsert_guild_role_overrides_row(
+    conn,
+    backend: str,
+    guild_db_id: int,
+    member_s: Optional[str],
+    mentor_s: Optional[str],
+    founder_s: Optional[str],
+) -> None:
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            INSERT INTO guild_role_overrides (guild_id, member_role_ids, mentor_role_ids, founder_role_ids)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                member_role_ids = EXCLUDED.member_role_ids,
+                mentor_role_ids = EXCLUDED.mentor_role_ids,
+                founder_role_ids = EXCLUDED.founder_role_ids
+            """,
+            (guild_db_id, member_s, mentor_s, founder_s),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO guild_role_overrides (guild_id, member_role_ids, mentor_role_ids, founder_role_ids)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                member_role_ids = excluded.member_role_ids,
+                mentor_role_ids = excluded.mentor_role_ids,
+                founder_role_ids = excluded.founder_role_ids
+            """,
+            (guild_db_id, member_s, mentor_s, founder_s),
+        )
+    conn.commit()
+
+
+def guild_exists(conn, backend: str, guild_db_id: int) -> bool:
+    if backend == "postgres":
+        row = fetch_one(conn, backend, "SELECT 1 AS o FROM guilds WHERE id = $1::int", (guild_db_id,))
+    else:
+        row = fetch_one(conn, backend, "SELECT 1 AS o FROM guilds WHERE id = ?", (guild_db_id,))
+    return bool(row)
+
+
 def get_active_players_count(conn, backend: str, guild_db_id: Optional[int]) -> int:
     if guild_db_id:
         row = fetch_one(

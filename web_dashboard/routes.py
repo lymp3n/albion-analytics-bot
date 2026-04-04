@@ -12,17 +12,24 @@ from flask import (
     url_for,
 )
 
+from utils.role_config import normalize_ids_for_storage
+
 from web_dashboard.data_service import (
     delete_events_by_ids,
+    delete_guild_role_overrides_row,
+    ensure_guild_role_overrides_table,
     get_database_storage,
     get_events_analytics,
     get_mentors_payroll,
     get_overview,
     get_players_table,
+    guild_exists,
     get_system_snapshot,
     get_tickets_breakdown,
     list_events_catalog,
+    list_guild_roles_panel,
     list_guilds,
+    upsert_guild_role_overrides_row,
 )
 from web_dashboard.db_sync import get_sync_connection
 
@@ -243,5 +250,76 @@ def register_dashboard(app: Flask) -> None:
             )
         return app.response_class(
             response=json.dumps({"ok": True, "message": "Saved. /event create uses this file immediately (same process)."}),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/guild-roles", methods=["GET"])
+    @login_required
+    def dashboard_guild_roles_get():
+        try:
+            with get_sync_connection() as (conn, backend):
+                ensure_guild_role_overrides_table(conn, backend)
+                rows = list_guild_roles_panel(conn, backend)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "guilds": rows}, default=str),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/guild-roles", methods=["POST"])
+    @login_required
+    def dashboard_guild_roles_post():
+        body = request.get_json(silent=True) or {}
+        try:
+            guild_db_id = int(body.get("guild_id", 0))
+        except (TypeError, ValueError):
+            guild_db_id = 0
+        if guild_db_id < 1:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "Invalid guild_id"}),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            m = normalize_ids_for_storage(body.get("member_role_ids"))
+            ment = normalize_ids_for_storage(body.get("mentor_role_ids"))
+            fnd = normalize_ids_for_storage(body.get("founder_role_ids"))
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_sync_connection() as (conn, backend):
+                ensure_guild_role_overrides_table(conn, backend)
+                if not guild_exists(conn, backend, guild_db_id):
+                    return app.response_class(
+                        response=json.dumps({"ok": False, "error": "Guild not found"}),
+                        status=404,
+                        mimetype="application/json",
+                    )
+                if m is None and ment is None and fnd is None:
+                    delete_guild_role_overrides_row(conn, backend, guild_db_id)
+                else:
+                    upsert_guild_role_overrides_row(conn, backend, guild_db_id, m, ment, fnd)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps(
+                {
+                    "ok": True,
+                    "message": "Saved. The bot reads these overrides per Discord server on the next permission check.",
+                }
+            ),
             mimetype="application/json",
         )

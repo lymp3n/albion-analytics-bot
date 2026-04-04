@@ -361,6 +361,26 @@
   color: #ff8a9a;
 }
 
+.ds-guild-role-card {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 240, 255, 0.12);
+  background: rgba(8, 8, 16, 0.55);
+}
+
+.ds-guild-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: start;
+}
+
+.ds-guild-role-grid .ds-gr-textarea {
+  min-height: 4.5rem;
+  margin-top: 0.25rem;
+}
+
 .ds-table {
   width: 100%;
   border-collapse: collapse;

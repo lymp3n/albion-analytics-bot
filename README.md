@@ -47,6 +47,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 | **Events** | Аналитика посещаемости **только по ивентам со статусом `closed`** — открытые тестовые посты в статистике не участвуют. Таблицы по контенту, «никогда не был на ивенте», низкая и стабильная посещаемость; длинные списки прокручиваются внутри блока. Внизу — **Event records (cleanup)**: выбор записей и удаление из таблицы `events` (ошибочные/тестовые строки; связанные подписи удаляются каскадом). Не удаляет сообщения в Discord. |
 | **Mentors** | Распределение выбранного фонда между менторами по логике, близкой к `/payroll`, за выбранное число дней. |
 | **Event templates** | Редактирование `events_templates.txt`: шаблоны ростера для `/event create` подхватываются **сразу** после сохранения (тот же процесс, что и бот). |
+| **Guild roles** | Переопределение Discord role ID для уровней member / mentor / founder **по гильдии в БД**; пустое поле = как в `config.yaml` + встроенные доп. ID. Без редеплоя. |
 | **System** | Краткий **статус связи бота с Discord** (понятная плашка для не-разработчиков), оценка занятого места в БД относительно квоты (см. `DASHBOARD_DB_QUOTA_BYTES`), время ответа БД, аптайм HTTP и развёрнутый JSON для диагностики. |
 
 **Важно про ивенты.** В аналитике учитываются только **завершённые** ивенты. Чтобы убрать мусор из базы, используйте блок cleanup на вкладке Events или SQL-скрипты в репозитории (например, `scripts/delete_first_three_events.sql` для точечной чистки по правилам файла).
@@ -147,6 +148,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 | **Events** | Attendance analytics for **`closed` events only** — open test posts do not inflate stats. Scrollable player lists. **Event records (cleanup)** at the bottom: select rows and delete from `events` (bad/test data; signups cascade). Does **not** remove Discord messages. |
 | **Mentors** | Split the chosen silver pool across mentors using logic close to `/payroll` for the selected days. |
 | **Event templates** | Edit `events_templates.txt` for `/event create`; changes apply **immediately** after save (same process as the bot). |
+| **Guild roles** | Override Discord role IDs for member / mentor / founder tiers **per DB guild**; blank field inherits `config.yaml` + built-in extras. No redeploy. |
 | **System** | Plain-language **Discord bot connectivity** hint, database size vs quota (`DASHBOARD_DB_QUOTA_BYTES`), DB round-trip time, HTTP uptime, and raw JSON for deeper checks. |
 
 **Events note.** Analytics count **finished** events only. To clean bad rows, use the Events-tab cleanup or repository SQL helpers (e.g. `scripts/delete_first_three_events.sql` — follow the comments in that file).
