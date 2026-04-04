@@ -647,23 +647,21 @@
         const ld = card.querySelector(".btn-discord-load-role-names");
         if (ld) {
           ld.addEventListener("click", async () => {
-            if (window.__discordRolesFetchInFlight) {
-              setGuildRolesStatus("A Discord roles request is already running — wait for it to finish.", "err");
-              return;
-            }
             const gid = parseInt(card.getAttribute("data-guild-db-id"), 10);
             if (Number.isNaN(gid) || gid < 1) {
               setGuildRolesStatus("Invalid guild id on card.", "err");
               return;
             }
-            const loadBtns = () => document.querySelectorAll(".btn-discord-load-role-names");
-            window.__discordRolesFetchInFlight = true;
-            loadBtns().forEach((b) => {
-              b.disabled = true;
-            });
+            window.__discordRolesFetching = window.__discordRolesFetching || new Set();
+            if (window.__discordRolesFetching.has(gid)) {
+              setGuildRolesStatus("Role list for this guild is already loading…", "err");
+              return;
+            }
+            window.__discordRolesFetching.add(gid);
+            ld.disabled = true;
             let cooldownMs = 45000;
             try {
-              setGuildRolesStatus("Loading Discord role names…", "");
+              setGuildRolesStatus("Loading Discord role names (guild db #" + gid + ")…", "");
               const res = await fetch("/dashboard/api/discord-guild-roles?guild_id=" + encodeURIComponent(String(gid)), {
                 credentials: "same-origin",
                 headers: { Accept: "application/json" },
@@ -677,7 +675,7 @@
               }
               const map = buildDiscordRoleNameMap(data.roles || []);
               card._discordRoleNamesById = map;
-              let filled = 0;
+              let updated = 0;
               let withId = 0;
               let noMatch = 0;
               card.querySelectorAll(".ds-role-access-tbody tr").forEach((tr) => {
@@ -692,18 +690,19 @@
                   noMatch++;
                   return;
                 }
-                if (!isRoleLabelEmpty(li)) return;
                 li.value = name;
-                filled++;
+                updated++;
               });
               setGuildRolesStatus(
-                "Discord returned " +
+                "Guild db #" +
+                  gid +
+                  ": Discord returned " +
                   (data.roles || []).length +
                   " roles (server " +
                   (data.discord_guild_id || "?") +
-                  "). Filled " +
-                  filled +
-                  " empty name cell(s) from " +
+                  "). Updated " +
+                  updated +
+                  " name cell(s) from " +
                   withId +
                   " row(s) with IDs." +
                   (noMatch ? " " + noMatch + " ID(s) not found on server (check digits / wrong server)." : "") +
@@ -713,11 +712,9 @@
             } catch (e) {
               setGuildRolesStatus(String(e), "err");
             } finally {
-              window.__discordRolesFetchInFlight = false;
+              window.__discordRolesFetching.delete(gid);
               setTimeout(() => {
-                loadBtns().forEach((b) => {
-                  b.disabled = false;
-                });
+                ld.disabled = false;
               }, cooldownMs);
             }
           });
