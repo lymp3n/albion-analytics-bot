@@ -257,6 +257,16 @@
       <section class="ds-panel ds-tab-panel" data-panel="mentors" hidden>
         <h2>Mentors · fund split</h2>
         <p class="ds-muted">Share matches <code>/payroll</code> logic for the selected window (sessions mentored).</p>
+        <div class="ds-mentors-fund-bar">
+          <div class="ds-field ds-mentors-fund-field">
+            <label for="mentors-fund-input">Mentor fund (silver)</label>
+            <input id="mentors-fund-input" type="number" min="0" step="1" value="1000000" />
+          </div>
+          <button type="button" class="ds-btn ds-btn-primary" id="btn-mentors-apply-fund">Apply fund &amp; refresh</button>
+          <p class="ds-muted ds-mentors-fund-hint">
+            Change the pool for the split, then apply — the table and KPIs reload for the current <strong>Period</strong> and <strong>Guild</strong> (same value as the header field).
+          </p>
+        </div>
         <div class="ds-grid-kpi" id="kpi-mentors"></div>
         <div class="ds-table-wrap">
           <table class="ds-table" id="tbl-mentors">
@@ -897,6 +907,14 @@
     });
     if (cur) gsel.value = cur;
 
+    const fil = data.filters || {};
+    if (fil.fund != null && fil.fund !== undefined) {
+      const fv = String(fil.fund);
+      $("#f-fund").value = fv;
+      const mfi = document.getElementById("mentors-fund-input");
+      if (mfi) mfi.value = fv;
+    }
+
     const ov = data.overview || {};
     $("#kpi-overview").innerHTML = kpiHTML([
       ["Tickets open", ov.tickets_open],
@@ -1073,10 +1091,24 @@
         loadRoleAssistCatalog();
         loadGuildRoles();
       }
+      if (id === "mentors") {
+        const hdr = $("#f-fund");
+        const mfi = document.getElementById("mentors-fund-input");
+        if (hdr && mfi) mfi.value = hdr.value || mfi.value;
+      }
     });
   });
 
   $("#btn-refresh").addEventListener("click", load);
+
+  const btnMentorsFund = document.getElementById("btn-mentors-apply-fund");
+  const mentorsFundInput = document.getElementById("mentors-fund-input");
+  if (btnMentorsFund && mentorsFundInput) {
+    btnMentorsFund.addEventListener("click", () => {
+      $("#f-fund").value = mentorsFundInput.value || "0";
+      load();
+    });
+  }
 
   const btnTplSave = $("#btn-templates-save");
   const btnTplReload = $("#btn-templates-reload");

@@ -184,6 +184,32 @@
   align-items: center;
 }
 
+/* Mentors tab — edit fund without using header only */
+.ds-mentors-fund-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  background: rgba(8, 8, 18, 0.55);
+  border: 1px solid rgba(0, 240, 255, 0.14);
+  border-radius: 10px;
+}
+
+.ds-mentors-fund-field {
+  min-width: 11rem;
+}
+
+.ds-mentors-fund-hint {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  align-self: center;
+  padding-bottom: 0.15rem;
+}
+
 .ds-btn {
   border-radius: 8px;
   padding: 0.5rem 1rem;
