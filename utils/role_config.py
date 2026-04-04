@@ -8,9 +8,21 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-# Discord snowflakes are < 2^63; keep a generous upper bound.
+# Discord snowflakes are 64-bit unsigned in practice; many IDs exceed signed 63-bit max.
 _MIN_SNOWFLAKE = 1
-_MAX_SNOWFLAKE = 2**63 - 1
+_MAX_SNOWFLAKE = (1 << 64) - 1
+
+
+def parse_discord_snowflake_string(raw: Any) -> Optional[str]:
+    """Return a normalized decimal snowflake string for DB/API, or None if invalid."""
+    if raw is None:
+        return None
+    s = str(raw).strip().replace(" ", "").replace("\u00a0", "")
+    if not s.isdigit():
+        return None
+    if len(s) < 15 or len(s) > 22:
+        return None
+    return s
 
 
 def parse_discord_role_ids(text: Optional[str]) -> List[int]:
@@ -84,7 +96,7 @@ def sets_from_assignment_rows(
     ment: Set[int] = set()
     f: Set[int] = set()
     for row in rows:
-        rid = int(row["discord_role_id"])
+        rid = int(str(row["discord_role_id"]).strip())
         t = str(row.get("tier") or "").strip().lower()
         if t == "member":
             m.add(rid)

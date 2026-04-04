@@ -302,7 +302,7 @@ class Database:
         await self.execute(f"""
             CREATE TABLE IF NOT EXISTS guild_role_assignments (
                 guild_id INTEGER NOT NULL,
-                discord_role_id {bigint_type} NOT NULL,
+                discord_role_id TEXT NOT NULL,
                 tier TEXT NOT NULL,
                 role_label TEXT,
                 PRIMARY KEY (guild_id, discord_role_id),
@@ -313,6 +313,8 @@ class Database:
             await self.execute("ALTER TABLE guild_role_assignments ADD COLUMN role_label TEXT")
         except Exception:
             pass
+
+        await self._migrate_guild_role_assignments_discord_id_to_text()
 
         # Indices
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
@@ -329,7 +331,70 @@ class Database:
                     UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
                 END;
             """)
-    
+
+    async def _migrate_guild_role_assignments_discord_id_to_text(self) -> None:
+        """INTEGER/BIGINT cannot store all Discord snowflakes; use TEXT for exact decimal strings."""
+        try:
+            if self.is_sqlite:
+                cursor = await self.conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='guild_role_assignments'"
+                )
+                if not await cursor.fetchone():
+                    return
+                cursor = await self.conn.execute("PRAGMA table_info(guild_role_assignments)")
+                rows = await cursor.fetchall()
+                for row in rows:
+                    col_name = row[1]
+                    col_type = str(row[2] or "").upper()
+                    if col_name == "discord_role_id" and "INT" in col_type:
+                        await self.conn.execute("BEGIN")
+                        await self.conn.execute(
+                            """
+                            CREATE TABLE guild_role_assignments__new (
+                                guild_id INTEGER NOT NULL,
+                                discord_role_id TEXT NOT NULL,
+                                tier TEXT NOT NULL,
+                                role_label TEXT,
+                                PRIMARY KEY (guild_id, discord_role_id),
+                                FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
+                            )
+                            """
+                        )
+                        await self.conn.execute(
+                            """
+                            INSERT INTO guild_role_assignments__new (guild_id, discord_role_id, tier, role_label)
+                            SELECT guild_id, CAST(discord_role_id AS TEXT), tier, role_label FROM guild_role_assignments
+                            """
+                        )
+                        await self.conn.execute("DROP TABLE guild_role_assignments")
+                        await self.conn.execute(
+                            "ALTER TABLE guild_role_assignments__new RENAME TO guild_role_assignments"
+                        )
+                        await self.conn.commit()
+                        break
+            else:
+                async with self.pool.acquire() as conn:
+                    row = await conn.fetchrow(
+                        """
+                        SELECT data_type FROM information_schema.columns
+                        WHERE table_name = 'guild_role_assignments'
+                          AND column_name = 'discord_role_id'
+                        LIMIT 1
+                        """
+                    )
+                    if not row:
+                        return
+                    dt = (row["data_type"] or "").lower()
+                    if dt in ("bigint", "integer", "smallint"):
+                        await conn.execute(
+                            """
+                            ALTER TABLE guild_role_assignments
+                            ALTER COLUMN discord_role_id TYPE TEXT USING TRIM(discord_role_id::text)
+                            """
+                        )
+        except Exception:
+            pass
+
     async def seed_initial_data(self):
         guilds_count = await self.fetch("SELECT COUNT(*) as count FROM guilds")
         if guilds_count[0]['count'] > 0:
@@ -393,7 +458,7 @@ class Database:
         )
 
     async def replace_guild_role_assignments(self, guild_db_id: int, pairs: List[tuple]) -> None:
-        """pairs: list of (discord_role_id: int, tier: str, role_label: Optional[str]). Replaces all rows for guild."""
+        """pairs: list of (discord_role_id: str, tier: str, role_label: Optional[str]). Replaces all rows for guild."""
         await self.execute("DELETE FROM guild_role_assignments WHERE guild_id = $1", guild_db_id)
         for item in pairs:
             if len(item) >= 3:

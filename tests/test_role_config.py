@@ -7,6 +7,7 @@ from utils.role_config import (
     effective_sets_from_override_row,
     normalize_ids_for_storage,
     parse_discord_role_ids,
+    parse_discord_snowflake_string,
     sets_from_assignment_rows,
     tier_set_from_db_value,
 )
@@ -40,6 +41,18 @@ class TestNormalizeForStorage(unittest.TestCase):
         )
 
 
+class TestSnowflakeString(unittest.TestCase):
+    def test_parse_discord_snowflake_string(self):
+        self.assertEqual(parse_discord_snowflake_string("1466898167940251822"), "1466898167940251822")
+        self.assertIsNone(parse_discord_snowflake_string("12"))
+        self.assertIsNone(parse_discord_snowflake_string(""))
+
+    def test_sets_from_large_string_ids(self):
+        sid = "1466898167940251822"
+        m, ment, f = sets_from_assignment_rows([{"discord_role_id": sid, "tier": "member"}])
+        self.assertEqual(m, {1466898167940251822})
+
+
 class TestAssignmentRows(unittest.TestCase):
     def test_legacy_to_rows_priority(self):
         legacy = {
@@ -56,7 +69,7 @@ class TestAssignmentRows(unittest.TestCase):
     def test_sets_from_assignments(self):
         m, ment, f = sets_from_assignment_rows(
             [
-                {"discord_role_id": 10, "tier": "member"},
+                {"discord_role_id": "10", "tier": "member"},
                 {"discord_role_id": 20, "tier": "mentor"},
             ]
         )

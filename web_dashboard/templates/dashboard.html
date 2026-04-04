@@ -217,6 +217,7 @@
           Map each Discord <strong>role ID</strong> to <strong>Basic</strong> / <strong>Staff</strong> / <strong>Admin</strong>.
           Optional <strong>role name</strong> (manual or <strong>Load names from Discord</strong>). Empty table = <code>config.yaml</code> defaults.
           Set <strong>Discord server ID</strong> and save before loading names.
+          Large role IDs are stored as text (not 64-bit integers) — if old rows looked wrong, re-type IDs and click <strong>Save role access</strong>.
         </p>
         <div id="guild-roles-mount"></div>
         <div id="role-assist-catalog" class="ds-role-assist-catalog-mount" aria-label="Commands by permission tier"></div>

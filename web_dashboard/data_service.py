@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from utils.role_config import assignment_rows_from_legacy_override
+from utils.role_config import assignment_rows_from_legacy_override, parse_discord_snowflake_string
 
 from web_dashboard.db_sync import fetch_all, fetch_one
 
@@ -89,6 +89,65 @@ def ensure_guild_role_overrides_table(conn, backend: str) -> None:
 _MISSING = object()
 
 
+def migrate_guild_role_assignments_discord_id_to_text(conn, backend: str) -> None:
+    """Sync path: same as database.Database — snowflakes may exceed signed 64-bit."""
+    cur = conn.cursor()
+    try:
+        if backend == "postgres":
+            cur.execute(
+                """
+                SELECT data_type FROM information_schema.columns
+                WHERE table_name = 'guild_role_assignments'
+                  AND column_name = 'discord_role_id'
+                LIMIT 1
+                """
+            )
+            row = cur.fetchone()
+            if row and (row[0] or "").lower() in ("bigint", "integer", "smallint"):
+                cur.execute(
+                    """
+                    ALTER TABLE guild_role_assignments
+                    ALTER COLUMN discord_role_id TYPE TEXT USING TRIM(discord_role_id::text)
+                    """
+                )
+        else:
+            cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='guild_role_assignments'"
+            )
+            if not cur.fetchone():
+                return
+            cur.execute("PRAGMA table_info(guild_role_assignments)")
+            for row in cur.fetchall():
+                if row[1] == "discord_role_id" and "INT" in str(row[2] or "").upper():
+                    cur.execute("BEGIN")
+                    cur.execute(
+                        """
+                        CREATE TABLE guild_role_assignments__new (
+                            guild_id INTEGER NOT NULL,
+                            discord_role_id TEXT NOT NULL,
+                            tier TEXT NOT NULL,
+                            role_label TEXT,
+                            PRIMARY KEY (guild_id, discord_role_id),
+                            FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
+                        )
+                        """
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO guild_role_assignments__new (guild_id, discord_role_id, tier, role_label)
+                        SELECT guild_id, CAST(discord_role_id AS TEXT), tier, role_label FROM guild_role_assignments
+                        """
+                    )
+                    cur.execute("DROP TABLE guild_role_assignments")
+                    cur.execute(
+                        "ALTER TABLE guild_role_assignments__new RENAME TO guild_role_assignments"
+                    )
+                    break
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
 def ensure_guild_role_assignments_table(conn, backend: str) -> None:
     cur = conn.cursor()
     if backend == "postgres":
@@ -96,7 +155,7 @@ def ensure_guild_role_assignments_table(conn, backend: str) -> None:
             """
             CREATE TABLE IF NOT EXISTS guild_role_assignments (
                 guild_id INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
-                discord_role_id BIGINT NOT NULL,
+                discord_role_id TEXT NOT NULL,
                 tier TEXT NOT NULL,
                 role_label TEXT,
                 PRIMARY KEY (guild_id, discord_role_id)
@@ -108,7 +167,7 @@ def ensure_guild_role_assignments_table(conn, backend: str) -> None:
             """
             CREATE TABLE IF NOT EXISTS guild_role_assignments (
                 guild_id INTEGER NOT NULL,
-                discord_role_id INTEGER NOT NULL,
+                discord_role_id TEXT NOT NULL,
                 tier TEXT NOT NULL,
                 role_label TEXT,
                 PRIMARY KEY (guild_id, discord_role_id),
@@ -116,6 +175,7 @@ def ensure_guild_role_assignments_table(conn, backend: str) -> None:
             )
             """
         )
+    migrate_guild_role_assignments_discord_id_to_text(conn, backend)
     ensure_guild_role_assignments_role_label_column(conn, backend)
 
 
@@ -157,10 +217,12 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
         else:
             lbl = None
         # String IDs so JSON + JavaScript do not lose Discord snowflake precision.
-        rid_int = int(a["discord_role_id"])
+        rid_raw = a.get("discord_role_id")
+        ps = parse_discord_snowflake_string(rid_raw)
+        rid_str = ps if ps else (str(rid_raw).strip() if rid_raw is not None else "")
         by_guild[int(a["guild_id"])].append(
             {
-                "discord_role_id": str(rid_int),
+                "discord_role_id": rid_str,
                 "tier": str(a["tier"]),
                 "role_label": lbl,
             }
@@ -193,7 +255,7 @@ def replace_guild_role_assignments_rows(
     conn,
     backend: str,
     guild_db_id: int,
-    pairs: List[Tuple[int, str, Optional[str]]],
+    pairs: List[Tuple[str, str, Optional[str]]],
 ) -> None:
     cur = conn.cursor()
     if backend == "postgres":

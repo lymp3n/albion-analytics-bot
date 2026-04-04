@@ -13,7 +13,7 @@ from flask import (
 )
 
 from utils.command_permissions_catalog import get_role_assist_catalog
-from utils.role_config import parse_single_snowflake
+from utils.role_config import parse_discord_snowflake_string, parse_single_snowflake
 
 from web_dashboard.data_service import (
     count_other_guilds_with_discord_id,
@@ -360,25 +360,25 @@ def register_dashboard(app: Flask) -> None:
             for item in raw_assignments:
                 if not isinstance(item, dict):
                     continue
-                rid = int(item.get("discord_role_id", 0))
-                tier = str(item.get("tier", "")).strip().lower()
-                if rid < 1:
+                rid_str = parse_discord_snowflake_string(item.get("discord_role_id"))
+                if not rid_str:
                     continue
+                tier = str(item.get("tier", "")).strip().lower()
                 if tier not in _VALID_TIERS:
                     return app.response_class(
                         response=json.dumps({"ok": False, "error": f"Invalid tier: {tier!r}"}),
                         status=400,
                         mimetype="application/json",
                     )
-                if rid in seen:
+                if rid_str in seen:
                     continue
-                seen.add(rid)
+                seen.add(rid_str)
                 raw_lbl = item.get("role_label")
                 if isinstance(raw_lbl, str):
                     lbl = raw_lbl.strip() or None
                 else:
                     lbl = None
-                pairs.append((rid, tier, lbl))
+                pairs.append((rid_str, tier, lbl))
         except (TypeError, ValueError) as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
