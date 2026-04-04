@@ -84,7 +84,7 @@ class AlbionBot(commands.Bot):
             self.load_extension("commands.menu")
             self.load_extension("commands.events")  # Event management
             logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
-            logger.info(f"✓ Found {len(self.application_commands)} application commands")
+            logger.info("✓ Slash commands will appear after Discord sync in on_ready")
         except Exception as e:
             logger.error(f"❌ Failed to load cogs: {e}")
             import traceback
@@ -123,14 +123,16 @@ class AlbionBot(commands.Bot):
 
     async def _dashboard_discord_heartbeat(self):
         """Lets the dashboard see recent Discord activity even if on_ready does not repeat after reconnects."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         while not self.is_closed():
             try:
                 from keep_alive import set_bot_ready
 
                 set_bot_ready(
-                    last_discord_heartbeat_utc=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                    last_discord_heartbeat_utc=datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%d %H:%M:%S UTC"
+                    )
                 )
             except Exception:
                 pass
@@ -300,15 +302,14 @@ class AlbionBot(commands.Bot):
         await super().close()
         logger.info("✓ Bot shutdown complete")
 
-from keep_alive import keep_alive
-
 async def main():
-    """Application entry point"""
+    """Application entry point (call keep_alive() from __main__ before asyncio.run)."""
     logger.info("=" * 50)
     logger.info("🚀 Starting Albion Analytics Discord Bot")
     logger.info("=" * 50)
-    
-    keep_alive()
+
+    await asyncio.sleep(0.15)
+
     attempt = 0
     base_backoff = 30
     max_backoff = 900
@@ -367,4 +368,7 @@ async def main():
                 pass
 
 if __name__ == "__main__":
+    from keep_alive import keep_alive
+
+    keep_alive()
     asyncio.run(main())

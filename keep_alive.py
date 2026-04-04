@@ -22,7 +22,7 @@ def set_bot_ready(*, touch_ready: bool = False, **kwargs: Any) -> None:
     global _bot_meta
     _bot_meta = {**_bot_meta, **kwargs}
     if touch_ready:
-        _bot_meta["last_ready_utc"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        _bot_meta["last_ready_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def get_bot_meta() -> dict:
@@ -206,3 +206,5 @@ def run():
 def keep_alive():
     t = Thread(target=run, daemon=True)
     t.start()
+    # Let Waitress bind $PORT before the main coroutine runs CPU-heavy imports (e.g. matplotlib on stats cog).
+    time.sleep(0.25)

@@ -2,7 +2,6 @@ import discord
 from discord import option
 from discord.ext import commands
 from datetime import datetime, timedelta
-from services.chart_generator import ChartGenerator
 import asyncio
 import logging
 
@@ -13,8 +12,16 @@ class StatsCommands(commands.Cog):
     
     def __init__(self, bot):
         self.bot = bot
-        self.chart_generator = ChartGenerator()
+        self._chart_generator = None
         print("✓ StatsCommands initialized")
+
+    @property
+    def chart_generator(self):
+        if self._chart_generator is None:
+            from services.chart_generator import ChartGenerator
+
+            self._chart_generator = ChartGenerator()
+        return self._chart_generator
     
     @discord.slash_command(name="stats", description="View player statistics")
     @option("target", description="Player to view stats for (leave empty for yourself)", required=False)

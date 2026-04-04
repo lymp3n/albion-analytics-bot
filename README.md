@@ -264,3 +264,6 @@ This bot registers commands **once** after login (`on_ready`). To avoid unnecess
 2. Build command: `pip install -r requirements.txt`
 3. Start command: `python bot.py`
 4. Health check: `GET /` (from `keep_alive.py`). Analytics UI: `GET /dashboard` (log in with `DASHBOARD_SECRET`).
+
+**Port check:** The HTTP server starts **before** the Discord client and heavy cog imports (e.g. matplotlib for `/stats`), so Render’s port probe should see `$PORT` open quickly. Use a **single** Web Service instance unless you know how to avoid duplicate Discord sessions.
+
