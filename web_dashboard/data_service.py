@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Optional
 from urllib.parse import urlparse
 
 from web_dashboard.db_sync import fetch_all, fetch_one
+
+# Dashboard analytics: only closed events count (open / test posts are excluded).
 
 
 def _since(days: int) -> str:
@@ -76,6 +79,7 @@ def get_overview(conn, backend: str, guild_db_id: Optional[int], days: int) -> d
             """
             SELECT COUNT(*) AS c FROM events e
             WHERE e.created_at >= $2::timestamp AND ($1::int IS NULL OR e.guild_id = $1::int)
+              AND e.status = 'closed'
             """,
             (guild_db_id, since),
         )
@@ -117,6 +121,7 @@ def get_overview(conn, backend: str, guild_db_id: Optional[int], days: int) -> d
             """
             SELECT COUNT(*) AS c FROM events e
             WHERE e.created_at >= ? AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
             """,
             (since, guild_db_id, guild_db_id),
         )
@@ -150,7 +155,7 @@ def get_players_table(conn, backend: str, guild_db_id: Optional[int], days: int,
                     (SELECT AVG(s.score) FROM sessions s WHERE s.player_id = p.id AND s.session_date >= $2::timestamp),
                     0
                 )::float AS avg_score,
-                (SELECT COUNT(*) FROM tickets t WHERE t.player_id = p.id AND t.status = 'available') AS tickets_open
+                (SELECT COUNT(*) FROM tickets t WHERE t.player_id = p.id AND t.status != 'closed') AS tickets_open
             FROM players p
             LEFT JOIN guilds g ON g.id = p.guild_id
             WHERE ($1::int IS NULL OR p.guild_id = $1::int)
@@ -174,7 +179,7 @@ def get_players_table(conn, backend: str, guild_db_id: Optional[int], days: int,
                 (SELECT AVG(s.score) FROM sessions s WHERE s.player_id = p.id AND s.session_date >= ?),
                 0
             ) AS avg_score,
-            (SELECT COUNT(*) FROM tickets t WHERE t.player_id = p.id AND t.status = 'available') AS tickets_open
+            (SELECT COUNT(*) FROM tickets t WHERE t.player_id = p.id AND t.status != 'closed') AS tickets_open
         FROM players p
         LEFT JOIN guilds g ON g.id = p.guild_id
         WHERE (? IS NULL OR p.guild_id = ?)
@@ -264,6 +269,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             WHERE es.player_id IS NOT NULL
               AND e.created_at >= $2::timestamp
               AND ($1::int IS NULL OR e.guild_id = $1::int)
+              AND e.status = 'closed'
             """,
             (guild_db_id, since),
         )
@@ -274,6 +280,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             SELECT COUNT(*) AS c FROM events e
             WHERE e.created_at >= $2::timestamp
               AND ($1::int IS NULL OR e.guild_id = $1::int)
+              AND e.status = 'closed'
             """,
             (guild_db_id, since),
         )
@@ -291,6 +298,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 LEFT JOIN event_signups es ON es.event_id = e.id
                 WHERE e.created_at >= $2::timestamp
                   AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
                 GROUP BY e.id, e.content_name
             ),
             content_uniq AS (
@@ -299,6 +307,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 JOIN event_signups es ON es.event_id = e.id AND es.player_id IS NOT NULL
                 WHERE e.created_at >= $2::timestamp
                   AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
                 GROUP BY e.content_name
             )
             SELECT
@@ -328,6 +337,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 WHERE es.player_id = p.id
                   AND e.created_at >= $2::timestamp
                   AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
               )
             ORDER BY p.nickname
             LIMIT 200
@@ -342,6 +352,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 SELECT id FROM events e
                 WHERE e.created_at >= $2::timestamp
                   AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
             ),
             total AS (SELECT COUNT(*)::int AS tc FROM ev),
             att AS (
@@ -371,6 +382,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 SELECT id FROM events e
                 WHERE e.created_at >= $2::timestamp
                   AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
             ),
             total AS (SELECT COUNT(*)::int AS tc FROM ev),
             att AS (
@@ -405,6 +417,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             WHERE es.player_id IS NOT NULL
               AND e.created_at >= ?
               AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
             """,
             (since, guild_db_id, guild_db_id),
         )
@@ -415,6 +428,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             SELECT COUNT(*) AS c FROM events e
             WHERE e.created_at >= ?
               AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
             """,
             (since, guild_db_id, guild_db_id),
         )
@@ -431,6 +445,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             LEFT JOIN event_signups es ON es.event_id = e.id
             WHERE e.created_at >= ?
               AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
             GROUP BY e.id, e.content_name
             """,
             (since, guild_db_id, guild_db_id),
@@ -444,6 +459,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             JOIN event_signups es ON es.event_id = e.id AND es.player_id IS NOT NULL
             WHERE e.created_at >= ?
               AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
             """,
             (since, guild_db_id, guild_db_id),
         )
@@ -485,6 +501,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 WHERE es.player_id = p.id
                   AND e.created_at >= ?
                   AND (? IS NULL OR e.guild_id = ?)
+                  AND e.status = 'closed'
               )
             ORDER BY p.nickname
             LIMIT 200
@@ -498,6 +515,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             WITH ev AS (
                 SELECT id FROM events e
                 WHERE e.created_at >= ? AND (? IS NULL OR e.guild_id = ?)
+                  AND e.status = 'closed'
             ),
             tc AS (SELECT COUNT(*) AS total FROM ev)
             SELECT p.nickname,
@@ -523,6 +541,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             WITH ev AS (
                 SELECT id FROM events e
                 WHERE e.created_at >= ? AND (? IS NULL OR e.guild_id = ?)
+                  AND e.status = 'closed'
             ),
             tc AS (SELECT COUNT(*) AS total FROM ev),
             agg AS (
@@ -561,6 +580,7 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
                 LEFT JOIN event_signups es ON es.event_id = e.id
                 WHERE e.created_at >= $2::timestamp
                   AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
                 GROUP BY e.id
             ) x
             """,
@@ -585,6 +605,92 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
         "ratio_avg_to_unique": (
             round((avg_players_overall or 0) / uc, 3) if uc and avg_players_overall else None
         ),
+        "only_closed_events": True,
+    }
+
+
+def list_events_catalog(conn, backend: str, guild_db_id: Optional[int], limit: int = 100) -> List[dict]:
+    lim = max(1, min(int(limit), 200))
+    if backend == "postgres":
+        return fetch_all(
+            conn,
+            backend,
+            f"""
+            SELECT e.id, e.content_name, e.event_time, e.status, e.created_at, e.guild_id, g.name AS guild_name
+            FROM events e
+            LEFT JOIN guilds g ON g.id = e.guild_id
+            WHERE ($1::int IS NULL OR e.guild_id = $1::int)
+            ORDER BY e.id DESC
+            LIMIT {lim}
+            """,
+            (guild_db_id,),
+        )
+    return fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT e.id, e.content_name, e.event_time, e.status, e.created_at, e.guild_id, g.name AS guild_name
+        FROM events e
+        LEFT JOIN guilds g ON g.id = e.guild_id
+        WHERE (? IS NULL OR e.guild_id = ?)
+        ORDER BY e.id DESC
+        LIMIT {lim}
+        """,
+        (guild_db_id, guild_db_id),
+    )
+
+
+def delete_events_by_ids(conn, backend: str, ids: List[int]) -> int:
+    clean: List[int] = []
+    for x in ids:
+        try:
+            i = int(x)
+            if i > 0:
+                clean.append(i)
+        except (TypeError, ValueError):
+            continue
+    clean = clean[:50]
+    if not clean:
+        return 0
+    cur = conn.cursor()
+    if backend == "postgres":
+        ph = ",".join(["%s"] * len(clean))
+        cur.execute(f"DELETE FROM events WHERE id IN ({ph})", tuple(clean))
+    else:
+        ph = ",".join(["?"] * len(clean))
+        cur.execute(f"DELETE FROM events WHERE id IN ({ph})", tuple(clean))
+    conn.commit()
+    try:
+        return int(cur.rowcount) if cur.rowcount is not None else 0
+    except Exception:
+        return 0
+
+
+def get_database_storage(conn, backend: str) -> dict:
+    quota = int(os.environ.get("DASHBOARD_DB_QUOTA_BYTES", str(512 * 1024 * 1024)))
+    bytes_used: Optional[int] = None
+    if backend == "postgres":
+        row = fetch_one(conn, backend, "SELECT pg_database_size(current_database())::bigint AS b", ())
+        if row and row.get("b") is not None:
+            bytes_used = int(row["b"])
+    else:
+        cur = conn.cursor()
+        cur.execute("PRAGMA page_count")
+        r1 = cur.fetchone()
+        cur.execute("PRAGMA page_size")
+        r2 = cur.fetchone()
+        if r1 is not None and r2 is not None:
+            bytes_used = int(r1[0] or 0) * int(r2[0] or 0)
+    free_est = (quota - bytes_used) if bytes_used is not None else None
+    pct = round(100.0 * bytes_used / quota, 2) if bytes_used is not None and quota > 0 else None
+    return {
+        "db_quota_bytes": quota,
+        "db_quota_gb": round(quota / (1024**3), 4),
+        "db_used_bytes": bytes_used,
+        "db_used_mb": round(bytes_used / (1024 * 1024), 2) if bytes_used is not None else None,
+        "db_free_bytes_estimate": free_est,
+        "db_free_mb_estimate": round(free_est / (1024 * 1024), 2) if free_est is not None else None,
+        "db_used_pct_of_quota": pct,
     }
 
 
@@ -652,7 +758,6 @@ def get_mentors_payroll(conn, backend: str, guild_db_id: Optional[int], days: in
 
 
 def get_system_snapshot(bot_meta: Optional[dict] = None) -> dict:
-    import os
     import platform
     import sys
     import threading

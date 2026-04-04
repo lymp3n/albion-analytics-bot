@@ -59,7 +59,14 @@
 
       <section class="ds-panel ds-tab-panel" data-panel="players" hidden>
         <h2>Players</h2>
-        <p class="ds-muted">Sorted by sessions in selected period.</p>
+        <p class="ds-muted">Sorted by sessions in the selected period.</p>
+        <p class="ds-muted" style="margin-top:0.35rem;">
+          <strong>Status</strong> is the roster role in the database:
+          <strong>pending</strong> — not fully onboarded;
+          <strong>active</strong> — regular player;
+          <strong>mentor</strong> / <strong>founder</strong> — staff roles (permissions).
+          <strong>Active tickets</strong> = all tickets that are not closed (waiting for a mentor or in progress).
+        </p>
         <div class="ds-table-wrap">
           <table class="ds-table" id="tbl-players">
             <thead>
@@ -69,7 +76,7 @@
                 <th>Status</th>
                 <th>Sessions</th>
                 <th>Avg score</th>
-                <th>Open tickets</th>
+                <th>Active tickets</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -106,8 +113,9 @@
       <section class="ds-panel ds-tab-panel" data-panel="events" hidden>
         <h2>Events & attendance</h2>
         <p class="ds-muted">
+          All metrics below count only <strong>closed</strong> events (open / draft posts are ignored).
           <strong>Participation %</strong> = distinct players with at least one signup in period ÷ active roster.
-          <strong>Stable</strong> = attended ≥ one third of all events in period.
+          <strong>Stable</strong> = attended ≥ one third of all closed events in period.
         </p>
         <div class="ds-grid-kpi" id="kpi-events"></div>
         <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Per content</h3>
@@ -129,7 +137,7 @@
         <div class="ds-two-col" style="margin-top:1rem;">
           <div>
             <h3 class="ds-muted" style="margin:0 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Never attended (active roster)</h3>
-            <div class="ds-table-wrap">
+            <div class="ds-table-wrap ds-scroll-y">
               <table class="ds-table" id="tbl-never">
                 <thead><tr><th>Nickname</th></tr></thead>
                 <tbody></tbody>
@@ -138,7 +146,7 @@
           </div>
           <div>
             <h3 class="ds-muted" style="margin:0 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Low attendance</h3>
-            <div class="ds-table-wrap">
+            <div class="ds-table-wrap ds-scroll-y">
               <table class="ds-table" id="tbl-low">
                 <thead>
                   <tr><th>Nickname</th><th>Events</th><th>Total</th><th>%</th></tr>
@@ -149,10 +157,35 @@
           </div>
         </div>
         <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Stable attendance</h3>
-        <div class="ds-table-wrap">
+        <div class="ds-table-wrap ds-scroll-y">
           <table class="ds-table" id="tbl-stable">
             <thead>
               <tr><th>Nickname</th><th>Events</th><th>Total</th><th>%</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h3 class="ds-muted" style="margin:1.25rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Event records (cleanup)</h3>
+        <p class="ds-muted" style="margin:0 0 0.35rem;">
+          Deletes rows from <code>events</code> (and related signups). Use for mistaken or test posts. Analytics already ignore non-closed events, but removing bad rows keeps the DB tidy.
+        </p>
+        <div class="ds-events-toolbar">
+          <button type="button" class="ds-btn ds-btn-primary" id="btn-events-delete">Delete selected</button>
+          <span class="ds-muted" style="font-size:0.8rem;">Max 50 IDs per request.</span>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y" style="max-height:20rem;">
+          <table class="ds-table" id="tbl-events-catalog">
+            <thead>
+              <tr>
+                <th style="width:2.5rem;"></th>
+                <th>ID</th>
+                <th>Status</th>
+                <th>Content</th>
+                <th>Guild</th>
+                <th>Event time</th>
+                <th>Created</th>
+              </tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -181,6 +214,17 @@
 
       <section class="ds-panel ds-tab-panel" data-panel="system" hidden>
         <h2>System</h2>
+        <p class="ds-muted" style="margin:0 0 0.75rem;">
+          If this page loads, the <strong>web service</strong> is running. The panel below estimates whether the <strong>Discord bot</strong> in the same process is still talking to Discord.
+        </p>
+        <div id="bot-health-banner" class="ds-health ds-health-unknown" role="status">
+          <div class="ds-health-head">
+            <span class="ds-health-dot" aria-hidden="true"></span>
+            <strong class="ds-health-title">Discord bot</strong>
+          </div>
+          <p class="ds-health-summary" style="margin:0.5rem 0 0;"></p>
+          <p class="ds-health-hint ds-muted" style="margin:0.35rem 0 0; display:none; font-size:0.85rem;"></p>
+        </div>
         <div class="ds-grid-kpi" id="kpi-system"></div>
         <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Full snapshot</h3>
         <pre class="ds-json" id="json-system"></pre>
@@ -247,7 +291,7 @@
       ["Tickets open", ov.tickets_open],
       ["Tickets closed (period)", ov.tickets_closed_period],
       ["Sessions (period)", ov.sessions_period],
-      ["Events created (period)", ov.events_period],
+      ["Closed events (period)", ov.events_period],
     ]);
     $("#overview-since").textContent = "Window: last " + ov.period_days + " days · since " + (ov.since_utc || "");
 
@@ -276,7 +320,7 @@
       ["Active roster", roster],
       ["Unique participants (period)", ev.unique_participants_period],
       ["Participation % of roster", (ev.participation_pct_of_roster ?? "—") + (roster ? "%" : "")],
-      ["Events in period", ev.events_in_period],
+      ["Closed events in period", ev.events_in_period],
       ["Avg players / event (overall)", ev.avg_players_per_event_overall ?? "—"],
       ["Avg ÷ unique pool", ev.ratio_avg_to_unique ?? "—"],
     ]);
@@ -304,6 +348,13 @@
       `<tr><td>${esc(r.nickname)}</td><td>${esc(r.events_attended)}</td><td>${esc(r.total_events)}</td><td>${esc(r.attendance_pct)}%</td></tr>`
     ).join("") || '<tr><td colspan="4">—</td></tr>';
 
+    const cat = data.events_catalog || [];
+    $("#tbl-events-catalog tbody").innerHTML = cat.map((r) =>
+      `<tr><td><input type="checkbox" class="ev-del-cb" value="${esc(r.id)}" aria-label="Select event ${esc(r.id)}" /></td>` +
+      `<td>${esc(r.id)}</td><td>${esc(r.status)}</td><td>${esc(r.content_name)}</td>` +
+      `<td>${esc(r.guild_name || "—")}</td><td>${esc(r.event_time)}</td><td>${esc(r.created_at)}</td></tr>`
+    ).join("") || '<tr><td colspan="7">No events in catalog</td></tr>';
+
     const m = data.mentors || {};
     $("#kpi-mentors").innerHTML = kpiHTML([
       ["Fund (silver)", (m.fund || 0).toLocaleString()],
@@ -319,8 +370,44 @@
 
     $("#json-system").textContent = JSON.stringify(data.system || {}, null, 2);
     const sys = data.system || {};
+    const bh = sys.bot_health || {};
+    const hb = $("#bot-health-banner");
+    if (hb) {
+      hb.className = "ds-health ds-health-" + (bh.signal_status || "unknown");
+      const ht = hb.querySelector(".ds-health-title");
+      const hs = hb.querySelector(".ds-health-summary");
+      const hh = hb.querySelector(".ds-health-hint");
+      if (ht) ht.textContent = bh.title || "Discord bot";
+      if (hs) hs.textContent = bh.summary || "—";
+      if (hh) {
+        const hint = bh.hint || "";
+        if (hint) {
+          hh.style.display = "block";
+          hh.textContent = hint;
+        } else {
+          hh.style.display = "none";
+          hh.textContent = "";
+        }
+      }
+    }
+    const dbUsed = sys.db_used_mb;
+    const dbFree = sys.db_free_mb_estimate;
+    const dbPct = sys.db_used_pct_of_quota;
+    const quotaGb = sys.db_quota_gb;
+    const dbStartup =
+      bh.database_ok === true ? "OK" : bh.database_ok === false ? "Failed at startup" : "—";
+    const discordGuess =
+      { ok: "Looks OK", warn: "Uncertain", down: "Likely offline", unknown: "Unknown" }[bh.signal_status || "unknown"] ||
+      "Unknown";
     $("#kpi-system").innerHTML = kpiHTML([
+      ["Discord bot (simple)", discordGuess],
+      ["Seconds since last bot signal", bh.seconds_since_signal != null ? bh.seconds_since_signal : "—"],
+      ["DB at bot startup", dbStartup],
       ["DB round-trip (ms)", sys.db_query_ms ?? "—"],
+      ["DB used (estimate)", dbUsed != null ? dbUsed + " MB" : "—"],
+      ["DB free vs quota (est.)", dbFree != null ? dbFree + " MB" : "—"],
+      ["DB quota", quotaGb != null ? quotaGb + " GB" : "—"],
+      ["DB % of quota", dbPct != null ? dbPct + "%" : "—"],
       ["HTTP uptime (s)", sys.http_server_uptime_s ?? "—"],
       ["Python", sys.python_version || "—"],
       ["Bot last ready (UTC)", sys.last_ready_utc || "—"],
@@ -339,6 +426,35 @@
   });
 
   $("#btn-refresh").addEventListener("click", load);
+
+  $("#btn-events-delete").addEventListener("click", async () => {
+    const ids = $$(".ev-del-cb:checked").map((c) => parseInt(c.value, 10)).filter((n) => !Number.isNaN(n));
+    if (!ids.length) {
+      showErr("Select at least one event to delete.");
+      return;
+    }
+    if (!window.confirm("Delete " + ids.length + " event(s) from the database? Related signups are removed (CASCADE).")) {
+      return;
+    }
+    showErr("");
+    try {
+      const res = await fetch("/dashboard/api/events/delete", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!out.ok) {
+        showErr(out.error || "Delete failed.");
+        return;
+      }
+      await load();
+    } catch (e) {
+      showErr(String(e));
+    }
+  });
+
   load().catch((e) => {
     $("#loading").style.display = "none";
     showErr(String(e));

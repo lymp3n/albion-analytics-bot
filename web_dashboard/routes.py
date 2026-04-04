@@ -13,12 +13,15 @@ from flask import (
 )
 
 from web_dashboard.data_service import (
+    delete_events_by_ids,
+    get_database_storage,
     get_events_analytics,
     get_mentors_payroll,
     get_overview,
     get_players_table,
     get_system_snapshot,
     get_tickets_breakdown,
+    list_events_catalog,
     list_guilds,
 )
 from web_dashboard.db_sync import get_sync_connection
@@ -115,6 +118,8 @@ def register_dashboard(app: Flask) -> None:
                 tickets = get_tickets_breakdown(conn, backend, guild_db_id, days)
                 events = get_events_analytics(conn, backend, guild_db_id, days)
                 mentors = get_mentors_payroll(conn, backend, guild_db_id, days, fund)
+                events_catalog = list_events_catalog(conn, backend, guild_db_id, 120)
+                db_storage = get_database_storage(conn, backend)
         except Exception as e:
             payload = {"ok": False, "error": str(e)}
             return app.response_class(
@@ -131,6 +136,7 @@ def register_dashboard(app: Flask) -> None:
             bot_meta = {}
 
         system = get_system_snapshot(bot_meta)
+        system.update(db_storage)
         system["db_query_ms"] = round((time.perf_counter() - t0) * 1000, 2)
         try:
             from keep_alive import get_http_uptime_s
@@ -138,6 +144,18 @@ def register_dashboard(app: Flask) -> None:
             system["http_server_uptime_s"] = get_http_uptime_s()
         except Exception:
             pass
+        try:
+            from keep_alive import get_bot_health
+
+            system["bot_health"] = get_bot_health()
+        except Exception:
+            system["bot_health"] = {
+                "signal_status": "unknown",
+                "title": "Discord bot",
+                "summary": "Status could not be loaded.",
+                "database_ok": None,
+                "hint": None,
+            }
 
         payload = {
             "ok": True,
@@ -147,10 +165,36 @@ def register_dashboard(app: Flask) -> None:
             "players": players,
             "tickets": tickets,
             "events": events,
+            "events_catalog": events_catalog,
             "mentors": mentors,
             "system": system,
         }
         return app.response_class(
             response=json.dumps(payload, default=str),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/events/delete", methods=["POST"])
+    @login_required
+    def dashboard_events_delete():
+        body = request.get_json(silent=True) or {}
+        raw_ids = body.get("ids")
+        if not isinstance(raw_ids, list):
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "Expected JSON body { \"ids\": [1,2,3] }"}),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_sync_connection() as (conn, backend):
+                deleted = delete_events_by_ids(conn, backend, raw_ids)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "deleted": deleted}, default=str),
             mimetype="application/json",
         )

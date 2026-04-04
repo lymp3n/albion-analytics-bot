@@ -118,6 +118,24 @@ class AlbionBot(commands.Bot):
                 seen.add(gid)
                 out.append(gid)
         return out
+
+    async def _dashboard_discord_heartbeat(self):
+        """Lets the dashboard see recent Discord activity even if on_ready does not repeat after reconnects."""
+        from datetime import datetime
+
+        while not self.is_closed():
+            try:
+                from keep_alive import set_bot_ready
+
+                set_bot_ready(
+                    last_discord_heartbeat_utc=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                )
+            except Exception:
+                pass
+            try:
+                await asyncio.sleep(45)
+            except asyncio.CancelledError:
+                break
     
     async def on_ready(self):
         """Bot readiness handler"""
@@ -132,9 +150,11 @@ class AlbionBot(commands.Bot):
         self.permissions = Permissions(self)
 
         # 2. Connect to DB (with error handling)
+        database_connected = False
         try:
             await self.db.connect()
             logger.info("✓ Database connected")
+            database_connected = True
         except Exception as e:
             logger.error(f"❌ Database connection failed: {e}")
             logger.error("Check DATABASE_URL in Render Environment Variables.")
@@ -193,10 +213,17 @@ class AlbionBot(commands.Bot):
             from keep_alive import set_bot_ready
 
             set_bot_ready(
+                touch_ready=True,
                 bot_username=str(self.user),
                 bot_user_id=self.user.id,
                 guilds_connected=len(self.guilds),
+                database_connected=database_connected,
             )
+        except Exception:
+            pass
+
+        try:
+            self.loop.create_task(self._dashboard_discord_heartbeat())
         except Exception:
             pass
     
