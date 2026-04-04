@@ -143,6 +143,13 @@ class AlbionBot(commands.Bot):
             return
         self.ready_check = True
 
+        try:
+            from keep_alive import set_discord_api_blocked
+
+            set_discord_api_blocked(False)
+        except Exception:
+            pass
+
         logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
         logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
         
@@ -274,6 +281,12 @@ async def main():
             logger.info("\n⚠️  Shutdown requested by user")
             break
         except discord.GatewayNotFound as e:
+            try:
+                from keep_alive import set_discord_api_blocked
+
+                set_discord_api_blocked(True, f"GatewayNotFound: {e}")
+            except Exception:
+                pass
             attempt += 1
             wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
             wait_seconds += random.randint(0, 20)
@@ -287,6 +300,12 @@ async def main():
             # Handle startup-level 429/Cloudflare responses without crash loops.
             err_text = str(e)
             if e.status == 429 or "1015" in err_text:
+                try:
+                    from keep_alive import set_discord_api_blocked
+
+                    set_discord_api_blocked(True, err_text)
+                except Exception:
+                    pass
                 attempt += 1
                 wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
                 wait_seconds += random.randint(0, 20)

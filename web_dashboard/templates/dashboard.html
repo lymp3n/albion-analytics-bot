@@ -7,6 +7,21 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
 </head>
 <body class="ds-body">
+  <div id="ds-ban-overlay" class="ds-ban-overlay" hidden>
+    <div class="ds-ban-card">
+      <img id="ds-ban-gif" class="ds-ban-gif" src="" alt="" width="360" height="360" decoding="async" />
+      <h2 class="ds-ban-title">Ограничение со стороны Discord</h2>
+      <p class="ds-ban-lead">
+        API Discord временно ограничил доступ (глобальный rate limit или блокировка на стороне сервиса). Бот
+        переподключается автоматически; команды в Discord могут не отвечать, пока лимит не снимут.
+      </p>
+      <p id="ds-ban-utc" class="ds-ban-meta"></p>
+      <p id="ds-ban-detail" class="ds-ban-detail" style="display:none;"></p>
+      <button type="button" class="ds-btn ds-btn-primary ds-ban-btn" id="ds-ban-to-system">
+        Перейти к вкладке System
+      </button>
+    </div>
+  </div>
   <div class="ds-app">
     <header class="ds-topbar">
       <div>
@@ -736,7 +751,59 @@
     }
   }
 
+  function resetBanUI() {
+    document.body.classList.remove("ds-ban-mode", "ds-system-only");
+    const o = document.getElementById("ds-ban-overlay");
+    if (o) {
+      o.hidden = true;
+      o.classList.remove("is-ready");
+    }
+    document.querySelectorAll(".ds-tab").forEach((t) => {
+      t.style.display = "";
+    });
+  }
+
+  function hideDiscordBanOverlay() {
+    const o = document.getElementById("ds-ban-overlay");
+    if (o) {
+      o.hidden = true;
+      o.classList.remove("is-ready");
+    }
+    document.body.classList.remove("ds-ban-mode");
+  }
+
+  function showDiscordBanOverlay(bh) {
+    document.body.classList.add("ds-ban-mode");
+    const o = document.getElementById("ds-ban-overlay");
+    const img = document.getElementById("ds-ban-gif");
+    const detailEl = document.getElementById("ds-ban-detail");
+    const utcEl = document.getElementById("ds-ban-utc");
+    if (!o || !img) return;
+    img.src = "/video/ban.gif?t=" + Date.now();
+    if (detailEl) {
+      const d = (bh && (bh.discord_api_blocked_detail || bh.hint)) || "";
+      if (d) {
+        detailEl.style.display = "block";
+        detailEl.textContent = d;
+      } else {
+        detailEl.style.display = "none";
+        detailEl.textContent = "";
+      }
+    }
+    if (utcEl) {
+      utcEl.textContent =
+        bh && bh.discord_api_blocked_utc ? "Зафиксировано: " + bh.discord_api_blocked_utc : "";
+    }
+    o.hidden = false;
+    o.classList.remove("is-ready");
+    if (window.__dsBanBtnTimer) clearTimeout(window.__dsBanBtnTimer);
+    window.__dsBanBtnTimer = setTimeout(() => {
+      o.classList.add("is-ready");
+    }, 2800);
+  }
+
   async function load() {
+    resetBanUI();
     showErr("");
     $("#loading").style.display = "block";
     $("#main-content").style.display = "none";
@@ -748,8 +815,8 @@
     const res = await fetch("/dashboard/api/data?" + qs.toString(), { credentials: "same-origin" });
     const data = await res.json().catch(() => ({}));
     $("#loading").style.display = "none";
-    $("#main-content").style.display = "block";
     if (!data.ok) {
+      $("#main-content").style.display = "none";
       showErr(data.error || "Failed to load data.");
       return;
     }
@@ -878,8 +945,11 @@
     const dbStartup =
       bh.database_ok === true ? "OK" : bh.database_ok === false ? "Failed at startup" : "—";
     const discordGuess =
-      { ok: "Looks OK", warn: "Uncertain", down: "Likely offline", unknown: "Unknown" }[bh.signal_status || "unknown"] ||
-      "Unknown";
+      bh.discord_api_blocked === true
+        ? "Ограничение Discord API"
+        : { ok: "Looks OK", warn: "Uncertain", down: "Likely offline", unknown: "Unknown" }[
+            bh.signal_status || "unknown"
+          ] || "Unknown";
     $("#kpi-system").innerHTML = kpiHTML([
       ["Discord bot (simple)", discordGuess],
       ["Seconds since last bot signal", bh.seconds_since_signal != null ? bh.seconds_since_signal : "—"],
@@ -894,10 +964,42 @@
       ["Bot last ready (UTC)", sys.last_ready_utc || "—"],
       ["Render commit", (sys.render_git_commit || "—").slice(0, 12)],
     ]);
+
+    if (bh.discord_api_blocked === true) {
+      showDiscordBanOverlay(bh);
+      $("#main-content").style.display = "none";
+    } else {
+      hideDiscordBanOverlay();
+      $("#main-content").style.display = "block";
+    }
+  }
+
+  const banToSystem = document.getElementById("ds-ban-to-system");
+  if (banToSystem) {
+    banToSystem.addEventListener("click", () => {
+      const o = document.getElementById("ds-ban-overlay");
+      if (o) {
+        o.hidden = true;
+        o.classList.remove("is-ready");
+      }
+      document.body.classList.remove("ds-ban-mode");
+      document.body.classList.add("ds-system-only");
+      const main = document.getElementById("main-content");
+      if (main) main.style.display = "block";
+      document.querySelectorAll(".ds-tab").forEach((b) => {
+        const id = b.getAttribute("data-tab");
+        b.style.display = id === "system" ? "" : "none";
+        b.classList.toggle("is-active", id === "system");
+      });
+      document.querySelectorAll(".ds-tab-panel").forEach((p) => {
+        p.hidden = p.getAttribute("data-panel") !== "system";
+      });
+    });
   }
 
   $$(".ds-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (document.body.classList.contains("ds-system-only")) return;
       $$(".ds-tab").forEach((b) => b.classList.toggle("is-active", b === btn));
       const id = btn.getAttribute("data-tab");
       $$(".ds-tab-panel").forEach((p) => {

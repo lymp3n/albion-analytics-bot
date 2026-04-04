@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import time
@@ -5,7 +6,7 @@ from datetime import datetime, timezone
 from threading import Thread
 from typing import Any, Dict, Optional
 
-from flask import Flask
+from flask import Flask, Response, send_file
 from waitress import serve
 
 logger = logging.getLogger("keep_alive")
@@ -28,6 +29,23 @@ def get_bot_meta() -> dict:
     return dict(_bot_meta)
 
 
+def set_discord_api_blocked(active: bool, detail: Optional[str] = None) -> None:
+    """Set when startup hits Discord 429 / Cloudflare-style blocks; cleared from on_ready."""
+    global _bot_meta
+    _bot_meta = {**_bot_meta}
+    if active:
+        _bot_meta["discord_api_blocked"] = True
+        if detail:
+            _bot_meta["discord_api_blocked_detail"] = str(detail)[:2000]
+        _bot_meta["discord_api_blocked_utc"] = datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+    else:
+        _bot_meta.pop("discord_api_blocked", None)
+        _bot_meta.pop("discord_api_blocked_detail", None)
+        _bot_meta.pop("discord_api_blocked_utc", None)
+
+
 def _parse_meta_utc(s: Optional[str]) -> Optional[datetime]:
     if not s or not isinstance(s, str):
         return None
@@ -47,6 +65,22 @@ def get_bot_health() -> Dict[str, Any]:
     hb = _parse_meta_utc(meta.get("last_discord_heartbeat_utc"))
     rd = _parse_meta_utc(meta.get("last_ready_utc"))
     db_ok = meta.get("database_connected")
+
+    if meta.get("discord_api_blocked"):
+        return {
+            "signal_status": "discord_blocked",
+            "discord_api_blocked": True,
+            "title": "Discord API",
+            "summary": (
+                "Временная блокировка или глобальный лимит запросов со стороны Discord (HTTP 429 / Cloudflare). "
+                "Бот переподключается с увеличивающейся задержкой."
+            ),
+            "seconds_since_signal": None,
+            "database_ok": db_ok,
+            "hint": meta.get("discord_api_blocked_detail"),
+            "discord_api_blocked_detail": meta.get("discord_api_blocked_detail"),
+            "discord_api_blocked_utc": meta.get("discord_api_blocked_utc"),
+        }
 
     if hb is None and rd is None:
         return {
@@ -142,6 +176,18 @@ register_dashboard(app)
 @app.route("/")
 def home():
     return "I'm alive!"
+
+
+@app.route("/video/ban.gif")
+def serve_ban_gif():
+    """Dashboard ban-screen animation; replace video/ban.gif in the repo with your asset."""
+    path = os.path.join(_ROOT, "video", "ban.gif")
+    if os.path.isfile(path):
+        return send_file(path, mimetype="image/gif")
+    data = base64.b64decode(
+        "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    )
+    return Response(data, mimetype="image/gif")
 
 
 def run():
