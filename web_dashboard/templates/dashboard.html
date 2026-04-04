@@ -45,7 +45,7 @@
       <button type="button" class="ds-tab" data-tab="tickets">Tickets</button>
       <button type="button" class="ds-tab" data-tab="events">Events</button>
       <button type="button" class="ds-tab" data-tab="templates">Event templates</button>
-      <button type="button" class="ds-tab" data-tab="roles">Role access</button>
+      <button type="button" class="ds-tab" data-tab="roles">Role assist</button>
       <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
       <button type="button" class="ds-tab" data-tab="system">System</button>
     </nav>
@@ -212,12 +212,13 @@
       </section>
 
       <section class="ds-panel ds-tab-panel" data-panel="roles" hidden>
-        <h2>Role access</h2>
+        <h2>Role assist</h2>
         <p class="ds-muted">
-          Like Discord’s role list: one row per <strong>role ID</strong>, choose whether it behaves as <strong>Basic</strong> (member),
-          <strong>Staff</strong> (mentor), or <strong>Admin</strong> (founder). Empty table for a guild = fall back to <code>config.yaml</code> defaults.
-          Set the correct <strong>Discord server ID</strong> per guild so the bot matches the right server.
+          Map each Discord <strong>role ID</strong> to <strong>Basic</strong> (member), <strong>Staff</strong> (mentor), or <strong>Admin</strong> (founder).
+          Optional <strong>role name</strong> is for you (or load from Discord). Empty rows for a guild = <code>config.yaml</code> defaults.
+          Set the correct <strong>Discord server ID</strong> so the bot and “Load names” use the right server.
         </p>
+        <div id="role-assist-catalog" class="ds-role-assist-catalog-mount" aria-label="Commands by permission tier"></div>
         <div id="guild-roles-mount"></div>
         <p class="ds-templates-status" id="guild-roles-status" aria-live="polite"></p>
       </section>
@@ -325,13 +326,15 @@
     if (kind === "err") el.classList.add("is-err");
   }
 
-  function roleAccessRowHtml(gid, rowIdx, roleId, tier) {
+  function roleAccessRowHtml(gid, rowIdx, roleId, tier, roleLabel) {
     const t = tier || "member";
     const nm = `tier-g-${gid}-${rowIdx}`;
     const rid = esc(roleId || "");
+    const rlab = esc(roleLabel || "");
     return (
       `<tr class="ds-role-access-row">` +
-      `<td><input type="text" class="ds-input ds-role-id-input" value="${rid}" placeholder="Role ID" inputmode="numeric" /></td>` +
+      `<td><input type="text" class="ds-input ds-role-id-input" value="${rid}" placeholder="Role ID" inputmode="numeric" autocomplete="off" /></td>` +
+      `<td><input type="text" class="ds-input ds-role-label-input" value="${rlab}" placeholder="Name (optional)" maxlength="100" /></td>` +
       `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="member" ${t === "member" ? "checked" : ""} /></td>` +
       `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="mentor" ${t === "mentor" ? "checked" : ""} /></td>` +
       `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="founder" ${t === "founder" ? "checked" : ""} /></td>` +
@@ -361,10 +364,21 @@
     if (addBtn) {
       addBtn.onclick = () => {
         const idx = nextRoleRowIndex(card);
-        tb.insertAdjacentHTML("beforeend", roleAccessRowHtml(gid, idx, "", "member"));
+        tb.insertAdjacentHTML("beforeend", roleAccessRowHtml(gid, idx, "", "member", ""));
         bindRoleAccessTable(card);
       };
     }
+    tb.querySelectorAll(".ds-role-id-input").forEach((inp) => {
+      inp.onblur = () => {
+        const map = card._discordRoleNamesById;
+        if (!map) return;
+        const tid = String(inp.value || "").trim();
+        const tr = inp.closest("tr");
+        if (!tr || !tid) return;
+        const li = tr.querySelector(".ds-role-label-input");
+        if (li && map[tid] && !String(li.value || "").trim()) li.value = map[tid];
+      };
+    });
     renumberRoleRowRadios(card);
   }
 
@@ -418,7 +432,11 @@
       if (!idv || !String(idv).trim()) return;
       const rad = tr.querySelector(".ds-role-tier:checked");
       if (!rad) return;
-      assignments.push({ discord_role_id: String(idv).trim(), tier: rad.value });
+      const labEl = tr.querySelector(".ds-role-label-input");
+      const role_label = labEl ? String(labEl.value || "").trim() : "";
+      const row = { discord_role_id: String(idv).trim(), tier: rad.value };
+      if (role_label) row.role_label = role_label;
+      assignments.push(row);
     });
     setGuildRolesStatus("Saving role access…", "");
     try {
@@ -437,6 +455,44 @@
       await loadGuildRoles();
     } catch (e) {
       setGuildRolesStatus(String(e), "err");
+    }
+  }
+
+  let __roleAssistCatalogLoaded = false;
+  async function loadRoleAssistCatalog() {
+    const mount = $("#role-assist-catalog");
+    if (!mount || __roleAssistCatalogLoaded) return;
+    mount.innerHTML = '<p class="ds-muted">Loading command reference…</p>';
+    try {
+      const res = await fetch("/dashboard/api/role-assist-catalog", { credentials: "same-origin" });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) {
+        mount.innerHTML = '<p class="ds-muted">' + esc(data.error || "Could not load command reference.") + "</p>";
+        return;
+      }
+      const secs = data.sections || [];
+      mount.innerHTML =
+        '<h3 class="ds-role-assist-h3">Commands by minimum access</h3>' +
+        '<p class="ds-muted ds-role-assist-lead">Match each row to <strong>Basic</strong> (member), <strong>Staff</strong> (mentor), or <strong>Admin</strong> (founder) in the table below.</p>' +
+        secs
+          .map(
+            (s) =>
+              `<section class="ds-role-assist-section" data-tier="${esc(s.id)}">` +
+              `<h4 class="ds-role-assist-tier-title">${esc(s.title)}</h4>` +
+              `<p class="ds-muted ds-role-assist-sub">${esc(s.subtitle || "")}</p>` +
+              `<div class="ds-table-wrap"><table class="ds-table ds-role-assist-table"><thead><tr><th>Command / action</th><th>Description</th></tr></thead><tbody>` +
+              (s.rows || [])
+                .map(
+                  (r) =>
+                    `<tr><td class="ds-role-assist-cmd">${esc(r.command)}</td><td>${esc(r.description)}</td></tr>`
+                )
+                .join("") +
+              `</tbody></table></div></section>`
+          )
+          .join("");
+      __roleAssistCatalogLoaded = true;
+    } catch (e) {
+      mount.innerHTML = '<p class="ds-muted">' + esc(String(e)) + "</p>";
     }
   }
 
@@ -462,8 +518,8 @@
           const disp = esc(g.display_name || g.name || "Guild");
           const internal = esc(g.name || "");
           const did = g.discord_id != null ? esc(g.discord_id) : "0";
-          const assign = (g.assignments && g.assignments.length ? g.assignments : [{ discord_role_id: "", tier: "member" }]).map(
-            (a, i) => roleAccessRowHtml(g.id, i, a.discord_role_id, a.tier)
+          const assign = (g.assignments && g.assignments.length ? g.assignments : [{ discord_role_id: "", tier: "member", role_label: "" }]).map(
+            (a, i) => roleAccessRowHtml(g.id, i, a.discord_role_id, a.tier, a.role_label)
           );
           const legacyHint =
             g.suggested_from_legacy && g.suggested_from_legacy.length && !g.has_explicit_assignments
@@ -483,10 +539,11 @@
             legacyHint +
             `<div class="ds-table-wrap ds-role-access-wrap">` +
             `<table class="ds-table ds-role-access-table">` +
-            `<thead><tr><th>Role ID</th><th>Basic (member)</th><th>Staff (mentor)</th><th>Admin (founder)</th><th></th></tr></thead>` +
+            `<thead><tr><th>Role ID</th><th>Role name</th><th>Basic</th><th>Staff</th><th>Admin</th><th></th></tr></thead>` +
             `<tbody class="ds-role-access-tbody">${assign.join("")}</tbody>` +
             `</table></div>` +
             `<div class="ds-templates-toolbar">` +
+            `<button type="button" class="ds-btn ds-btn-ghost btn-discord-load-role-names">Load names from Discord</button>` +
             `<button type="button" class="ds-btn ds-btn-ghost btn-add-role-row">+ Add role</button>` +
             `<button type="button" class="ds-btn ds-btn-primary btn-guild-roles-save-access">Save role access</button>` +
             `<button type="button" class="ds-btn ds-btn-ghost btn-guild-roles-clear-access">Clear all (use defaults)</button>` +
@@ -509,7 +566,8 @@
               card.getAttribute("data-guild-db-id"),
               0,
               "",
-              "member"
+              "member",
+              ""
             );
             bindRoleAccessTable(card);
             await saveGuildRoleAccess(card);
@@ -524,9 +582,39 @@
             const tb = card.querySelector(".ds-role-access-tbody");
             if (!tb) return;
             tb.innerHTML = sug
-              .map((a, i) => roleAccessRowHtml(gid, i, a.discord_role_id, a.tier))
+              .map((a, i) => roleAccessRowHtml(gid, i, a.discord_role_id, a.tier, a.role_label))
               .join("");
             bindRoleAccessTable(card);
+          });
+        }
+        const ld = card.querySelector(".btn-discord-load-role-names");
+        if (ld) {
+          ld.addEventListener("click", async () => {
+            setGuildRolesStatus("Loading Discord role names…", "");
+            try {
+              const gid = parseInt(card.getAttribute("data-guild-db-id"), 10);
+              const res = await fetch("/dashboard/api/discord-guild-roles?guild_id=" + gid, {
+                credentials: "same-origin",
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!data.ok) {
+                setGuildRolesStatus(data.error || "Failed to load Discord roles.", "err");
+                return;
+              }
+              const map = {};
+              (data.roles || []).forEach((r) => {
+                map[String(r.id)] = r.name;
+              });
+              card._discordRoleNamesById = map;
+              card.querySelectorAll(".ds-role-access-tbody tr").forEach((tr) => {
+                const tid = String((tr.querySelector(".ds-role-id-input") || {}).value || "").trim();
+                const li = tr.querySelector(".ds-role-label-input");
+                if (tid && map[tid] && li && !String(li.value || "").trim()) li.value = map[tid];
+              });
+              setGuildRolesStatus("Role names loaded — empty labels filled where IDs match. Save to keep.", "ok");
+            } catch (e) {
+              setGuildRolesStatus(String(e), "err");
+            }
           });
         }
       });
@@ -726,7 +814,10 @@
         p.hidden = p.getAttribute("data-panel") !== id;
       });
       if (id === "templates") loadEventTemplates();
-      if (id === "roles") loadGuildRoles();
+      if (id === "roles") {
+        loadRoleAssistCatalog();
+        loadGuildRoles();
+      }
     });
   });
 

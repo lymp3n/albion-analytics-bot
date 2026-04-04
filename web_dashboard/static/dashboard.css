@@ -394,7 +394,7 @@
 }
 
 .ds-role-access-table {
-  min-width: 480px;
+  min-width: 640px;
 }
 
 .ds-role-access-table th,
@@ -404,13 +404,57 @@
 }
 
 .ds-role-access-table th:first-child,
-.ds-role-access-table td:first-child {
+.ds-role-access-table td:first-child,
+.ds-role-access-table th:nth-child(2),
+.ds-role-access-table td:nth-child(2) {
   text-align: left;
 }
 
 .ds-role-access-table .ds-role-id-input {
   width: 100%;
+  max-width: 200px;
+}
+
+.ds-role-access-table .ds-role-label-input {
+  width: 100%;
   max-width: 220px;
+}
+
+.ds-role-assist-catalog-mount {
+  margin-bottom: 1.75rem;
+}
+
+.ds-role-assist-h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.ds-role-assist-lead {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+}
+
+.ds-role-assist-section {
+  margin-bottom: 1.25rem;
+}
+
+.ds-role-assist-tier-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ds-accent, #00f0ff);
+}
+
+.ds-role-assist-sub {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+}
+
+.ds-role-assist-table .ds-role-assist-cmd {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  word-break: break-word;
 }
 
 .ds-btn-tiny {

@@ -304,10 +304,15 @@ class Database:
                 guild_id INTEGER NOT NULL,
                 discord_role_id {bigint_type} NOT NULL,
                 tier TEXT NOT NULL,
+                role_label TEXT,
                 PRIMARY KEY (guild_id, discord_role_id),
                 FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
             )
         """)
+        try:
+            await self.execute("ALTER TABLE guild_role_assignments ADD COLUMN role_label TEXT")
+        except Exception:
+            pass
 
         # Indices
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
@@ -379,7 +384,7 @@ class Database:
     async def fetch_guild_role_assignments(self, guild_db_id: int) -> list:
         return await self.fetch(
             """
-            SELECT guild_id, discord_role_id, tier
+            SELECT guild_id, discord_role_id, tier, role_label
             FROM guild_role_assignments
             WHERE guild_id = $1
             ORDER BY discord_role_id
@@ -388,17 +393,22 @@ class Database:
         )
 
     async def replace_guild_role_assignments(self, guild_db_id: int, pairs: List[tuple]) -> None:
-        """pairs: list of (discord_role_id: int, tier: str). Replaces all rows for guild."""
+        """pairs: list of (discord_role_id: int, tier: str, role_label: Optional[str]). Replaces all rows for guild."""
         await self.execute("DELETE FROM guild_role_assignments WHERE guild_id = $1", guild_db_id)
-        for role_id, tier in pairs:
+        for item in pairs:
+            if len(item) >= 3:
+                role_id, tier, label = item[0], item[1], item[2]
+            else:
+                role_id, tier, label = item[0], item[1], None
             await self.execute(
                 """
-                INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier)
-                VALUES ($1, $2, $3)
+                INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier, role_label)
+                VALUES ($1, $2, $3, $4)
                 """,
                 guild_db_id,
                 role_id,
                 tier,
+                label,
             )
     
     async def get_player_by_discord_id(self, discord_id: int) -> Optional[Dict[str, Any]]:

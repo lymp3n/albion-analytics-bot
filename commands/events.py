@@ -8,8 +8,7 @@ from datetime import datetime
 import logging
 
 from event_templates_store import load_templates_dict as get_templates
-
-SHOTCALLER_ROLE_IDS = {1469711597827260679, 1488301094609096744}
+from utils.shotcaller_role_ids import SHOTCALLER_ROLE_IDS
 logger = logging.getLogger("albion-bot")
 
 

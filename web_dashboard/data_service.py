@@ -98,6 +98,7 @@ def ensure_guild_role_assignments_table(conn, backend: str) -> None:
                 guild_id INTEGER NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
                 discord_role_id BIGINT NOT NULL,
                 tier TEXT NOT NULL,
+                role_label TEXT,
                 PRIMARY KEY (guild_id, discord_role_id)
             )
             """
@@ -109,11 +110,24 @@ def ensure_guild_role_assignments_table(conn, backend: str) -> None:
                 guild_id INTEGER NOT NULL,
                 discord_role_id INTEGER NOT NULL,
                 tier TEXT NOT NULL,
+                role_label TEXT,
                 PRIMARY KEY (guild_id, discord_role_id),
                 FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
             )
             """
         )
+    ensure_guild_role_assignments_role_label_column(conn, backend)
+
+
+def ensure_guild_role_assignments_role_label_column(conn, backend: str) -> None:
+    cur = conn.cursor()
+    try:
+        if backend == "postgres":
+            cur.execute("ALTER TABLE guild_role_assignments ADD COLUMN IF NOT EXISTS role_label TEXT")
+        else:
+            cur.execute("ALTER TABLE guild_role_assignments ADD COLUMN role_label TEXT")
+    except Exception:
+        pass
     conn.commit()
 
 
@@ -121,11 +135,12 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
     ensure_guilds_dashboard_columns(conn, backend)
     ensure_guild_role_overrides_table(conn, backend)
     ensure_guild_role_assignments_table(conn, backend)
+    ensure_guild_role_assignments_role_label_column(conn, backend)
     guilds = list_guilds(conn, backend)
     assigns = fetch_all(
         conn,
         backend,
-        "SELECT guild_id, discord_role_id, tier FROM guild_role_assignments",
+        "SELECT guild_id, discord_role_id, tier, role_label FROM guild_role_assignments",
         (),
     )
     overrides = fetch_all(
@@ -137,8 +152,17 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
     ov_by: Dict[int, dict] = {int(o["guild_id"]): dict(o) for o in overrides}
     by_guild: Dict[int, List[dict]] = defaultdict(list)
     for a in assigns:
+        lbl = a.get("role_label")
+        if lbl is not None and isinstance(lbl, str):
+            lbl = lbl.strip() or None
+        else:
+            lbl = None
         by_guild[int(a["guild_id"])].append(
-            {"discord_role_id": int(a["discord_role_id"]), "tier": str(a["tier"])}
+            {
+                "discord_role_id": int(a["discord_role_id"]),
+                "tier": str(a["tier"]),
+                "role_label": lbl,
+            }
         )
     out: List[dict] = []
     for g in guilds:
@@ -157,24 +181,40 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
 
 
 def replace_guild_role_assignments_rows(
-    conn, backend: str, guild_db_id: int, pairs: List[Tuple[int, str]]
+    conn,
+    backend: str,
+    guild_db_id: int,
+    pairs: List[Tuple[int, str, Optional[str]]],
 ) -> None:
     cur = conn.cursor()
     if backend == "postgres":
         cur.execute("DELETE FROM guild_role_assignments WHERE guild_id = %s", (guild_db_id,))
-        for rid, tier in pairs:
+        for rid, tier, label in pairs:
             cur.execute(
-                "INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier) VALUES (%s, %s, %s)",
-                (guild_db_id, rid, tier),
+                "INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier, role_label) VALUES (%s, %s, %s, %s)",
+                (guild_db_id, rid, tier, label),
             )
     else:
         cur.execute("DELETE FROM guild_role_assignments WHERE guild_id = ?", (guild_db_id,))
-        for rid, tier in pairs:
+        for rid, tier, label in pairs:
             cur.execute(
-                "INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier) VALUES (?, ?, ?)",
-                (guild_db_id, rid, tier),
+                "INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier, role_label) VALUES (?, ?, ?, ?)",
+                (guild_db_id, rid, tier, label),
             )
     conn.commit()
+
+
+def fetch_guild_discord_id(conn, backend: str, guild_db_id: int) -> int:
+    if backend == "postgres":
+        row = fetch_one(conn, backend, "SELECT discord_id FROM guilds WHERE id = $1::int", (guild_db_id,))
+    else:
+        row = fetch_one(conn, backend, "SELECT discord_id FROM guilds WHERE id = ?", (guild_db_id,))
+    if not row or row.get("discord_id") is None:
+        return 0
+    try:
+        return int(row["discord_id"])
+    except (TypeError, ValueError):
+        return 0
 
 
 def count_other_guilds_with_discord_id(conn, backend: str, guild_db_id: int, discord_id: int) -> int:

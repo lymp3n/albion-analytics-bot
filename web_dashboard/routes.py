@@ -12,6 +12,7 @@ from flask import (
     url_for,
 )
 
+from utils.command_permissions_catalog import get_role_assist_catalog
 from utils.role_config import parse_single_snowflake
 
 from web_dashboard.data_service import (
@@ -20,6 +21,7 @@ from web_dashboard.data_service import (
     delete_guild_role_overrides_row,
     ensure_guild_role_assignments_table,
     ensure_guild_role_overrides_table,
+    fetch_guild_discord_id,
     get_database_storage,
     get_events_analytics,
     get_mentors_payroll,
@@ -35,6 +37,7 @@ from web_dashboard.data_service import (
     update_guild_dashboard_meta,
 )
 from web_dashboard.db_sync import get_sync_connection
+from web_dashboard.discord_roles_client import fetch_discord_guild_roles
 
 from event_templates_store import read_raw_text, save_raw_text, templates_file_path
 
@@ -258,6 +261,56 @@ def register_dashboard(app: Flask) -> None:
 
     _VALID_TIERS = frozenset({"member", "mentor", "founder"})
 
+    @app.route("/dashboard/api/role-assist-catalog", methods=["GET"])
+    @login_required
+    def dashboard_role_assist_catalog():
+        try:
+            payload = {"ok": True, **get_role_assist_catalog()}
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps(payload, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/discord-guild-roles", methods=["GET"])
+    @login_required
+    def dashboard_discord_guild_roles():
+        guild_db_id = request.args.get("guild_id", type=int) or 0
+        if guild_db_id < 1:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "Invalid guild_id"}),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_sync_connection() as (conn, backend):
+                if not guild_exists(conn, backend, guild_db_id):
+                    return app.response_class(
+                        response=json.dumps({"ok": False, "error": "Guild not found"}),
+                        status=404,
+                        mimetype="application/json",
+                    )
+                discord_gid = fetch_guild_discord_id(conn, backend, guild_db_id)
+            roles, err = fetch_discord_guild_roles(discord_gid)
+            if err:
+                return app.response_class(
+                    response=json.dumps({"ok": False, "error": err, "roles": []}, default=str),
+                    status=502,
+                    mimetype="application/json",
+                )
+            return app.response_class(
+                response=json.dumps({"ok": True, "roles": roles, "discord_guild_id": discord_gid}, default=str),
+                mimetype="application/json",
+            )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+
     @app.route("/dashboard/api/guild-roles", methods=["GET"])
     @login_required
     def dashboard_guild_roles_get():
@@ -315,7 +368,12 @@ def register_dashboard(app: Flask) -> None:
                 if rid in seen:
                     continue
                 seen.add(rid)
-                pairs.append((rid, tier))
+                raw_lbl = item.get("role_label")
+                if isinstance(raw_lbl, str):
+                    lbl = raw_lbl.strip() or None
+                else:
+                    lbl = None
+                pairs.append((rid, tier, lbl))
         except (TypeError, ValueError) as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
