@@ -632,20 +632,32 @@
         const ld = card.querySelector(".btn-discord-load-role-names");
         if (ld) {
           ld.addEventListener("click", async () => {
-            setGuildRolesStatus("Loading Discord role names…", "");
+            if (window.__discordRolesFetchInFlight) {
+              setGuildRolesStatus("A Discord roles request is already running — wait for it to finish.", "err");
+              return;
+            }
+            const gid = parseInt(card.getAttribute("data-guild-db-id"), 10);
+            if (Number.isNaN(gid) || gid < 1) {
+              setGuildRolesStatus("Invalid guild id on card.", "err");
+              return;
+            }
+            const loadBtns = () => document.querySelectorAll(".btn-discord-load-role-names");
+            window.__discordRolesFetchInFlight = true;
+            loadBtns().forEach((b) => {
+              b.disabled = true;
+            });
+            let cooldownMs = 45000;
             try {
-              const gid = parseInt(card.getAttribute("data-guild-db-id"), 10);
-              if (Number.isNaN(gid) || gid < 1) {
-                setGuildRolesStatus("Invalid guild id on card.", "err");
-                return;
-              }
+              setGuildRolesStatus("Loading Discord role names…", "");
               const res = await fetch("/dashboard/api/discord-guild-roles?guild_id=" + encodeURIComponent(String(gid)), {
                 credentials: "same-origin",
                 headers: { Accept: "application/json" },
               });
               const data = await res.json().catch(() => ({}));
+              const errText = String(data.error || "").toLowerCase();
               if (!data.ok) {
                 setGuildRolesStatus(data.error || "Failed to load Discord roles (HTTP " + res.status + ").", "err");
+                if (errText.includes("429") || errText.includes("rate limit")) cooldownMs = 120000;
                 return;
               }
               const map = buildDiscordRoleNameMap(data.roles || []);
@@ -685,6 +697,13 @@
               );
             } catch (e) {
               setGuildRolesStatus(String(e), "err");
+            } finally {
+              window.__discordRolesFetchInFlight = false;
+              setTimeout(() => {
+                loadBtns().forEach((b) => {
+                  b.disabled = false;
+                });
+              }, cooldownMs);
             }
           });
         }
