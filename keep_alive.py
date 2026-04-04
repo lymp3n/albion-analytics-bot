@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from threading import Thread
 from typing import Any, Dict, Optional
 
-from flask import Flask, Response, send_file
+from flask import Flask, Response, abort, send_file
 from waitress import serve
 
 logger = logging.getLogger("keep_alive")
@@ -178,16 +178,21 @@ def home():
     return "I'm alive!"
 
 
-@app.route("/video/ban.gif")
-def serve_ban_gif():
-    """Dashboard ban-screen animation; replace video/ban.gif in the repo with your asset."""
-    path = os.path.join(_ROOT, "video", "ban.gif")
+_VIDEO_GIF_ALLOW = frozenset({"ban.gif", "secret.gif"})
+_TINY_GIF = base64.b64decode(
+    "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+)
+
+
+@app.route("/video/<name>")
+def serve_video_gif(name: str):
+    """Served from ./video/ — ban.gif (dashboard block screen), secret.gif (login)."""
+    if name not in _VIDEO_GIF_ALLOW or "/" in name or "\\" in name:
+        abort(404)
+    path = os.path.join(_ROOT, "video", name)
     if os.path.isfile(path):
         return send_file(path, mimetype="image/gif")
-    data = base64.b64decode(
-        "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-    )
-    return Response(data, mimetype="image/gif")
+    return Response(_TINY_GIF, mimetype="image/gif")
 
 
 def run():

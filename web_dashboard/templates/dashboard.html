@@ -22,6 +22,17 @@
       </button>
     </div>
   </div>
+  <div id="ds-boot-loader" class="ds-boot-loader" role="status" aria-live="polite" aria-busy="true">
+    <div class="ds-boot-backdrop" aria-hidden="true"></div>
+    <div class="ds-boot-inner">
+      <p class="ds-boot-brand">ALBION <span class="ds-accent">ANALYTICS</span></p>
+      <div class="ds-boot-spinner" aria-hidden="true">
+        <span class="ds-boot-spinner-ring"></span>
+      </div>
+      <p class="ds-boot-primary" id="ds-boot-primary">Preparing command deck</p>
+      <p class="ds-boot-sub" id="ds-boot-sub">Syncing telemetry with this bot instance…</p>
+    </div>
+  </div>
   <div class="ds-app">
     <header class="ds-topbar">
       <div>
@@ -64,8 +75,6 @@
       <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
       <button type="button" class="ds-tab" data-tab="system">System</button>
     </nav>
-
-    <div id="loading" class="ds-loading">Loading telemetry…</div>
 
     <main id="main-content" style="display:none;">
       <section class="ds-panel ds-tab-panel" data-panel="overview">
@@ -776,7 +785,7 @@
     const detailEl = document.getElementById("ds-ban-detail");
     const utcEl = document.getElementById("ds-ban-utc");
     if (!o || !img) return;
-    img.src = "/video/ban.gif?t=" + Date.now();
+    img.src = "/video/ban.gif?v=" + Date.now();
     if (detailEl) {
       const d = (bh && (bh.discord_api_blocked_detail || bh.hint)) || "";
       if (d) {
@@ -799,19 +808,58 @@
     }, 2800);
   }
 
+  function showBootLoader(isFirstLoad) {
+    const el = document.getElementById("ds-boot-loader");
+    if (!el) return;
+    el.classList.remove("ds-boot-exit");
+    el.hidden = false;
+    el.setAttribute("aria-busy", "true");
+    const p = document.getElementById("ds-boot-primary");
+    const s = document.getElementById("ds-boot-sub");
+    if (isFirstLoad) {
+      if (p) p.textContent = "Preparing command deck";
+      if (s) s.textContent = "Syncing telemetry with this bot instance…";
+    } else {
+      if (p) p.textContent = "Refreshing analytics";
+      if (s) s.textContent = "Re-querying the database for the selected window…";
+    }
+  }
+
+  function hideBootLoader() {
+    const el = document.getElementById("ds-boot-loader");
+    if (!el || el.hidden) return;
+    el.setAttribute("aria-busy", "false");
+    el.classList.add("ds-boot-exit");
+    if (window.__dsBootExitTimer) clearTimeout(window.__dsBootExitTimer);
+    window.__dsBootExitTimer = setTimeout(() => {
+      el.hidden = true;
+      el.classList.remove("ds-boot-exit");
+    }, 400);
+  }
+
   async function load() {
     resetBanUI();
     showErr("");
-    $("#loading").style.display = "block";
+    const firstPaint = !window.__dsDashLoadedOnce;
+    showBootLoader(firstPaint);
     $("#main-content").style.display = "none";
     const days = $("#f-days").value || 30;
     const guild = $("#f-guild").value || "";
     const fund = $("#f-fund").value || 0;
     const qs = new URLSearchParams({ days, fund });
     if (guild) qs.set("guild_id", guild);
-    const res = await fetch("/dashboard/api/data?" + qs.toString(), { credentials: "same-origin" });
-    const data = await res.json().catch(() => ({}));
-    $("#loading").style.display = "none";
+    let data = {};
+    try {
+      const res = await fetch("/dashboard/api/data?" + qs.toString(), { credentials: "same-origin" });
+      data = await res.json().catch(() => ({}));
+    } catch (e) {
+      $("#main-content").style.display = "none";
+      showErr(String(e));
+      return;
+    } finally {
+      hideBootLoader();
+      window.__dsDashLoadedOnce = true;
+    }
     if (!data.ok) {
       $("#main-content").style.display = "none";
       showErr(data.error || "Failed to load data.");
@@ -1046,7 +1094,8 @@
   });
 
   load().catch((e) => {
-    $("#loading").style.display = "none";
+    hideBootLoader();
+    window.__dsDashLoadedOnce = true;
     showErr(String(e));
   });
 })();
