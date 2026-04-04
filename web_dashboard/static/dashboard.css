@@ -624,15 +624,106 @@
     border-top-color: var(--ds-cyan);
   }
 
+  .ds-gif-placeholder-ring {
+    animation: none;
+    border-color: rgba(0, 240, 255, 0.35);
+    border-top-color: var(--ds-cyan);
+  }
+
   .ds-boot-loader {
+    transition: none;
+  }
+
+  .ds-media-gif {
     transition: none;
   }
 }
 
+/* GIF slots: placeholder until decode/first frame (avoids layout jank on slow GIFs) */
+.ds-media-gif-slot {
+  position: relative;
+  width: 100%;
+  margin: 0 auto 1rem;
+}
+
+.ds-login-gif-wrap.ds-media-gif-slot {
+  min-height: min(36vh, 18rem);
+}
+
+.ds-ban-gif-wrap.ds-media-gif-slot {
+  min-height: min(40vh, 22rem);
+}
+
+.ds-gif-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: min(36vh, 18rem);
+  max-height: min(36vh, 18rem);
+  width: 100%;
+  max-width: min(18rem, 88vw);
+  margin: 0 auto;
+  border-radius: 12px;
+  border: 1px solid var(--ds-border);
+  background: rgba(8, 8, 18, 0.75);
+  box-shadow: var(--ds-glow);
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.ds-ban-gif-wrap .ds-gif-placeholder {
+  min-height: min(40vh, 22rem);
+  max-height: min(40vh, 22rem);
+  max-width: min(22rem, 88vw);
+}
+
+.ds-gif-placeholder.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(22rem, 88vw);
+  height: min(40vh, 22rem);
+}
+
+.ds-login-gif-wrap .ds-gif-placeholder.is-hidden {
+  width: min(18rem, 88vw);
+  height: min(36vh, 18rem);
+}
+
+.ds-gif-placeholder-ring {
+  display: block;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 240, 255, 0.12);
+  border-top-color: var(--ds-cyan);
+  border-right-color: rgba(255, 46, 166, 0.4);
+  animation: ds-boot-spin 0.85s linear infinite;
+}
+
+.ds-gif-placeholder-label {
+  font-size: 0.78rem;
+  color: var(--ds-muted);
+  letter-spacing: 0.04em;
+}
+
+.ds-media-gif {
+  display: block;
+  margin: 0 auto;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.ds-media-gif.is-visible {
+  opacity: 1;
+}
+
 /* Login — hero GIF above token form */
 .ds-login-secret-gif {
-  display: block;
-  margin: 0 auto 1rem;
   width: auto;
   height: auto;
   max-width: min(18rem, 88vw);
@@ -810,9 +901,11 @@ code {
   padding: 1.25rem 1rem 1.5rem;
 }
 
+.ds-ban-gif-wrap {
+  margin-bottom: 1.25rem;
+}
+
 .ds-ban-gif {
-  display: block;
-  margin: 0 auto 1.25rem;
   width: auto;
   height: auto;
   max-width: min(22rem, 88vw);

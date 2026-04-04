@@ -53,6 +53,8 @@ class AlbionBot(commands.Bot):
             command_prefix="!",
             intents=intents,
             help_command=None,
+            # Default True runs sync_commands on every on_connect; we sync once in on_ready with controlled guild scope.
+            auto_sync_commands=False,
         )
         
         # Load YAML config
@@ -167,40 +169,52 @@ class AlbionBot(commands.Bot):
             logger.error("Check DATABASE_URL in Render Environment Variables.")
             # Don't crash completely so the bot can at least respond to ping
         
-        # 3. Sync slash commands
+        # 3. Sync slash commands (single pass; see auto_sync_commands=False above).
         logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
         
         try:
             connected_guild_ids = {g.id for g in self.guilds}
-            target_guild_ids = sorted(connected_guild_ids)
-            skipped_guild_ids = [gid for gid in self.guild_ids if gid not in connected_guild_ids]
+            configured_guild_ids = set(self.guild_ids)
 
-            if skipped_guild_ids:
-                logger.warning(
-                    "⚠️ Skipping command sync for guild(s) the bot is not in: "
-                    f"{skipped_guild_ids}. Invite the bot first or remove them from env."
-                )
+            if configured_guild_ids:
+                # Only sync guilds listed in GUILD_ID / GUILD_ID2 / GUILD_IDS — avoids N× bulk upserts for every server the bot was invited to.
+                target_guild_ids = sorted(connected_guild_ids & configured_guild_ids)
+                missing = sorted(configured_guild_ids - connected_guild_ids)
+                if missing:
+                    logger.warning(
+                        "⚠️ Bot is not in configured guild id(s) (no command sync there until invited): "
+                        f"{missing}"
+                    )
+            else:
+                # Legacy: env had no guild list — sync all connected (may hit Discord rate limits if the bot is in many servers).
+                target_guild_ids = sorted(connected_guild_ids)
+                if len(target_guild_ids) > 1:
+                    logger.warning(
+                        "⚠️ No GUILD_IDS / GUILD_ID in env — syncing slash commands to all "
+                        f"{len(target_guild_ids)} connected guild(s). Set GUILD_IDS to your guild id(s) to reduce "
+                        "API load and avoid global/application command rate limits."
+                    )
 
-            extra_connected = [gid for gid in target_guild_ids if gid not in self.guild_ids]
-            if extra_connected:
-                logger.info(
-                    "ℹ️ Bot is connected to guild(s) not listed in env and will sync there too: "
-                    f"{extra_connected}"
-                )
-
-            # Sync commands (prefer guild sync for instant propagation).
-            # Avoid aggressive clear+force on every startup: it can trigger rate limits
-            # and lead to temporary "Unknown Integration" on stale client-side command IDs.
+            # Prefer per-guild sync (fast). If there is no eligible guild, register globally (one bulk call; propagation can be slower).
             if target_guild_ids:
                 try:
-                    await self.sync_commands(guild_ids=target_guild_ids, force=False)
-                    logger.info(f"✓ Commands synced to guilds: {target_guild_ids}")
+                    if len(target_guild_ids) == 1:
+                        await self.sync_commands(guild_ids=target_guild_ids, force=False)
+                    else:
+                        for i, gid in enumerate(target_guild_ids):
+                            await self.sync_commands(guild_ids=[gid], force=False)
+                            if i < len(target_guild_ids) - 1:
+                                await asyncio.sleep(2.2)
+                    logger.info(f"✓ Commands synced to guild(s): {target_guild_ids}")
                 except discord.Forbidden as e:
                     logger.error(f"❌ Guild command sync forbidden: {e}")
-                    # fallback to global sync so at least commands exist
                     await self.sync_commands(force=False)
                     logger.info("✓ Fallback: global slash commands synced")
             else:
+                if configured_guild_ids:
+                    logger.warning(
+                        "⚠️ No overlap between connected guilds and env guild list — registering commands globally."
+                    )
                 await self.sync_commands(force=False)
                 logger.info("✓ Global slash commands synced")
         except Exception as e:

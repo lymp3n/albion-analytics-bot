@@ -9,7 +9,13 @@
 <body class="ds-body">
   <div id="ds-ban-overlay" class="ds-ban-overlay" hidden>
     <div class="ds-ban-card">
-      <img id="ds-ban-gif" class="ds-ban-gif" src="" alt="" decoding="async" />
+      <div class="ds-ban-gif-wrap ds-media-gif-slot">
+        <div class="ds-gif-placeholder" id="ds-ban-gif-ph" aria-hidden="true">
+          <span class="ds-gif-placeholder-ring"></span>
+          <span class="ds-gif-placeholder-label">Loading animation…</span>
+        </div>
+        <img id="ds-ban-gif" class="ds-ban-gif ds-media-gif" src="" alt="" decoding="async" />
+      </div>
       <h2 class="ds-ban-title">Discord API restriction</h2>
       <p class="ds-ban-lead">
         Discord has temporarily limited access (global rate limit or an upstream block). The bot will reconnect
@@ -782,10 +788,22 @@
     document.body.classList.add("ds-ban-mode");
     const o = document.getElementById("ds-ban-overlay");
     const img = document.getElementById("ds-ban-gif");
+    const ph = document.getElementById("ds-ban-gif-ph");
     const detailEl = document.getElementById("ds-ban-detail");
     const utcEl = document.getElementById("ds-ban-utc");
     if (!o || !img) return;
+    const revealGif = () => {
+      if (ph) ph.classList.add("is-hidden");
+      img.classList.add("is-visible");
+    };
+    img.onload = revealGif;
+    img.onerror = revealGif;
+    img.classList.remove("is-visible");
+    if (ph) ph.classList.remove("is-hidden");
     img.src = "/video/ban.gif?v=" + Date.now();
+    requestAnimationFrame(() => {
+      if (img.complete && img.naturalWidth > 0) revealGif();
+    });
     if (detailEl) {
       const d = (bh && (bh.discord_api_blocked_detail || bh.hint)) || "";
       if (d) {

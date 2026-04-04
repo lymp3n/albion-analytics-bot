@@ -4,12 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Albion Analytics — Dashboard</title>
+  <link rel="preload" href="/video/secret.gif" as="image" />
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
 </head>
 <body class="ds-body">
   <div class="ds-login-wrap">
     <div class="ds-panel ds-login-panel">
-      <img class="ds-login-secret-gif" src="/video/secret.gif" alt="" decoding="async" />
+      <div class="ds-login-gif-wrap ds-media-gif-slot">
+        <div class="ds-gif-placeholder" id="ds-login-gif-ph" aria-hidden="true">
+          <span class="ds-gif-placeholder-ring"></span>
+          <span class="ds-gif-placeholder-label">Loading…</span>
+        </div>
+        <img id="ds-login-secret-gif" class="ds-login-secret-gif ds-media-gif" src="/video/secret.gif" alt="" decoding="async" />
+      </div>
       <h1 class="ds-brand">ALBION <span class="ds-accent">ANALYTICS</span></h1>
       <p class="ds-muted">Private dashboard — enter access token from <code>DASHBOARD_SECRET</code>.</p>
       {% if error %}
@@ -22,5 +29,21 @@
       </form>
     </div>
   </div>
+  <script>
+    (function () {
+      var img = document.getElementById("ds-login-secret-gif");
+      var ph = document.getElementById("ds-login-gif-ph");
+      if (!img || !ph) return;
+      function reveal() {
+        ph.classList.add("is-hidden");
+        img.classList.add("is-visible");
+      }
+      if (img.complete && img.naturalWidth > 0) reveal();
+      else {
+        img.addEventListener("load", reveal);
+        img.addEventListener("error", reveal);
+      }
+    })();
+  </script>
 </body>
 </html>
