@@ -47,8 +47,17 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 | **Events** | Аналитика посещаемости **только по ивентам со статусом `closed`** — открытые тестовые посты в статистике не участвуют. Таблицы по контенту, «никогда не был на ивенте», низкая и стабильная посещаемость; длинные списки прокручиваются внутри блока. Внизу — **Event records (cleanup)**: выбор записей и удаление из таблицы `events` (ошибочные/тестовые строки; связанные подписи удаляются каскадом). Не удаляет сообщения в Discord. |
 | **Mentors** | Распределение выбранного фонда между менторами по логике, близкой к `/payroll`, за выбранное число дней. |
 | **Event templates** | Редактирование `events_templates.txt`: шаблоны ростера для `/event create` подхватываются **сразу** после сохранения (тот же процесс, что и бот). |
-| **Guild roles** | Переопределение Discord role ID для уровней member / mentor / founder **по гильдии в БД**; пустое поле = как в `config.yaml` + встроенные доп. ID. Без редеплоя. |
 | **System** | Краткий **статус связи бота с Discord** (понятная плашка для не-разработчиков), оценка занятого места в БД относительно квоты (см. `DASHBOARD_DB_QUOTA_BYTES`), время ответа БД, аптайм HTTP и развёрнутый JSON для диагностики. |
+| **Role assist** | Переопределение Discord role ID для уровней member / mentor / founder **по гильдии в БД**; пустое поле = как в `config.yaml` + встроенные доп. ID. Подгрузка имён ролей с сервера кнопкой **Load role names** (см. «Недавние обновления дашборда»). Без редеплоя. |
+
+**Недавние обновления дашборда**
+
+- **Экран загрузки** — перед первым ответом `/dashboard/api/data` и при каждом **Refresh data** показывается полноэкранный слой (бренд, спиннер, краткий текст; плавное скрытие после ответа сервера).
+- **Страница входа** — над формой токена отображается GIF **`/video/secret.gif`**; файл лежит в репозитории как `video/secret.gif` (можно заменить своим).
+- **Блокировка / rate limit Discord** — если процесс бота фиксирует глобальный 429 или аналог при подключении, дашборд после загрузки данных может показать полноэкранное предупреждение с **`/video/ban.gif`** (`video/ban.gif` в репо). Кнопка ведёт только на вкладку **System**; остальные вкладки скрыты, пока флаг активен. После **Refresh** экран снова появится, если ограничение ещё действует.
+- **Role assist / имена ролей** — запрос имён к Discord выполняется **отдельно для каждой гильдии** (несколько серверов можно обрабатывать параллельно). При успешной загрузке ячейки имён **обновляются** из ответа API (не только пустые поля).
+
+Статические GIF раздаются маршрутом **`/video/<имя>`** для файлов из белого списка (`ban.gif`, `secret.gif`).
 
 **Важно про ивенты.** В аналитике учитываются только **завершённые** ивенты. Чтобы убрать мусор из базы, используйте блок cleanup на вкладке Events или SQL-скрипты в репозитории (например, `scripts/delete_first_three_events.sql` для точечной чистки по правилам файла).
 
@@ -148,8 +157,17 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 | **Events** | Attendance analytics for **`closed` events only** — open test posts do not inflate stats. Scrollable player lists. **Event records (cleanup)** at the bottom: select rows and delete from `events` (bad/test data; signups cascade). Does **not** remove Discord messages. |
 | **Mentors** | Split the chosen silver pool across mentors using logic close to `/payroll` for the selected days. |
 | **Event templates** | Edit `events_templates.txt` for `/event create`; changes apply **immediately** after save (same process as the bot). |
-| **Guild roles** | Override Discord role IDs for member / mentor / founder tiers **per DB guild**; blank field inherits `config.yaml` + built-in extras. No redeploy. |
+| **Role assist** | Override Discord role IDs for member / mentor / founder tiers **per DB guild**; blank field inherits `config.yaml` + built-in extras. **Load role names** pulls labels from Discord (see **Recent dashboard updates** below). No redeploy. |
 | **System** | Plain-language **Discord bot connectivity** hint, database size vs quota (`DASHBOARD_DB_QUOTA_BYTES`), DB round-trip time, HTTP uptime, and raw JSON for deeper checks. |
+
+**Recent dashboard updates**
+
+- **Boot screen** — a full-viewport loading layer (brand, spinner, short status copy) shows until `/dashboard/api/data` returns, and again on every **Refresh data**; it fades out when the response is handled.
+- **Login page** — optional hero GIF at **`/video/secret.gif`** (`video/secret.gif` in the repo; replace with your asset).
+- **Discord API block / rate limit** — when the bot process records a startup-level global 429 (or similar), the dashboard can show a full-screen notice with **`/video/ban.gif`** (`video/ban.gif`). A button opens **only the System tab**; other tabs stay hidden while the flag is set. **Refresh** shows the screen again if the block is still active.
+- **Role assist / role names** — Discord role-name fetches run **per guild card** (you can load several servers in parallel). Successful loads **overwrite** name cells from the API, not only empty ones.
+
+GIFs are served from **`/video/<filename>`** for an allowlisted set (`ban.gif`, `secret.gif`).
 
 **Events note.** Analytics count **finished** events only. To clean bad rows, use the Events-tab cleanup or repository SQL helpers (e.g. `scripts/delete_first_three_events.sql` — follow the comments in that file).
 

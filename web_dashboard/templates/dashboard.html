@@ -10,15 +10,15 @@
   <div id="ds-ban-overlay" class="ds-ban-overlay" hidden>
     <div class="ds-ban-card">
       <img id="ds-ban-gif" class="ds-ban-gif" src="" alt="" decoding="async" />
-      <h2 class="ds-ban-title">Ограничение со стороны Discord</h2>
+      <h2 class="ds-ban-title">Discord API restriction</h2>
       <p class="ds-ban-lead">
-        API Discord временно ограничил доступ (глобальный rate limit или блокировка на стороне сервиса). Бот
-        переподключается автоматически; команды в Discord могут не отвечать, пока лимит не снимут.
+        Discord has temporarily limited access (global rate limit or an upstream block). The bot will reconnect
+        automatically; slash commands may not respond until the limit clears.
       </p>
       <p id="ds-ban-utc" class="ds-ban-meta"></p>
       <p id="ds-ban-detail" class="ds-ban-detail" style="display:none;"></p>
       <button type="button" class="ds-btn ds-btn-primary ds-ban-btn" id="ds-ban-to-system">
-        Перейти к вкладке System
+        Open System tab
       </button>
     </div>
   </div>
@@ -798,7 +798,7 @@
     }
     if (utcEl) {
       utcEl.textContent =
-        bh && bh.discord_api_blocked_utc ? "Зафиксировано: " + bh.discord_api_blocked_utc : "";
+        bh && bh.discord_api_blocked_utc ? "Detected: " + bh.discord_api_blocked_utc : "";
     }
     o.hidden = false;
     o.classList.remove("is-ready");
@@ -991,7 +991,7 @@
       bh.database_ok === true ? "OK" : bh.database_ok === false ? "Failed at startup" : "—";
     const discordGuess =
       bh.discord_api_blocked === true
-        ? "Ограничение Discord API"
+        ? "Discord API limited"
         : { ok: "Looks OK", warn: "Uncertain", down: "Likely offline", unknown: "Unknown" }[
             bh.signal_status || "unknown"
           ] || "Unknown";

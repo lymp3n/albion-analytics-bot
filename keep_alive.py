@@ -72,8 +72,8 @@ def get_bot_health() -> Dict[str, Any]:
             "discord_api_blocked": True,
             "title": "Discord API",
             "summary": (
-                "Временная блокировка или глобальный лимит запросов со стороны Discord (HTTP 429 / Cloudflare). "
-                "Бот переподключается с увеличивающейся задержкой."
+                "Temporary block or global rate limit from Discord (HTTP 429 / Cloudflare). "
+                "The bot is reconnecting with exponential backoff."
             ),
             "seconds_since_signal": None,
             "database_ok": db_ok,
