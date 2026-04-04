@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Albion Analytics — Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+</head>
+<body class="ds-body">
+  <div class="ds-login-wrap">
+    <div class="ds-panel ds-login-panel">
+      <h1 class="ds-brand">ALBION <span class="ds-accent">ANALYTICS</span></h1>
+      <p class="ds-muted">Private dashboard — enter access token from <code>DASHBOARD_SECRET</code>.</p>
+      {% if error %}
+      <div class="ds-alert">{{ error }}</div>
+      {% endif %}
+      <form method="post" class="ds-form">
+        <label class="ds-label" for="token">Access token</label>
+        <input class="ds-input" type="password" id="token" name="token" autocomplete="off" required />
+        <button class="ds-btn ds-btn-primary" type="submit">Enter</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

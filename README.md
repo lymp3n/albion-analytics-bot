@@ -13,6 +13,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 - Ивенты и ростер: создание события, набор в слоты, ручное управление составом.
 - Выплаты менторам: расчет фонда по активности за выбранный период.
 - Гильдейские роли и доступ: регистрация по коду, approve/promote/demote/info.
+- Веб-дашборд (dark synth UI) на том же Render Web Service: `/dashboard` — обзор, игроки, тикеты, ивенты/посещаемость, менторы с ручным фондом, системные метрики.
 
 ### Новые функции (последние обновления)
 - В `Manage` для ивента можно вводить не только ID, но и:
@@ -76,6 +77,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 - Event roster management: event posts, slot signup, and manual roster control.
 - Mentor payroll: budget split based on mentoring activity over a selected period.
 - Guild access control: invite-code registration and role management actions.
+- Web dashboard (dark synth UI) on the same Render Web Service at `/dashboard`: overview, players, tickets, events/attendance, mentors with manual fund input, system diagnostics.
 
 ### New Features (recent updates)
 - Event `Manage` input now accepts:
@@ -137,9 +139,11 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 - `DISCORD_TOKEN` — bot token.
 - `DATABASE_URL` — PostgreSQL connection string.
 - `GUILD_ID` — target Discord server ID.
+- `DASHBOARD_SECRET` — long random token for the web dashboard login (`https://<your-service>.onrender.com/dashboard`).
+- `FLASK_SECRET_KEY` — optional; cookie signing (defaults to `DASHBOARD_SECRET`).
 
 ### Deployment (Render)
 1. Connect your GitHub repository.
 2. Build command: `pip install -r requirements.txt`
 3. Start command: `python bot.py`
-4. Health endpoint is provided by `keep_alive.py`.
+4. Health check: `GET /` (from `keep_alive.py`). Analytics UI: `GET /dashboard` (log in with `DASHBOARD_SECRET`).

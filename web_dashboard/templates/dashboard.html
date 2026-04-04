@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Albion Analytics — Command Deck</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+</head>
+<body class="ds-body">
+  <div class="ds-app">
+    <header class="ds-topbar">
+      <div>
+        <h1 class="ds-brand">ALBION <span class="ds-accent">ANALYTICS</span></h1>
+        <p class="ds-muted" style="margin:0.35rem 0 0;">Synth analytics · same service as bot</p>
+      </div>
+      <div class="ds-toolbar">
+        <div class="ds-field">
+          <label for="f-days">Period (days)</label>
+          <input id="f-days" type="number" min="1" max="730" value="30" />
+        </div>
+        <div class="ds-field">
+          <label for="f-guild">Guild</label>
+          <select id="f-guild">
+            <option value="">All guilds</option>
+          </select>
+        </div>
+        <div class="ds-field">
+          <label for="f-fund">Mentor fund (silver)</label>
+          <input id="f-fund" type="number" min="0" value="1000000" />
+        </div>
+        <div class="ds-actions">
+          <button type="button" class="ds-btn ds-btn-primary" id="btn-refresh">Refresh data</button>
+          <form method="post" action="{{ url_for('dashboard_logout') }}" style="margin:0;">
+            <button type="submit" class="ds-btn ds-btn-ghost">Logout</button>
+          </form>
+        </div>
+      </div>
+    </header>
+
+    <div id="err-box" class="ds-error-banner" style="display:none;"></div>
+
+    <nav class="ds-tabs" role="tablist" aria-label="Dashboard sections">
+      <button type="button" class="ds-tab is-active" data-tab="overview">Overview</button>
+      <button type="button" class="ds-tab" data-tab="players">Players</button>
+      <button type="button" class="ds-tab" data-tab="tickets">Tickets</button>
+      <button type="button" class="ds-tab" data-tab="events">Events</button>
+      <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
+      <button type="button" class="ds-tab" data-tab="system">System</button>
+    </nav>
+
+    <div id="loading" class="ds-loading">Loading telemetry…</div>
+
+    <main id="main-content" style="display:none;">
+      <section class="ds-panel ds-tab-panel" data-panel="overview">
+        <h2>Overview</h2>
+        <div class="ds-grid-kpi" id="kpi-overview"></div>
+        <p class="ds-muted" id="overview-since"></p>
+      </section>
+
+      <section class="ds-panel ds-tab-panel" data-panel="players" hidden>
+        <h2>Players</h2>
+        <p class="ds-muted">Sorted by sessions in selected period.</p>
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="tbl-players">
+            <thead>
+              <tr>
+                <th>Nickname</th>
+                <th>Guild</th>
+                <th>Status</th>
+                <th>Sessions</th>
+                <th>Avg score</th>
+                <th>Open tickets</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ds-panel ds-tab-panel" data-panel="tickets" hidden>
+        <h2>Tickets</h2>
+        <div class="ds-two-col">
+          <div>
+            <h3 class="ds-muted" style="margin:0 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">By status</h3>
+            <div class="ds-table-wrap">
+              <table class="ds-table" id="tbl-ticket-status">
+                <thead><tr><th>Status</th><th>Count</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 class="ds-muted" style="margin:0 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Recent</h3>
+            <div class="ds-table-wrap">
+              <table class="ds-table" id="tbl-ticket-recent">
+                <thead>
+                  <tr><th>ID</th><th>Status</th><th>Player</th><th>Mentor</th><th>Created</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ds-panel ds-tab-panel" data-panel="events" hidden>
+        <h2>Events & attendance</h2>
+        <p class="ds-muted">
+          <strong>Participation %</strong> = distinct players with at least one signup in period ÷ active roster.
+          <strong>Stable</strong> = attended ≥ one third of all events in period.
+        </p>
+        <div class="ds-grid-kpi" id="kpi-events"></div>
+        <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Per content</h3>
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="tbl-events-content">
+            <thead>
+              <tr>
+                <th>Content</th>
+                <th>Events</th>
+                <th>Avg players / event</th>
+                <th>Unique players</th>
+                <th>% of roster</th>
+                <th>Max slots seen</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="ds-two-col" style="margin-top:1rem;">
+          <div>
+            <h3 class="ds-muted" style="margin:0 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Never attended (active roster)</h3>
+            <div class="ds-table-wrap">
+              <table class="ds-table" id="tbl-never">
+                <thead><tr><th>Nickname</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 class="ds-muted" style="margin:0 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Low attendance</h3>
+            <div class="ds-table-wrap">
+              <table class="ds-table" id="tbl-low">
+                <thead>
+                  <tr><th>Nickname</th><th>Events</th><th>Total</th><th>%</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Stable attendance</h3>
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="tbl-stable">
+            <thead>
+              <tr><th>Nickname</th><th>Events</th><th>Total</th><th>%</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ds-panel ds-tab-panel" data-panel="mentors" hidden>
+        <h2>Mentors · fund split</h2>
+        <p class="ds-muted">Share matches <code>/payroll</code> logic for the selected window (sessions mentored).</p>
+        <div class="ds-grid-kpi" id="kpi-mentors"></div>
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="tbl-mentors">
+            <thead>
+              <tr>
+                <th>Mentor</th>
+                <th>Sessions (window)</th>
+                <th>All-time sessions</th>
+                <th>Share %</th>
+                <th>Payout (silver)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="ds-panel ds-tab-panel" data-panel="system" hidden>
+        <h2>System</h2>
+        <div class="ds-grid-kpi" id="kpi-system"></div>
+        <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Full snapshot</h3>
+        <pre class="ds-json" id="json-system"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script>
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  function showErr(msg) {
+    const b = $("#err-box");
+    b.style.display = msg ? "block" : "none";
+    b.textContent = msg || "";
+  }
+
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function kpiHTML(items) {
+    return items.map(([l, v]) =>
+      `<div class="ds-kpi"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`
+    ).join("");
+  }
+
+  async function load() {
+    showErr("");
+    $("#loading").style.display = "block";
+    $("#main-content").style.display = "none";
+    const days = $("#f-days").value || 30;
+    const guild = $("#f-guild").value || "";
+    const fund = $("#f-fund").value || 0;
+    const qs = new URLSearchParams({ days, fund });
+    if (guild) qs.set("guild_id", guild);
+    const res = await fetch("/dashboard/api/data?" + qs.toString(), { credentials: "same-origin" });
+    const data = await res.json().catch(() => ({}));
+    $("#loading").style.display = "none";
+    $("#main-content").style.display = "block";
+    if (!data.ok) {
+      showErr(data.error || "Failed to load data.");
+      return;
+    }
+
+    const gsel = $("#f-guild");
+    const cur = gsel.value;
+    gsel.innerHTML = '<option value="">All guilds</option>';
+    (data.guilds || []).forEach((g) => {
+      const o = document.createElement("option");
+      o.value = String(g.id);
+      o.textContent = g.name + " (db #" + g.id + ")";
+      gsel.appendChild(o);
+    });
+    if (cur) gsel.value = cur;
+
+    const ov = data.overview || {};
+    $("#kpi-overview").innerHTML = kpiHTML([
+      ["Tickets open", ov.tickets_open],
+      ["Tickets closed (period)", ov.tickets_closed_period],
+      ["Sessions (period)", ov.sessions_period],
+      ["Events created (period)", ov.events_period],
+    ]);
+    $("#overview-since").textContent = "Window: last " + ov.period_days + " days · since " + (ov.since_utc || "");
+
+    const pl = data.players || [];
+    const ptb = $("#tbl-players tbody");
+    ptb.innerHTML = pl.map((p) =>
+      `<tr><td>${esc(p.nickname)}</td><td>${esc(p.guild_name || "—")}</td><td><span class="ds-pill">${esc(p.status)}</span></td>` +
+      `<td>${esc(p.sessions_count)}</td><td>${esc(Number(p.avg_score).toFixed(2))}</td><td>${esc(p.tickets_open)}</td></tr>`
+    ).join("") || '<tr><td colspan="6">No players</td></tr>';
+
+    const tk = data.tickets || {};
+    const st = tk.by_status || [];
+    $("#tbl-ticket-status tbody").innerHTML = st.map((r) =>
+      `<tr><td>${esc(r.status)}</td><td>${esc(r.c)}</td></tr>`
+    ).join("") || '<tr><td colspan="2">No data</td></tr>';
+
+    const tr = tk.recent || [];
+    $("#tbl-ticket-recent tbody").innerHTML = tr.map((r) =>
+      `<tr><td>${esc(r.id)}</td><td>${esc(r.status)}</td><td>${esc(r.player_nick)}</td>` +
+      `<td>${esc(r.mentor_nick || "—")}</td><td>${esc(r.created_at)}</td></tr>`
+    ).join("") || '<tr><td colspan="5">No recent tickets</td></tr>';
+
+    const ev = data.events || {};
+    const roster = ev.active_roster_count || 0;
+    $("#kpi-events").innerHTML = kpiHTML([
+      ["Active roster", roster],
+      ["Unique participants (period)", ev.unique_participants_period],
+      ["Participation % of roster", (ev.participation_pct_of_roster ?? "—") + (roster ? "%" : "")],
+      ["Events in period", ev.events_in_period],
+      ["Avg players / event (overall)", ev.avg_players_per_event_overall ?? "—"],
+      ["Avg ÷ unique pool", ev.ratio_avg_to_unique ?? "—"],
+    ]);
+
+    const pctRoster = (u) => (roster ? ((Number(u) / roster) * 100).toFixed(1) : "—");
+    const ec = ev.per_content || [];
+    $("#tbl-events-content tbody").innerHTML = ec.map((r) =>
+      `<tr><td>${esc(r.content_name)}</td><td>${esc(r.events_count)}</td><td>${esc(r.avg_players_per_event)}</td>` +
+      `<td>${esc(r.unique_players_on_content)}</td><td>${esc(pctRoster(r.unique_players_on_content))}${roster ? "%" : ""}</td>` +
+      `<td>${esc(r.max_slots_seen)}</td></tr>`
+    ).join("") || '<tr><td colspan="6">No events in window</td></tr>';
+
+    const nev = ev.never_attended || [];
+    $("#tbl-never tbody").innerHTML = nev.map((r) =>
+      `<tr><td>${esc(r.nickname)}</td></tr>`
+    ).join("") || '<tr><td>—</td></tr>';
+
+    const low = ev.low_attendance || [];
+    $("#tbl-low tbody").innerHTML = low.map((r) =>
+      `<tr><td>${esc(r.nickname)}</td><td>${esc(r.events_attended)}</td><td>${esc(r.total_events)}</td><td>${esc(r.attendance_pct)}%</td></tr>`
+    ).join("") || '<tr><td colspan="4">—</td></tr>';
+
+    const stb = ev.stable_attendance || [];
+    $("#tbl-stable tbody").innerHTML = stb.map((r) =>
+      `<tr><td>${esc(r.nickname)}</td><td>${esc(r.events_attended)}</td><td>${esc(r.total_events)}</td><td>${esc(r.attendance_pct)}%</td></tr>`
+    ).join("") || '<tr><td colspan="4">—</td></tr>';
+
+    const m = data.mentors || {};
+    $("#kpi-mentors").innerHTML = kpiHTML([
+      ["Fund (silver)", (m.fund || 0).toLocaleString()],
+      ["Window (days)", m.window_days],
+      ["Sessions in window", m.total_sessions_window],
+      ["Mentors (active)", (m.mentors || []).length],
+    ]);
+    const mt = m.mentors || [];
+    $("#tbl-mentors tbody").innerHTML = mt.map((r) =>
+      `<tr><td>${esc(r.nickname)}</td><td>${esc(r.sessions_window)}</td><td>${esc(r.total_sessions)}</td>` +
+      `<td>${esc(r.share_pct)}%</td><td>${esc((r.payout || 0).toLocaleString())}</td></tr>`
+    ).join("") || '<tr><td colspan="5">No mentor sessions in window</td></tr>';
+
+    $("#json-system").textContent = JSON.stringify(data.system || {}, null, 2);
+    const sys = data.system || {};
+    $("#kpi-system").innerHTML = kpiHTML([
+      ["DB round-trip (ms)", sys.db_query_ms ?? "—"],
+      ["HTTP uptime (s)", sys.http_server_uptime_s ?? "—"],
+      ["Python", sys.python_version || "—"],
+      ["Bot last ready (UTC)", sys.last_ready_utc || "—"],
+      ["Render commit", (sys.render_git_commit || "—").slice(0, 12)],
+    ]);
+  }
+
+  $$(".ds-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $$(".ds-tab").forEach((b) => b.classList.toggle("is-active", b === btn));
+      const id = btn.getAttribute("data-tab");
+      $$(".ds-tab-panel").forEach((p) => {
+        p.hidden = p.getAttribute("data-panel") !== id;
+      });
+    });
+  });
+
+  $("#btn-refresh").addEventListener("click", load);
+  load().catch((e) => {
+    $("#loading").style.display = "none";
+    showErr(String(e));
+  });
+})();
+  </script>
+</body>
+</html>

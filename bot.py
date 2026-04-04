@@ -188,6 +188,17 @@ class AlbionBot(commands.Bot):
             activity=discord.Game(name="Albion Analytics | !ping"),
             status=discord.Status.online
         )
+
+        try:
+            from keep_alive import set_bot_ready
+
+            set_bot_ready(
+                bot_username=str(self.user),
+                bot_user_id=self.user.id,
+                guilds_connected=len(self.guilds),
+            )
+        except Exception:
+            pass
     
     async def on_application_command_error(self, ctx, error):
         logger.exception("Application command error: %s", error)

@@ -1,0 +1,156 @@
+import json
+import os
+import time
+from functools import wraps
+
+from flask import (
+    Flask,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+
+from web_dashboard.data_service import (
+    get_events_analytics,
+    get_mentors_payroll,
+    get_overview,
+    get_players_table,
+    get_system_snapshot,
+    get_tickets_breakdown,
+    list_guilds,
+)
+from web_dashboard.db_sync import get_sync_connection
+
+
+def register_dashboard(app: Flask) -> None:
+    app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("DASHBOARD_SECRET") or "change-me-in-production"
+
+    def dashboard_secret() -> str:
+        return (os.environ.get("DASHBOARD_SECRET") or "").strip()
+
+    def require_secret_configured():
+        if not dashboard_secret():
+            return False
+        return True
+
+    def login_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not require_secret_configured():
+                return (
+                    render_template(
+                        "dashboard_login.html",
+                        error="Set DASHBOARD_SECRET in environment (Render env vars).",
+                    ),
+                    503,
+                )
+            if not session.get("dash_ok"):
+                return redirect(url_for("dashboard_login", next=request.path))
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    @app.route("/dashboard/login", methods=["GET", "POST"])
+    def dashboard_login():
+        if not require_secret_configured():
+            return (
+                render_template(
+                    "dashboard_login.html",
+                    error="Set DASHBOARD_SECRET in environment to enable the dashboard.",
+                ),
+                503,
+            )
+        err = None
+        if request.method == "POST":
+            token = (request.form.get("token") or "").strip()
+            if token == dashboard_secret():
+                session["dash_ok"] = True
+                session.permanent = True
+                nxt = request.args.get("next") or url_for("dashboard_app")
+                return redirect(nxt)
+            err = "Invalid access token."
+        return render_template("dashboard_login.html", error=err)
+
+    @app.route("/dashboard/logout", methods=["POST"])
+    def dashboard_logout():
+        session.pop("dash_ok", None)
+        return redirect(url_for("dashboard_login"))
+
+    @app.route("/dashboard")
+    @login_required
+    def dashboard_app():
+        return render_template("dashboard.html")
+
+    @app.route("/dashboard/api/data")
+    @login_required
+    def dashboard_api_data():
+        try:
+            days = int(request.args.get("days", 30))
+        except ValueError:
+            days = 30
+        days = max(1, min(days, 730))
+
+        guild_raw = request.args.get("guild_id", "").strip()
+        guild_db_id = None
+        if guild_raw:
+            try:
+                guild_db_id = int(guild_raw)
+            except ValueError:
+                guild_db_id = None
+
+        try:
+            fund = int(request.args.get("fund", 1_000_000))
+        except ValueError:
+            fund = 1_000_000
+        fund = max(0, min(fund, 10_000_000_000))
+
+        t0 = time.perf_counter()
+        try:
+            with get_sync_connection() as (conn, backend):
+                guilds = list_guilds(conn, backend)
+                overview = get_overview(conn, backend, guild_db_id, days)
+                players = get_players_table(conn, backend, guild_db_id, days)
+                tickets = get_tickets_breakdown(conn, backend, guild_db_id, days)
+                events = get_events_analytics(conn, backend, guild_db_id, days)
+                mentors = get_mentors_payroll(conn, backend, guild_db_id, days, fund)
+        except Exception as e:
+            payload = {"ok": False, "error": str(e)}
+            return app.response_class(
+                response=json.dumps(payload, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+
+        try:
+            from keep_alive import get_bot_meta
+
+            bot_meta = get_bot_meta()
+        except Exception:
+            bot_meta = {}
+
+        system = get_system_snapshot(bot_meta)
+        system["db_query_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+        try:
+            from keep_alive import get_http_uptime_s
+
+            system["http_server_uptime_s"] = get_http_uptime_s()
+        except Exception:
+            pass
+
+        payload = {
+            "ok": True,
+            "guilds": guilds,
+            "filters": {"days": days, "guild_id": guild_db_id, "fund": fund},
+            "overview": overview,
+            "players": players,
+            "tickets": tickets,
+            "events": events,
+            "mentors": mentors,
+            "system": system,
+        }
+        return app.response_class(
+            response=json.dumps(payload, default=str),
+            mimetype="application/json",
+        )
