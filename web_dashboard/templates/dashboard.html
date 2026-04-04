@@ -317,14 +317,54 @@
     }
   }
 
-  /** Normalize pasted Discord snowflakes (spaces, role-mention markup). */
+  /**
+   * Normalize Discord snowflake from an input (mentions, spaces, odd separators).
+   * Uses 15–22 digit window so older/shorter IDs still match the role map.
+   */
   function normalizeSnowflake(s) {
     const t = String(s ?? "").trim();
     if (!t) return "";
-    const noMention = t.replace(/[<@!&>]/g, "").replace(/\s+/g, "");
-    if (/^\d+$/.test(noMention)) return noMention;
-    const m = t.match(/\d{17,22}/);
-    return m ? m[0] : noMention;
+    const stripped = t.replace(/[<@!&>]/g, "").replace(/\s+/g, "");
+    if (/^\d{15,22}$/.test(stripped)) return stripped;
+    const digitRun = stripped.replace(/\D/g, "");
+    if (/^\d{15,22}$/.test(digitRun)) return digitRun;
+    const m = stripped.match(/\d{15,22}/);
+    return m ? m[0] : "";
+  }
+
+  function isRoleLabelEmpty(li) {
+    if (!li) return true;
+    return !String(li.value || "")
+      .replace(/\u00a0/g, " ")
+      .trim();
+  }
+
+  /** Build id -> name; index raw string, normalized snowflake, and digits-only key. */
+  function buildDiscordRoleNameMap(roles) {
+    const map = Object.create(null);
+    (roles || []).forEach((r) => {
+      if (!r || r.id == null || r.name == null) return;
+      const name = String(r.name);
+      const asStr = String(r.id).trim();
+      map[asStr] = name;
+      const norm = normalizeSnowflake(asStr);
+      if (norm) map[norm] = name;
+      const digits = asStr.replace(/\D/g, "");
+      if (digits.length >= 15 && digits.length <= 22) map[digits] = name;
+    });
+    return map;
+  }
+
+  function resolveRoleNameFromMap(map, rawIdValue) {
+    if (!map || rawIdValue == null) return null;
+    const s = String(rawIdValue).trim();
+    if (!s) return null;
+    if (map[s]) return map[s];
+    const n = normalizeSnowflake(s);
+    if (n && map[n]) return map[n];
+    const digits = s.replace(/\D/g, "");
+    if (digits.length >= 15 && digits.length <= 22 && map[digits]) return map[digits];
+    return null;
   }
 
   function setGuildRolesStatus(msg, kind) {
@@ -382,11 +422,11 @@
       inp.onblur = () => {
         const map = card._discordRoleNamesById;
         if (!map) return;
-        const tid = normalizeSnowflake(inp.value);
         const tr = inp.closest("tr");
-        if (!tr || !tid) return;
+        if (!tr) return;
         const li = tr.querySelector(".ds-role-label-input");
-        if (li && map[tid] && !String(li.value || "").trim()) li.value = map[tid];
+        const name = resolveRoleNameFromMap(map, inp.value);
+        if (li && name && isRoleLabelEmpty(li)) li.value = name;
       };
     });
     renumberRoleRowRadios(card);
@@ -483,11 +523,11 @@
       const rows = data.table || [];
       mount.innerHTML =
         '<h3 class="ds-role-assist-h3">Commands by access level</h3>' +
-        '<div class="ds-table-wrap"><table class="ds-table ds-role-assist-table"><thead><tr><th>Access</th><th>Commands</th></tr></thead><tbody>' +
+        '<div class="ds-table-wrap"><table class="ds-table ds-role-assist-table"><thead><tr><th>Access</th><th>Commands</th><th>Details</th></tr></thead><tbody>' +
         rows
           .map(
             (r) =>
-              `<tr><td class="ds-role-assist-tiercell">${esc(r.tier)}</td><td class="ds-role-assist-cmd">${esc(r.commands)}</td></tr>`
+              `<tr><td class="ds-role-assist-tiercell">${esc(r.tier)}</td><td class="ds-role-assist-cmd">${esc(r.commands)}</td><td class="ds-role-assist-details">${esc(r.details || "—")}</td></tr>`
           )
           .join("") +
         "</tbody></table></div>";
@@ -607,23 +647,39 @@
                 setGuildRolesStatus(data.error || "Failed to load Discord roles (HTTP " + res.status + ").", "err");
                 return;
               }
-              const map = Object.create(null);
-              (data.roles || []).forEach((r) => {
-                const id = String(r.id);
-                map[id] = r.name;
-              });
+              const map = buildDiscordRoleNameMap(data.roles || []);
               card._discordRoleNamesById = map;
+              let filled = 0;
+              let withId = 0;
+              let noMatch = 0;
               card.querySelectorAll(".ds-role-access-tbody tr").forEach((tr) => {
-                const tid = normalizeSnowflake((tr.querySelector(".ds-role-id-input") || {}).value);
+                const inp = tr.querySelector(".ds-role-id-input");
                 const li = tr.querySelector(".ds-role-label-input");
-                if (tid && map[tid] && li && !String(li.value || "").trim()) li.value = map[tid];
+                if (!inp || !li) return;
+                const raw = inp.value;
+                if (!String(raw || "").trim()) return;
+                withId++;
+                const name = resolveRoleNameFromMap(map, raw);
+                if (!name) {
+                  noMatch++;
+                  return;
+                }
+                if (!isRoleLabelEmpty(li)) return;
+                li.value = name;
+                filled++;
               });
               setGuildRolesStatus(
-                "Loaded " +
+                "Discord returned " +
                   (data.roles || []).length +
-                  " roles (Discord server " +
+                  " roles (server " +
                   (data.discord_guild_id || "?") +
-                  "). Empty name cells filled where IDs match — save to keep.",
+                  "). Filled " +
+                  filled +
+                  " empty name cell(s) from " +
+                  withId +
+                  " row(s) with IDs." +
+                  (noMatch ? " " + noMatch + " ID(s) not found on server (check digits / wrong server)." : "") +
+                  " Save to keep.",
                 "ok"
               );
             } catch (e) {

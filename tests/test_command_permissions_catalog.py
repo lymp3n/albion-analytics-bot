@@ -18,7 +18,9 @@ class TestRoleAssistCatalog(unittest.TestCase):
         for row in data["table"]:
             self.assertIn("tier", row)
             self.assertIn("commands", row)
+            self.assertIn("details", row)
             self.assertTrue(str(row["commands"]).strip())
+            self.assertTrue(str(row["details"]).strip())
 
     def test_shotcaller_ids_in_response(self):
         data = get_role_assist_catalog()

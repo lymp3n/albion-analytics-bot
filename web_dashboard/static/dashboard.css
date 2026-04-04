@@ -446,6 +446,13 @@
   vertical-align: top;
 }
 
+.ds-role-assist-table .ds-role-assist-details {
+  font-size: 0.78rem;
+  color: var(--ds-muted);
+  line-height: 1.35;
+  vertical-align: top;
+}
+
 .ds-btn-tiny {
   padding: 0.25rem 0.45rem;
   font-size: 0.75rem;

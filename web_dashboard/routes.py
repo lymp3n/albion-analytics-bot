@@ -300,9 +300,11 @@ def register_dashboard(app: Flask) -> None:
                     status=502,
                     mimetype="application/json",
                 )
+            # Force string ids so the browser JSON parser never rounds snowflakes.
+            roles_out = [{"id": str(r["id"]), "name": str(r["name"])} for r in roles]
             return app.response_class(
                 response=json.dumps(
-                    {"ok": True, "roles": roles, "discord_guild_id": str(int(discord_gid))},
+                    {"ok": True, "roles": roles_out, "discord_guild_id": str(int(discord_gid))},
                     default=str,
                 ),
                 mimetype="application/json",

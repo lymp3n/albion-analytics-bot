@@ -10,17 +10,30 @@ from utils.shotcaller_role_ids import SHOTCALLER_ROLE_IDS
 
 
 def get_role_assist_catalog() -> Dict[str, Any]:
-    """One compact table for the dashboard (tier → what they can use)."""
+    """Table for the dashboard: tier, short command list, extra detail."""
+    shot = ", ".join(str(x) for x in sorted(SHOTCALLER_ROLE_IDS))
     table: List[Dict[str, str]] = [
-        {"tier": "Everyone", "commands": "`/register`"},
+        {
+            "tier": "Everyone",
+            "commands": "`/register`",
+            "details": "Join with a guild invite code. No bot role tier required yet.",
+        },
         {
             "tier": "Basic",
-            "commands": "`/menu` · `/ticket` create/list · `/event` create · event Join/Leave · `/stats` self",
+            "commands": "`/menu` · `/ticket` create & list · `/event` create · event Join/Leave · `/stats` (self)",
+            "details": "Needs member-level access (`require_member`). `/ticket list` shows your tickets; mentors see the queue. Event buttons need a player profile.",
         },
         {
             "tier": "Staff",
-            "commands": "`/stats` others · `/ticket` claim/rate/unclaim/info · `/event` roster* · event Close/Manage · shotcaller roles (IDs in bot code)",
+            "commands": "`/stats` (other player) · `/ticket` claim, rate, unclaim, info · `/event` close & roster · event Close/Manage",
+            "details": "Mentor tier (`require_mentor`); founders count too. Event roster = add/remove/swap/extra. Shotcaller Discord role IDs act like staff for events: "
+            + shot
+            + ".",
         },
-        {"tier": "Admin", "commands": "`/guild` · `/payroll` · `/stats_seed_test`"},
+        {
+            "tier": "Admin",
+            "commands": "`/guild` · `/payroll` · `/stats_seed_test`",
+            "details": "Founder-only (`require_founder`): roster management, mentor payout split, test data seed.",
+        },
     ]
     return {"table": table, "shotcaller_role_ids": sorted(SHOTCALLER_ROLE_IDS)}
