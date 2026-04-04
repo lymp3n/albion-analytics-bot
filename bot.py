@@ -195,6 +195,16 @@ class AlbionBot(commands.Bot):
                     )
                     await asyncio.sleep(defer)
 
+                jitter_max = float(os.getenv("DISCORD_COMMAND_SYNC_JITTER_SEC", "0") or "0")
+                if jitter_max > 0:
+                    j = random.uniform(0.0, jitter_max)
+                    logger.info(
+                        "⏳ Random pre-sync delay %.2fs (DISCORD_COMMAND_SYNC_JITTER_SEC=%.1f) to stagger parallel deploys",
+                        j,
+                        jitter_max,
+                    )
+                    await asyncio.sleep(j)
+
                 connected_guild_ids = {g.id for g in self.guilds}
                 configured_guild_ids = set(self.guild_ids)
 
