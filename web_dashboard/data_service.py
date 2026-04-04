@@ -135,7 +135,6 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
     ensure_guilds_dashboard_columns(conn, backend)
     ensure_guild_role_overrides_table(conn, backend)
     ensure_guild_role_assignments_table(conn, backend)
-    ensure_guild_role_assignments_role_label_column(conn, backend)
     guilds = list_guilds(conn, backend)
     assigns = fetch_all(
         conn,
