@@ -26,6 +26,8 @@ from web_dashboard.data_service import (
 )
 from web_dashboard.db_sync import get_sync_connection
 
+from event_templates_store import read_raw_text, save_raw_text, templates_file_path
+
 
 def register_dashboard(app: Flask) -> None:
     app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("DASHBOARD_SECRET") or "change-me-in-production"
@@ -196,5 +198,50 @@ def register_dashboard(app: Flask) -> None:
             )
         return app.response_class(
             response=json.dumps({"ok": True, "deleted": deleted}, default=str),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/event-templates", methods=["GET"])
+    @login_required
+    def dashboard_event_templates_get():
+        try:
+            content = read_raw_text()
+            path = str(templates_file_path())
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "content": content, "path": path}, default=str),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/event-templates", methods=["POST"])
+    @login_required
+    def dashboard_event_templates_post():
+        body = request.get_json(silent=True) or {}
+        content = body.get("content")
+        if not isinstance(content, str):
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": 'Send JSON { "content": "..." }'}), status=400, mimetype="application/json"
+            )
+        try:
+            save_raw_text(content)
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        except OSError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "message": "Saved. /event create uses this file immediately (same process)."}),
             mimetype="application/json",
         )

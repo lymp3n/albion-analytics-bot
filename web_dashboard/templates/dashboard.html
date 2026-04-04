@@ -44,6 +44,7 @@
       <button type="button" class="ds-tab" data-tab="players">Players</button>
       <button type="button" class="ds-tab" data-tab="tickets">Tickets</button>
       <button type="button" class="ds-tab" data-tab="events">Events</button>
+      <button type="button" class="ds-tab" data-tab="templates">Event templates</button>
       <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
       <button type="button" class="ds-tab" data-tab="system">System</button>
     </nav>
@@ -192,6 +193,23 @@
         </div>
       </section>
 
+      <section class="ds-panel ds-tab-panel" data-panel="templates" hidden>
+        <h2>Event templates</h2>
+        <p class="ds-muted">
+          Edit <code>events_templates.txt</code> here. The bot reads this file from disk on every
+          <code>/event create</code> and template autocomplete — <strong>no redeploy</strong> (same server process as this dashboard).
+          Format: each block starts with a line <code>[Template name]</code>, then numbered lines <code>1. Role name</code>.
+          If your host resets disk on restart (e.g. some serverless setups), copy important edits into git or download a backup.
+        </p>
+        <div class="ds-templates-toolbar">
+          <button type="button" class="ds-btn ds-btn-primary" id="btn-templates-save">Save file</button>
+          <button type="button" class="ds-btn ds-btn-ghost" id="btn-templates-reload">Reload from disk</button>
+        </div>
+        <textarea id="evt-templates-editor" class="ds-templates-editor" spellcheck="false" aria-label="Event templates file contents"></textarea>
+        <p class="ds-templates-path" id="evt-templates-path"></p>
+        <p class="ds-templates-status" id="evt-templates-status" aria-live="polite"></p>
+      </section>
+
       <section class="ds-panel ds-tab-panel" data-panel="mentors" hidden>
         <h2>Mentors · fund split</h2>
         <p class="ds-muted">Share matches <code>/payroll</code> logic for the selected window (sessions mentored).</p>
@@ -255,6 +273,57 @@
     return items.map(([l, v]) =>
       `<div class="ds-kpi"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`
     ).join("");
+  }
+
+  function setTemplatesStatus(msg, kind) {
+    const el = $("#evt-templates-status");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.remove("is-ok", "is-err");
+    if (kind === "ok") el.classList.add("is-ok");
+    if (kind === "err") el.classList.add("is-err");
+  }
+
+  async function loadEventTemplates() {
+    const ta = $("#evt-templates-editor");
+    const pathEl = $("#evt-templates-path");
+    if (!ta) return;
+    setTemplatesStatus("Loading…", "");
+    try {
+      const res = await fetch("/dashboard/api/event-templates", { credentials: "same-origin" });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) {
+        setTemplatesStatus(data.error || "Failed to load templates.", "err");
+        return;
+      }
+      ta.value = data.content ?? "";
+      if (pathEl) pathEl.textContent = "File: " + (data.path || "");
+      setTemplatesStatus("Loaded.", "ok");
+    } catch (e) {
+      setTemplatesStatus(String(e), "err");
+    }
+  }
+
+  async function saveEventTemplates() {
+    const ta = $("#evt-templates-editor");
+    if (!ta) return;
+    setTemplatesStatus("Saving…", "");
+    try {
+      const res = await fetch("/dashboard/api/event-templates", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: ta.value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) {
+        setTemplatesStatus(data.error || "Save failed.", "err");
+        return;
+      }
+      setTemplatesStatus(data.message || "Saved.", "ok");
+    } catch (e) {
+      setTemplatesStatus(String(e), "err");
+    }
   }
 
   async function load() {
@@ -422,10 +491,16 @@
       $$(".ds-tab-panel").forEach((p) => {
         p.hidden = p.getAttribute("data-panel") !== id;
       });
+      if (id === "templates") loadEventTemplates();
     });
   });
 
   $("#btn-refresh").addEventListener("click", load);
+
+  const btnTplSave = $("#btn-templates-save");
+  const btnTplReload = $("#btn-templates-reload");
+  if (btnTplSave) btnTplSave.addEventListener("click", () => saveEventTemplates());
+  if (btnTplReload) btnTplReload.addEventListener("click", () => loadEventTemplates());
 
   $("#btn-events-delete").addEventListener("click", async () => {
     const ids = $$(".ev-del-cb:checked").map((c) => parseInt(c.value, 10)).filter((n) => !Number.isNaN(n));

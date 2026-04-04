@@ -310,6 +310,57 @@
   margin: 0.75rem 0 0.25rem;
 }
 
+.ds-templates-editor {
+  width: 100%;
+  min-height: 22rem;
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: var(--ds-bg0);
+  color: var(--ds-text);
+  font-family: var(--ds-mono);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.ds-templates-editor:focus {
+  outline: none;
+  border-color: var(--ds-cyan);
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.25);
+}
+
+.ds-templates-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-top: 0.65rem;
+}
+
+.ds-templates-path {
+  font-family: var(--ds-mono);
+  font-size: 0.72rem;
+  color: var(--ds-muted);
+  word-break: break-all;
+  margin-top: 0.35rem;
+}
+
+.ds-templates-status {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  min-height: 1.25rem;
+}
+
+.ds-templates-status.is-ok {
+  color: var(--ds-green);
+}
+
+.ds-templates-status.is-err {
+  color: #ff8a9a;
+}
+
 .ds-table {
   width: 100%;
   border-collapse: collapse;

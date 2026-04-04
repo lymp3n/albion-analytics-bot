@@ -1,5 +1,4 @@
 import re
-from pathlib import Path
 from typing import Union
 
 import discord
@@ -8,36 +7,10 @@ from discord.ext import commands
 from datetime import datetime
 import logging
 
+from event_templates_store import load_templates_dict as get_templates
+
 SHOTCALLER_ROLE_IDS = {1469711597827260679, 1488301094609096744}
 logger = logging.getLogger("albion-bot")
-
-
-def get_templates():
-    """Reads templates from events_templates.txt."""
-    templates = {}
-    filepath = Path(__file__).resolve().parent.parent / "events_templates.txt"
-    default_text = "[Castle]\n1. Caller\n2. Healer\n3. DPS\n\n[Open World]\n1. Tank\n2. DPS\n"
-
-    try:
-        if not filepath.exists():
-            filepath.write_text(default_text, encoding="utf-8")
-        content = filepath.read_text(encoding="utf-8")
-    except Exception:
-        content = default_text
-
-    current_template = None
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            current_template = line[1:-1]
-            templates[current_template] = []
-        elif current_template:
-            role_name = re.sub(r"^\d+\.\s*", "", line)
-            templates[current_template].append(role_name)
-
-    return templates
 
 
 async def build_event_embed(bot, event_id: int):
