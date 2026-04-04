@@ -6,7 +6,7 @@ Used by Permissions and the dashboard; pure helpers are easy to unit-test.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Discord snowflakes are < 2^63; keep a generous upper bound.
 _MIN_SNOWFLAKE = 1
@@ -58,6 +58,61 @@ def effective_sets_from_override_row(
     ment = tier_set_from_db_value(row.get("mentor_role_ids"), default_mentors)
     f = tier_set_from_db_value(row.get("founder_role_ids"), default_founders)
     return m, ment, f
+
+
+def parse_single_snowflake(text: Optional[str]) -> Optional[int]:
+    """Parse one Discord snowflake; empty -> None. Raises ValueError if invalid."""
+    if text is None:
+        return None
+    s = str(text).strip()
+    if not s:
+        return None
+    try:
+        n = int(s)
+    except ValueError as e:
+        raise ValueError(f"Not a valid ID: {s!r}") from e
+    if n < _MIN_SNOWFLAKE or n > _MAX_SNOWFLAKE:
+        raise ValueError(f"ID out of range: {n}")
+    return n
+
+
+def sets_from_assignment_rows(
+    rows: List[Dict[str, Any]],
+) -> Tuple[Set[int], Set[int], Set[int]]:
+    """Build member / mentor / founder sets from guild_role_assignments rows."""
+    m: Set[int] = set()
+    ment: Set[int] = set()
+    f: Set[int] = set()
+    for row in rows:
+        rid = int(row["discord_role_id"])
+        t = str(row.get("tier") or "").strip().lower()
+        if t == "member":
+            m.add(rid)
+        elif t == "mentor":
+            ment.add(rid)
+        elif t == "founder":
+            f.add(rid)
+    return m, ment, f
+
+
+def assignment_rows_from_legacy_override(legacy: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Flatten legacy three-string overrides into per-role rows (highest tier wins)."""
+    if not legacy:
+        return []
+    f_raw = legacy.get("founder_role_ids")
+    m_raw = legacy.get("mentor_role_ids")
+    mem_raw = legacy.get("member_role_ids")
+    f_ids = set(parse_discord_role_ids(str(f_raw))) if f_raw and str(f_raw).strip() else set()
+    m_ids = set(parse_discord_role_ids(str(m_raw))) if m_raw and str(m_raw).strip() else set()
+    mem_ids = set(parse_discord_role_ids(str(mem_raw))) if mem_raw and str(mem_raw).strip() else set()
+    out: List[Dict[str, Any]] = []
+    for rid in sorted(f_ids):
+        out.append({"discord_role_id": rid, "tier": "founder"})
+    for rid in sorted(m_ids - f_ids):
+        out.append({"discord_role_id": rid, "tier": "mentor"})
+    for rid in sorted(mem_ids - f_ids - m_ids):
+        out.append({"discord_role_id": rid, "tier": "member"})
+    return out
 
 
 def normalize_ids_for_storage(text: Optional[str]) -> Optional[str]:

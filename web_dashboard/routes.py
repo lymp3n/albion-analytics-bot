@@ -12,11 +12,13 @@ from flask import (
     url_for,
 )
 
-from utils.role_config import normalize_ids_for_storage
+from utils.role_config import parse_single_snowflake
 
 from web_dashboard.data_service import (
+    count_other_guilds_with_discord_id,
     delete_events_by_ids,
     delete_guild_role_overrides_row,
+    ensure_guild_role_assignments_table,
     ensure_guild_role_overrides_table,
     get_database_storage,
     get_events_analytics,
@@ -27,9 +29,10 @@ from web_dashboard.data_service import (
     get_system_snapshot,
     get_tickets_breakdown,
     list_events_catalog,
-    list_guild_roles_panel,
+    list_guild_roles_dashboard,
     list_guilds,
-    upsert_guild_role_overrides_row,
+    replace_guild_role_assignments_rows,
+    update_guild_dashboard_meta,
 )
 from web_dashboard.db_sync import get_sync_connection
 
@@ -253,13 +256,14 @@ def register_dashboard(app: Flask) -> None:
             mimetype="application/json",
         )
 
+    _VALID_TIERS = frozenset({"member", "mentor", "founder"})
+
     @app.route("/dashboard/api/guild-roles", methods=["GET"])
     @login_required
     def dashboard_guild_roles_get():
         try:
             with get_sync_connection() as (conn, backend):
-                ensure_guild_role_overrides_table(conn, backend)
-                rows = list_guild_roles_panel(conn, backend)
+                rows = list_guild_roles_dashboard(conn, backend)
         except Exception as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
@@ -285,13 +289,111 @@ def register_dashboard(app: Flask) -> None:
                 status=400,
                 mimetype="application/json",
             )
+        raw_assignments = body.get("assignments")
+        if not isinstance(raw_assignments, list):
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": 'Expected JSON { "guild_id": N, "assignments": [...] }'}),
+                status=400,
+                mimetype="application/json",
+            )
+        pairs = []
+        seen: set = set()
         try:
-            m = normalize_ids_for_storage(body.get("member_role_ids"))
-            ment = normalize_ids_for_storage(body.get("mentor_role_ids"))
-            fnd = normalize_ids_for_storage(body.get("founder_role_ids"))
-        except ValueError as e:
+            for item in raw_assignments:
+                if not isinstance(item, dict):
+                    continue
+                rid = int(item.get("discord_role_id", 0))
+                tier = str(item.get("tier", "")).strip().lower()
+                if rid < 1:
+                    continue
+                if tier not in _VALID_TIERS:
+                    return app.response_class(
+                        response=json.dumps({"ok": False, "error": f"Invalid tier: {tier!r}"}),
+                        status=400,
+                        mimetype="application/json",
+                    )
+                if rid in seen:
+                    continue
+                seen.add(rid)
+                pairs.append((rid, tier))
+        except (TypeError, ValueError) as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_sync_connection() as (conn, backend):
+                ensure_guild_role_overrides_table(conn, backend)
+                ensure_guild_role_assignments_table(conn, backend)
+                if not guild_exists(conn, backend, guild_db_id):
+                    return app.response_class(
+                        response=json.dumps({"ok": False, "error": "Guild not found"}),
+                        status=404,
+                        mimetype="application/json",
+                    )
+                replace_guild_role_assignments_rows(conn, backend, guild_db_id, pairs)
+                delete_guild_role_overrides_row(conn, backend, guild_db_id)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps(
+                {
+                    "ok": True,
+                    "message": "Saved. Role access is stored per role (like Discord). Empty list = use config.yaml defaults.",
+                }
+            ),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/guild-meta", methods=["POST"])
+    @login_required
+    def dashboard_guild_meta_post():
+        body = request.get_json(silent=True) or {}
+        try:
+            guild_db_id = int(body.get("guild_id", 0))
+        except (TypeError, ValueError):
+            guild_db_id = 0
+        if guild_db_id < 1:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "Invalid guild_id"}),
+                status=400,
+                mimetype="application/json",
+            )
+        kwargs = {}
+        if "dashboard_label" in body:
+            label = body.get("dashboard_label")
+            if label is not None and not isinstance(label, str):
+                return app.response_class(
+                    response=json.dumps({"ok": False, "error": "dashboard_label must be a string"}),
+                    status=400,
+                    mimetype="application/json",
+                )
+            kwargs["dashboard_label"] = label
+        parsed_did = None
+        if "discord_id" in body:
+            raw_did = body.get("discord_id")
+            if raw_did is None or str(raw_did).strip() == "":
+                parsed_did = 0
+            else:
+                try:
+                    parsed_did = parse_single_snowflake(str(raw_did).strip())
+                except ValueError as e:
+                    return app.response_class(
+                        response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                        status=400,
+                        mimetype="application/json",
+                    )
+                if parsed_did is None:
+                    parsed_did = 0
+            kwargs["discord_id"] = int(parsed_did)
+        if not kwargs:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "No fields to update"}),
                 status=400,
                 mimetype="application/json",
             )
@@ -304,10 +406,18 @@ def register_dashboard(app: Flask) -> None:
                         status=404,
                         mimetype="application/json",
                     )
-                if m is None and ment is None and fnd is None:
-                    delete_guild_role_overrides_row(conn, backend, guild_db_id)
-                else:
-                    upsert_guild_role_overrides_row(conn, backend, guild_db_id, m, ment, fnd)
+                if "discord_id" in kwargs and int(kwargs["discord_id"]) > 0:
+                    if count_other_guilds_with_discord_id(
+                        conn, backend, guild_db_id, int(kwargs["discord_id"])
+                    ) > 0:
+                        return app.response_class(
+                            response=json.dumps(
+                                {"ok": False, "error": "Another guild already uses this Discord server ID."}
+                            ),
+                            status=400,
+                            mimetype="application/json",
+                        )
+                update_guild_dashboard_meta(conn, backend, guild_db_id, **kwargs)
         except Exception as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
@@ -315,11 +425,6 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         return app.response_class(
-            response=json.dumps(
-                {
-                    "ok": True,
-                    "message": "Saved. The bot reads these overrides per Discord server on the next permission check.",
-                }
-            ),
+            response=json.dumps({"ok": True, "message": "Guild info updated."}),
             mimetype="application/json",
         )

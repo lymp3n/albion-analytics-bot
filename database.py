@@ -1,7 +1,7 @@
 import os
 import asyncio
 import hashlib
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 import aiosqlite
 import asyncpg
@@ -151,6 +151,10 @@ class Database:
                 created_at {timestamp_default}
             )
         """)
+        try:
+            await self.execute("ALTER TABLE guilds ADD COLUMN dashboard_label TEXT")
+        except Exception:
+            pass
         
         if not self.is_sqlite:
             try:
@@ -295,6 +299,16 @@ class Database:
             )
         """)
 
+        await self.execute(f"""
+            CREATE TABLE IF NOT EXISTS guild_role_assignments (
+                guild_id INTEGER NOT NULL,
+                discord_role_id {bigint_type} NOT NULL,
+                tier TEXT NOT NULL,
+                PRIMARY KEY (guild_id, discord_role_id),
+                FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE
+            )
+        """)
+
         # Indices
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
@@ -347,6 +361,45 @@ class Database:
             "UPDATE guilds SET discord_id = $1 WHERE name = $2 AND discord_id = 0",
             discord_guild_id, guild_name
         )
+
+    async def update_guild_discord_id_by_id(self, guild_db_id: int, discord_guild_id: int) -> None:
+        await self.execute(
+            "UPDATE guilds SET discord_id = $1 WHERE id = $2",
+            discord_guild_id,
+            guild_db_id,
+        )
+
+    async def update_guild_dashboard_label(self, guild_db_id: int, label: Optional[str]) -> None:
+        await self.execute(
+            "UPDATE guilds SET dashboard_label = $1 WHERE id = $2",
+            label,
+            guild_db_id,
+        )
+
+    async def fetch_guild_role_assignments(self, guild_db_id: int) -> list:
+        return await self.fetch(
+            """
+            SELECT guild_id, discord_role_id, tier
+            FROM guild_role_assignments
+            WHERE guild_id = $1
+            ORDER BY discord_role_id
+            """,
+            guild_db_id,
+        )
+
+    async def replace_guild_role_assignments(self, guild_db_id: int, pairs: List[tuple]) -> None:
+        """pairs: list of (discord_role_id: int, tier: str). Replaces all rows for guild."""
+        await self.execute("DELETE FROM guild_role_assignments WHERE guild_id = $1", guild_db_id)
+        for role_id, tier in pairs:
+            await self.execute(
+                """
+                INSERT INTO guild_role_assignments (guild_id, discord_role_id, tier)
+                VALUES ($1, $2, $3)
+                """,
+                guild_db_id,
+                role_id,
+                tier,
+            )
     
     async def get_player_by_discord_id(self, discord_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(

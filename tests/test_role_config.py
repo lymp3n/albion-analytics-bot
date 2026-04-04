@@ -3,9 +3,11 @@
 import unittest
 
 from utils.role_config import (
+    assignment_rows_from_legacy_override,
     effective_sets_from_override_row,
     normalize_ids_for_storage,
     parse_discord_role_ids,
+    sets_from_assignment_rows,
     tier_set_from_db_value,
 )
 
@@ -36,6 +38,31 @@ class TestNormalizeForStorage(unittest.TestCase):
             normalize_ids_for_storage("2, 1, 2"),
             "1, 2",
         )
+
+
+class TestAssignmentRows(unittest.TestCase):
+    def test_legacy_to_rows_priority(self):
+        legacy = {
+            "member_role_ids": "1, 2",
+            "mentor_role_ids": "2, 3",
+            "founder_role_ids": "3",
+        }
+        rows = assignment_rows_from_legacy_override(legacy)
+        tiers = {r["discord_role_id"]: r["tier"] for r in rows}
+        self.assertEqual(tiers[1], "member")
+        self.assertEqual(tiers[2], "mentor")
+        self.assertEqual(tiers[3], "founder")
+
+    def test_sets_from_assignments(self):
+        m, ment, f = sets_from_assignment_rows(
+            [
+                {"discord_role_id": 10, "tier": "member"},
+                {"discord_role_id": 20, "tier": "mentor"},
+            ]
+        )
+        self.assertEqual(m, {10})
+        self.assertEqual(ment, {20})
+        self.assertEqual(f, set())
 
 
 class TestEffectiveSets(unittest.TestCase):

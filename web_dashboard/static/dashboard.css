@@ -381,6 +381,53 @@
   margin-top: 0.25rem;
 }
 
+.ds-guild-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.ds-role-access-wrap {
+  margin-top: 0.75rem;
+}
+
+.ds-role-access-table {
+  min-width: 480px;
+}
+
+.ds-role-access-table th,
+.ds-role-access-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ds-role-access-table th:first-child,
+.ds-role-access-table td:first-child {
+  text-align: left;
+}
+
+.ds-role-access-table .ds-role-id-input {
+  width: 100%;
+  max-width: 220px;
+}
+
+.ds-btn-tiny {
+  padding: 0.25rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.ds-legacy-hint {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 200, 80, 0.35);
+  background: rgba(255, 200, 80, 0.08);
+  font-size: 0.82rem;
+  color: var(--ds-text);
+}
+
 .ds-table {
   width: 100%;
   border-collapse: collapse;

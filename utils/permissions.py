@@ -2,7 +2,7 @@ from typing import Optional, Set, Tuple
 
 import discord
 
-from utils.role_config import effective_sets_from_override_row
+from utils.role_config import effective_sets_from_override_row, sets_from_assignment_rows
 
 # Additional role IDs requested for another server (defaults when DB has no override).
 EXTRA_MEMBER_ROLE_IDS = {
@@ -51,7 +51,11 @@ class Permissions:
         g = await self.bot.db.get_guild_by_discord_id(member.guild.id)
         if not g:
             return defaults
-        row = await self.bot.db.fetch_guild_role_overrides(int(g["id"]))
+        gid = int(g["id"])
+        assigns = await self.bot.db.fetch_guild_role_assignments(gid)
+        if assigns:
+            return sets_from_assignment_rows(assigns)
+        row = await self.bot.db.fetch_guild_role_overrides(gid)
         return effective_sets_from_override_row(row, *defaults)
 
     async def effective_role_sets_for_interaction(

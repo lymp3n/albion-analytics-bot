@@ -25,16 +25,22 @@ class AuthCommands(commands.Cog):
             print("⚠️ AuthCommands: Database not connected after wait, skipping on_ready sync")
             return
 
-        guild_id = self.bot.guild_id or int(self.bot.config.get('GUILD_ID', 0))
-        if not guild_id:
-            return
-            
-        guild = discord.utils.get(self.bot.guilds, id=guild_id)
-        if guild:
-            # Update Discord ID for all guilds in DB that are still using 0
-            for db_guild in await self.bot.db.fetch("SELECT id, name FROM guilds WHERE discord_id = 0"):
-                await self.bot.db.update_guild_discord_id(db_guild['name'], guild.id)
-                print(f"✓ Updated Discord ID for guild '{db_guild['name']}' -> {guild.id}")
+        # Link each DB guild (discord_id still 0) to the connected server whose name matches.
+        # Do not assign every row the same GUILD_ID — that breaks multi-server setups.
+        pending = await self.bot.db.fetch("SELECT id, name FROM guilds WHERE discord_id = 0")
+        for db_guild in pending:
+            name = (db_guild.get("name") or "").strip()
+            if not name:
+                continue
+            name_cf = name.casefold()
+            match = None
+            for dg in self.bot.guilds:
+                if dg.name.strip().casefold() == name_cf:
+                    match = dg
+                    break
+            if match:
+                await self.bot.db.update_guild_discord_id_by_id(int(db_guild["id"]), match.id)
+                print(f"✓ Linked DB guild '{name}' (id={db_guild['id']}) -> Discord {match.id} ({match.name})")
     
     @discord.slash_command(name="register", description="Register in the guild using invite code")
     @option("code", description="Guild invitation code")
