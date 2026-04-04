@@ -59,7 +59,7 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 
 Статические GIF раздаются маршрутом **`/video/<имя>`** для файлов из белого списка (`ban.gif`, `secret.gif`).
 
-**Логи: `rate limited ... /applications/.../commands`.** Discord ограничивает частоту **регистрации slash-команд**. Сообщение означает, что запрос на обновление команд временно отклонён — клиент подождёт и повторит попытку. Чтобы реже упираться в лимит: задайте **`GUILD_IDS`** (и при необходимости `GUILD_ID`) — команды синхронизируются **только** с перечисленными гильдиями, а не со всеми серверами, куда добавили бота; на старте отключена двойная синхронизация (`on_connect` + `on_ready`), между несколькими гильдиями добавлена небольшая пауза.
+**Логи: `rate limited ... /applications/.../commands`.** Discord ограничивает частоту **регистрации slash-команд**. Сообщение означает, что запрос временно отклонён — клиент подождёт и повторит попытку. Чтобы снизить нагрузку: задайте **`GUILD_IDS`** / **`GUILD_ID`** — синк только для этих серверов; синхронизация **одним** вызовом для всего списка (без цикла по гильдиям, чтобы не множить служебные запросы к API). Опционально **`DISCORD_COMMAND_SYNC_DEFER_SEC`** (секунды паузы перед синком) и **`DISCORD_SKIP_COMMAND_SYNC=1`** только для отладки.
 
 **GIF на входе и на экране блокировки.** Тяжёлые GIF могут подлагивать при первом кадре: для входа включён **preload** `secret.gif`, на обеих страницах показывается **плейсхолдер со спиннером** фиксированного размера до загрузки картинки, затем плавное появление GIF.
 
@@ -238,6 +238,8 @@ GIFs are served from **`/video/<filename>`** for an allowlisted set (`ban.gif`, 
 - `DATABASE_URL` — PostgreSQL connection string.
 - `GUILD_ID` / `GUILD_ID2` — legacy target Discord server ID(s).
 - `GUILD_IDS` — optional comma- or space-separated guild IDs. **Recommended** when the bot is in **multiple** servers: slash commands are registered **only** for these guilds (plus legacy `GUILD_ID`/`GUILD_ID2`), which greatly reduces Discord **application command** rate limits on startup.
+- `DISCORD_COMMAND_SYNC_DEFER_SEC` — optional; seconds to sleep in `on_ready` before syncing slash commands (spread load after deploys).
+- `DISCORD_SKIP_COMMAND_SYNC` — optional; set to `1` / `true` to skip slash command registration for this run (debug only).
 - `DASHBOARD_SECRET` — long random token for the web dashboard login (`https://<your-service>.onrender.com/dashboard`).
 - `FLASK_SECRET_KEY` — optional; cookie signing (defaults to `DASHBOARD_SECRET`).
 - `DASHBOARD_DB_QUOTA_BYTES` — optional; database size quota in bytes for the System tab (default ~512 MiB, e.g. Neon free tier).
@@ -250,7 +252,9 @@ Discord limits how often **slash commands** can be registered. The library will 
 This bot registers commands **once** after login (`on_ready`). To avoid unnecessary API traffic:
 
 - Set **`GUILD_IDS`** (and/or `GUILD_ID`) to the Discord server id(s) you actually use. The bot **does not** sync commands to every server it was invited to when these env vars are set.
-- The bot disables **automatic** sync on every `on_connect` and uses a **single** controlled sync in `on_ready`, with a short pause between guilds when several ids are configured.
+- The bot disables **automatic** sync on every `on_connect` and runs **one** `sync_commands` call in `on_ready` for the whole guild list (splitting into a per-guild loop would repeat Discord’s internal global-command checks and **worsen** rate limits).
+- Optional **`DISCORD_COMMAND_SYNC_DEFER_SEC`** (e.g. `5`–`30`) — seconds to wait after `on_ready` before syncing; helps if many instances restart at once or you want to spread load.
+- Optional **`DISCORD_SKIP_COMMAND_SYNC=1`** — skip registration for this process (debug only; slash commands may be missing until you unset it and redeploy).
 - Avoid rapid restart loops (e.g. crash → restart) while developing.
 
 ### Deployment (Render)
