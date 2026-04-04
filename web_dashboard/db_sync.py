@@ -5,6 +5,27 @@ from contextlib import contextmanager
 from typing import Any, Generator, List, Optional, Tuple
 
 
+def _pg_dollar_to_psycopg(sql: str, params: tuple) -> Tuple[str, tuple]:
+    """
+    asyncpg uses $1, $2, ...; psycopg2 expects %s in order of appearance.
+    Duplicate bindings when the same $n appears multiple times.
+    """
+    expanded: List[Any] = []
+    pattern = re.compile(r"\$(\d+)")
+
+    def repl(match):
+        idx = int(match.group(1)) - 1
+        if idx < 0 or idx >= len(params):
+            raise IndexError(
+                f"SQL placeholder {match.group(0)} out of range for {len(params)} parameter(s)"
+            )
+        expanded.append(params[idx])
+        return "%s"
+
+    new_sql = pattern.sub(repl, sql)
+    return new_sql, tuple(expanded)
+
+
 def _normalize_postgres_url(url: str) -> str:
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql://", 1)
@@ -52,16 +73,15 @@ def rows_to_dicts(rows: List[Any]) -> List[dict]:
     return out
 
 
-def _sql_for_backend(sql: str, backend: str) -> str:
-    if backend != "sqlite":
-        return sql
-    return re.sub(r"\$\d+", "?", sql)
-
-
 def fetch_all(conn, backend: str, sql: str, params: Optional[tuple] = None) -> List[dict]:
     cur = conn.cursor()
-    q = _sql_for_backend(sql, backend)
-    cur.execute(q, params or ())
+    p = params or ()
+    if backend == "sqlite":
+        q = re.sub(r"\$\d+", "?", sql)
+        cur.execute(q, p)
+    else:
+        q, bind = _pg_dollar_to_psycopg(sql, p)
+        cur.execute(q, bind)
     if backend == "sqlite":
         cols = [d[0] for d in cur.description] if cur.description else []
         return [dict(zip(cols, row)) for row in cur.fetchall()]
@@ -70,8 +90,13 @@ def fetch_all(conn, backend: str, sql: str, params: Optional[tuple] = None) -> L
 
 def fetch_one(conn, backend: str, sql: str, params: Optional[tuple] = None) -> Optional[dict]:
     cur = conn.cursor()
-    q = _sql_for_backend(sql, backend)
-    cur.execute(q, params or ())
+    p = params or ()
+    if backend == "sqlite":
+        q = re.sub(r"\$\d+", "?", sql)
+        cur.execute(q, p)
+    else:
+        q, bind = _pg_dollar_to_psycopg(sql, p)
+        cur.execute(q, bind)
     row = cur.fetchone()
     if not row:
         return None
