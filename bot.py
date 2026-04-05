@@ -35,6 +35,38 @@ logger = logging.getLogger('albion-bot')
 SLASH_SYNC_FP_KV = "slash_sync_fingerprint"
 
 
+def _discord_response_looks_like_cf1015_ip_ban(message: str) -> bool:
+    """Cloudflare error 1015 = Discord temporarily blocks the hosting egress IP (HTML body, not JSON API 429)."""
+    if not message or "1015" not in message:
+        return False
+    low = message.lower()
+    return (
+        "cloudflare" in low
+        or "discord.com" in low
+        or "errorcode: 1015" in low.replace(" ", "")
+        or "you are being rate limited" in low
+    )
+
+
+def _discord_cf1015_retry_wait_seconds() -> int:
+    raw = (os.getenv("DISCORD_CF1015_RETRY_AFTER_SEC") or "3600").strip()
+    try:
+        base = max(300, int(float(raw)))
+    except ValueError:
+        base = 3600
+    return base + random.randint(0, 180)
+
+
+def _discord_startup_reconnect_delay_seconds(attempt: int, err_text: str) -> int:
+    """Avoid hammering Discord when the IP is banned (short retries only make logs noisy and may extend blocks)."""
+    if _discord_response_looks_like_cf1015_ip_ban(err_text):
+        return _discord_cf1015_retry_wait_seconds()
+    base_backoff = 30
+    max_backoff = 900
+    wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
+    return wait_seconds + random.randint(0, 20)
+
+
 def _slash_command_tree_fingerprint(
     bot: commands.Bot, sync_mode: str, target_guild_ids: List[int]
 ) -> str:
@@ -399,8 +431,6 @@ async def main():
     await asyncio.sleep(0.15)
 
     attempt = 0
-    base_backoff = 30
-    max_backoff = 900
 
     while True:
         bot = AlbionBot()
@@ -419,13 +449,24 @@ async def main():
             except Exception:
                 pass
             attempt += 1
-            wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
-            wait_seconds += random.randint(0, 20)
-            logger.error(
-                "❌ Discord gateway unavailable (likely temporary rate limit / Cloudflare 1015): %s",
-                e,
+            err_text = str(e)
+            wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
+            if _discord_response_looks_like_cf1015_ip_ban(err_text):
+                logger.error(
+                    "❌ Discord gateway unreachable; response looks like Cloudflare 1015 / IP block on discord.com. "
+                    "This is not fixable in application code: wait (often hours–24h), move the service to another "
+                    "region or host, or use a different egress IP. Use exactly one bot instance per token."
+                )
+            else:
+                logger.error(
+                    "❌ Discord gateway unavailable (temporary outage or rate limit): %s",
+                    e,
+                )
+            logger.warning(
+                "⏳ Reconnect attempt #%s in %ss (longer waits if CF 1015; DISCORD_CF1015_RETRY_AFTER_SEC)",
+                attempt,
+                wait_seconds,
             )
-            logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
             await asyncio.sleep(wait_seconds)
         except discord.HTTPException as e:
             # Handle startup-level 429/Cloudflare responses without crash loops.
@@ -438,9 +479,17 @@ async def main():
                 except Exception:
                     pass
                 attempt += 1
-                wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
-                wait_seconds += random.randint(0, 20)
-                logger.error("❌ Discord HTTP rate limit during startup: %s", e)
+                wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
+                if _discord_response_looks_like_cf1015_ip_ban(err_text):
+                    logger.error(
+                        "❌ Discord returned HTTP %s with Cloudflare 1015 / datacenter IP ban HTML. "
+                        "Short reconnect intervals do not help. Next try in %ss (default 1h; env DISCORD_CF1015_RETRY_AFTER_SEC). "
+                        "Practical fixes: another Render region, another provider, wait out the ban, single bot process.",
+                        e.status,
+                        wait_seconds,
+                    )
+                else:
+                    logger.error("❌ Discord HTTP rate limit during startup: %s", e)
                 logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
                 await asyncio.sleep(wait_seconds)
             else:

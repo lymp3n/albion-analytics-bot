@@ -61,6 +61,8 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
 
 **Логи: `rate limited ... /applications/.../commands`.** Discord ограничивает частоту **регистрации slash-команд**. Сообщение означает, что запрос временно отклонён — клиент подождёт и повторит попытку. Чтобы снизить нагрузку: задайте **`GUILD_IDS`** / **`GUILD_ID`** — синк только для этих серверов; синхронизация **одним** вызовом для всего списка (без цикла по гильдиям, чтобы не множить служебные запросы к API). После **успешного** синка бот сохраняет в БД отпечаток дерева команд и при следующих перезапусках **пропускает** повторный `sync_commands`, пока код команд или список целевых гильдий не изменились (экономия запросов к API). Чтобы принудительно зарегистрировать команды снова: **`DISCORD_FORCE_COMMAND_SYNC=1`** на один запуск. Опционально **`DISCORD_COMMAND_SYNC_DEFER_SEC`**, **`DISCORD_COMMAND_SYNC_JITTER_SEC`** (случайная пауза 0…N с перед синком) и **`DISCORD_SKIP_COMMAND_SYNC=1`** только для отладки.
 
+**Логи: HTML Cloudflare, `Error 1015`, «You are being rate limited» на discord.com.** Это **блокировка исходящего IP** вашего хостинга (часто у датацентров), а не обычный лимит API. Код бота это не обходит: подождите (иногда до суток), смените **регион** или провайдера (другой egress IP), убедитесь, что с токеном работает **один** процесс. Между попытками входа бот делает **длинную** паузу; интервал задаётся **`DISCORD_CF1015_RETRY_AFTER_SEC`** (по умолчанию 3600 с).
+
 **GIF на входе и на экране блокировки.** Тяжёлые GIF могут подлагивать при первом кадре: для входа включён **preload** `secret.gif`, на обеих страницах показывается **плейсхолдер со спиннером** фиксированного размера до загрузки картинки, затем плавное появление GIF.
 
 **Важно про ивенты.** В аналитике учитываются только **завершённые** ивенты. Чтобы убрать мусор из базы, используйте блок cleanup на вкладке Events или SQL-скрипты в репозитории (например, `scripts/delete_first_three_events.sql` для точечной чистки по правилам файла).
@@ -242,6 +244,7 @@ GIFs are served from **`/video/<filename>`** for an allowlisted set (`ban.gif`, 
 - `DISCORD_COMMAND_SYNC_JITTER_SEC` — optional; e.g. `20` adds a random **0…20s** sleep before sync so multiple instances or quick redeploys don’t hit the command API at the same instant.
 - `DISCORD_SKIP_COMMAND_SYNC` — optional; set to `1` / `true` to skip slash command registration for this run (debug only).
 - `DISCORD_FORCE_COMMAND_SYNC` — optional; set to `1` / `true` to always run `sync_commands` and refresh the stored fingerprint (use after changing slash commands, or if Discord’s copy is out of sync).
+- `DISCORD_CF1015_RETRY_AFTER_SEC` — optional; when Discord’s edge returns **Cloudflare error 1015** (temporary **IP ban** for your host’s egress), the bot waits this many seconds between login attempts (default **3600**). Shorter retries do not unblock the IP; change region/provider or wait it out.
 - `DASHBOARD_SECRET` — long random token for the web dashboard login (`https://<your-service>.onrender.com/dashboard`).
 - `FLASK_SECRET_KEY` — optional; cookie signing (defaults to `DASHBOARD_SECRET`).
 - `DASHBOARD_DB_QUOTA_BYTES` — optional; database size quota in bytes for the System tab (default ~512 MiB, e.g. Neon free tier).
@@ -259,6 +262,7 @@ This bot registers commands **once** after login (`on_ready`). To avoid unnecess
 - Optional **`DISCORD_COMMAND_SYNC_JITTER_SEC`** (e.g. `15`–`30`) — extra random **0…N** second delay so staggered deploys don’t synchronize on the same API window.
 - Optional **`DISCORD_SKIP_COMMAND_SYNC=1`** — skip registration for this process (debug only; slash commands may be missing until you unset it and redeploy).
 - After a **successful** sync, the bot stores a **fingerprint** of the slash command tree and guild/global sync mode in the database (`bot_kv`). On later startups it **skips** `sync_commands` when nothing changed, which cuts Discord application-command API traffic. Set **`DISCORD_FORCE_COMMAND_SYNC=1`** for one run after you edit commands or if the developer portal / Discord state diverged (e.g. you only changed a description).
+- **Cloudflare 1015 / “You are being rate limited” HTML from discord.com** means Discord blocked your **server’s public IP**, not a normal REST 429. Fix: wait (often hours), redeploy to another **region** or host, ensure **one** bot process per token. The bot uses a **long** retry (see `DISCORD_CF1015_RETRY_AFTER_SEC`) so it does not hammer the edge while banned.
 - Avoid rapid restart loops (e.g. crash → restart) while developing.
 
 ### Deployment (Render)
