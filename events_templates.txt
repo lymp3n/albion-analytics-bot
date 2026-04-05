@@ -87,11 +87,11 @@
 9. Hoarfrost
 10. GA
 11. Rift
-12. Rift
+12. Rift/Dawnsong
 13. Dawnsong
-14. Dawnsong
-15. Spiked
-16. Perma
+14. Spiked
+15. Perma
+16. Occult
 17. Oathkeepers/Locus
 18. RB
 19. Carving
