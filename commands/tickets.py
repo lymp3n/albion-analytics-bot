@@ -415,7 +415,10 @@ class TicketsCommands(commands.Cog):
     
     @commands.Cog.listener()
     async def on_ready(self):
-        """Register persistent view"""
+        """Register persistent view once (on_ready repeats on reconnect)."""
+        if getattr(self.bot, "_ticket_control_persistent_view_registered", False):
+            return
+        self.bot._ticket_control_persistent_view_registered = True
         self.bot.add_view(TicketControlView(self.bot))
 
     ticket_group = discord.SlashCommandGroup("ticket", "Manage tickets")

@@ -488,9 +488,11 @@ class EventControlView(ui.View):
 
     @ui.button(label="Join", style=discord.ButtonStyle.success, custom_id="evt_join")
     async def join(self, button: ui.Button, interaction: discord.Interaction):
+        if interaction.response.is_done():
+            return
         try:
             await interaction.response.defer(ephemeral=True)
-        except discord.NotFound:
+        except (discord.NotFound, discord.HTTPException):
             return
 
         event = await self.bot.db.fetchrow("SELECT id, status, guild_id FROM events WHERE discord_message_id = $1", interaction.message.id)
@@ -664,6 +666,11 @@ class EventCommands(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        # on_ready runs on every gateway reconnect; duplicate add_view() registers the same
+        # custom_id handlers twice → first defer wins, second raises 40060 Interaction already acknowledged.
+        if getattr(self.bot, "_event_control_persistent_view_registered", False):
+            return
+        self.bot._event_control_persistent_view_registered = True
         self.bot.add_view(EventControlView(self.bot))
 
     event_group = discord.SlashCommandGroup("event", "Manage events")
