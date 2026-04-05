@@ -316,6 +316,13 @@ class Database:
 
         await self._migrate_guild_role_assignments_discord_id_to_text()
 
+        await self.execute("""
+            CREATE TABLE IF NOT EXISTS bot_kv (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
         # Indices
         await self.execute("CREATE INDEX IF NOT EXISTS idx_players_guild_status ON players(guild_id, status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
@@ -546,3 +553,28 @@ class Database:
                 mentor_role_ids,
                 founder_role_ids,
             )
+
+    async def get_bot_kv(self, key: str) -> Optional[str]:
+        row = await self.fetchrow("SELECT value FROM bot_kv WHERE key = $1", key)
+        if not row:
+            return None
+        return row.get("value")
+
+    async def set_bot_kv(self, key: str, value: str) -> None:
+        """Upsert key/value; bypasses execute() INSERT RETURNING id behavior (no id column)."""
+        if self.is_sqlite:
+            await self.conn.execute(
+                "INSERT OR REPLACE INTO bot_kv (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+            await self.conn.commit()
+        else:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO bot_kv (key, value) VALUES ($1, $2)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    key,
+                    value,
+                )

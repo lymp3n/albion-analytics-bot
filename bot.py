@@ -12,6 +12,8 @@ except ImportError:
         print("Warning: audioop not found. Voice features may fail.")
 
 import asyncio
+import hashlib
+import json
 import logging
 import random
 import discord
@@ -29,6 +31,44 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger('albion-bot')
+
+SLASH_SYNC_FP_KV = "slash_sync_fingerprint"
+
+
+def _slash_command_tree_fingerprint(
+    bot: commands.Bot, sync_mode: str, target_guild_ids: List[int]
+) -> str:
+    """Stable hash of slash tree + sync scope; used to skip redundant Discord command API sync."""
+
+    def walk_options(opts):
+        if not opts:
+            return []
+        out = []
+        for o in sorted(
+            opts, key=lambda x: (getattr(x, "name", ""), int(getattr(x, "type", 0)))
+        ):
+            nested = getattr(o, "options", None) or []
+            out.append(
+                [
+                    getattr(o, "name", ""),
+                    int(getattr(o, "type", 0)),
+                    walk_options(nested),
+                ]
+            )
+        return out
+
+    cmds = []
+    for c in sorted(
+        bot.application_commands,
+        key=lambda x: (x.name, int(getattr(x, "type", 1))),
+    ):
+        top = getattr(c, "options", None) or []
+        cmds.append([c.name, int(getattr(c, "type", 1)), walk_options(top)])
+
+    payload = {"m": sync_mode, "g": sorted(target_guild_ids), "c": cmds}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()
+
 
 class AlbionBot(commands.Bot):
     def __init__(self):
@@ -189,6 +229,11 @@ class AlbionBot(commands.Bot):
                 "true",
                 "yes",
             )
+            force_command_sync = (os.getenv("DISCORD_FORCE_COMMAND_SYNC", "") or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
             if skip_sync:
                 logger.warning(
                     "⚠️ DISCORD_SKIP_COMMAND_SYNC is set — slash commands will NOT be registered this run. "
@@ -237,14 +282,42 @@ class AlbionBot(commands.Bot):
                                 "API load and avoid application-command rate limits."
                             )
 
-                    if target_guild_ids:
+                    sync_mode = "guild" if target_guild_ids else "global"
+                    fp_ids = sorted(target_guild_ids) if target_guild_ids else []
+                    fp = _slash_command_tree_fingerprint(self, sync_mode, fp_ids)
+
+                    stored_fp = None
+                    if database_connected and not force_command_sync:
+                        try:
+                            stored_fp = await self.db.get_bot_kv(SLASH_SYNC_FP_KV)
+                        except Exception as ex:
+                            logger.warning("Slash fingerprint read failed (%s); syncing commands.", ex)
+
+                    skip_redundant_sync = (
+                        stored_fp is not None
+                        and stored_fp == fp
+                        and database_connected
+                        and not force_command_sync
+                    )
+
+                    if skip_redundant_sync:
+                        logger.info(
+                            "✓ Slash command sync skipped — same tree as last successful sync (stored in DB). "
+                            "Set DISCORD_FORCE_COMMAND_SYNC=1 for one run after you change commands or if Discord is stale."
+                        )
+                    elif target_guild_ids:
                         try:
                             await self.sync_commands(guild_ids=target_guild_ids, force=False)
                             logger.info(f"✓ Commands synced to guild(s): {target_guild_ids}")
+                            if database_connected:
+                                await self.db.set_bot_kv(SLASH_SYNC_FP_KV, fp)
                         except discord.Forbidden as e:
                             logger.error(f"❌ Guild command sync forbidden: {e}")
+                            fp_global = _slash_command_tree_fingerprint(self, "global", [])
                             await self.sync_commands(force=False)
                             logger.info("✓ Fallback: global slash commands synced")
+                            if database_connected:
+                                await self.db.set_bot_kv(SLASH_SYNC_FP_KV, fp_global)
                     else:
                         if configured_guild_ids:
                             logger.warning(
@@ -252,6 +325,8 @@ class AlbionBot(commands.Bot):
                             )
                         await self.sync_commands(force=False)
                         logger.info("✓ Global slash commands synced")
+                        if database_connected:
+                            await self.db.set_bot_kv(SLASH_SYNC_FP_KV, fp)
             except Exception as e:
                 logger.error(f"❌ Command sync failed: {e}")
 
