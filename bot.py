@@ -332,6 +332,15 @@ class AlbionBot(commands.Bot):
                         and not force_command_sync
                     )
 
+                    # Fingerprint skip avoids HTTP sync, but in a new process py-cord often leaves
+                    # `application_commands` empty until sync — slash interactions then do not dispatch.
+                    if skip_redundant_sync and len(self.application_commands) == 0:
+                        logger.warning(
+                            "Slash sync: DB fingerprint matches but application_commands is empty — "
+                            "forcing sync this run (required so this process registers command handlers)."
+                        )
+                        skip_redundant_sync = False
+
                     if skip_redundant_sync:
                         logger.info(
                             "✓ Slash command sync skipped — same tree as last successful sync (stored in DB). "
