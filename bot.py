@@ -121,6 +121,11 @@ class AlbionBot(commands.Bot):
                 out.append(gid)
         return out
 
+    def _database_ready(self) -> bool:
+        if self.db.is_sqlite:
+            return self.db.conn is not None
+        return self.db.pool is not None
+
     async def _dashboard_discord_heartbeat(self):
         """Lets the dashboard see recent Discord activity even if on_ready does not repeat after reconnects."""
         from datetime import datetime, timezone
@@ -140,13 +145,16 @@ class AlbionBot(commands.Bot):
                 await asyncio.sleep(45)
             except asyncio.CancelledError:
                 break
-    
-    async def on_ready(self):
-        """Bot readiness handler"""
-        if getattr(self, 'ready_check', False):
-            return
-        self.ready_check = True
 
+    async def on_resumed(self):
+        """Discord gateway RESUME succeeded — same session, not a disconnect. This is normal."""
+        logger.info(
+            "✓ Gateway RESUMED — websocket session continued; slash commands should work. "
+            "If commands still fail, check for a second bot process using the same token."
+        )
+
+    async def on_ready(self):
+        """First ready: DB, permissions, slash sync, heartbeat task. Later ready: refresh presence + dashboard meta."""
         try:
             from keep_alive import set_discord_api_blocked
 
@@ -154,117 +162,127 @@ class AlbionBot(commands.Bot):
         except Exception:
             pass
 
-        logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
-        logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
-        
-        # 1. Initialize permissions system
-        self.permissions = Permissions(self)
+        first = not getattr(self, "_albion_initial_ready_done", False)
+        database_connected = self._database_ready()
 
-        # 2. Connect to DB (with error handling)
-        database_connected = False
-        try:
-            await self.db.connect()
-            logger.info("✓ Database connected")
-            database_connected = True
-        except Exception as e:
-            logger.error(f"❌ Database connection failed: {e}")
-            logger.error("Check DATABASE_URL in Render Environment Variables.")
-            # Don't crash completely so the bot can at least respond to ping
-        
-        # 3. Sync slash commands (single pass; see auto_sync_commands=False above).
-        skip_sync = (os.getenv("DISCORD_SKIP_COMMAND_SYNC", "") or "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        if skip_sync:
-            logger.warning(
-                "⚠️ DISCORD_SKIP_COMMAND_SYNC is set — slash commands will NOT be registered this run. "
-                "Unset for production or run `/` sync manually when needed."
+        if first:
+            self._albion_initial_ready_done = True
+            self.ready_check = True
+
+            logger.info(f"✓ Logged in as {self.user.name} (ID: {self.user.id})")
+            logger.info(f"✓ Connected to {len(self.guilds)} guild(s)")
+
+            self.permissions = Permissions(self)
+
+            try:
+                if not self._database_ready():
+                    await self.db.connect()
+                    logger.info("✓ Database connected")
+                database_connected = self._database_ready()
+            except Exception as e:
+                logger.error(f"❌ Database connection failed: {e}")
+                logger.error("Check DATABASE_URL in Render Environment Variables.")
+                database_connected = False
+
+            skip_sync = (os.getenv("DISCORD_SKIP_COMMAND_SYNC", "") or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
             )
+            if skip_sync:
+                logger.warning(
+                    "⚠️ DISCORD_SKIP_COMMAND_SYNC is set — slash commands will NOT be registered this run. "
+                    "Unset for production or run `/` sync manually when needed."
+                )
+            else:
+                logger.info("⏳ Syncing slash commands (first connection this process)...")
+
+            try:
+                if not skip_sync:
+                    defer = float(os.getenv("DISCORD_COMMAND_SYNC_DEFER_SEC", "0") or "0")
+                    if defer > 0:
+                        logger.info(
+                            "⏳ DISCORD_COMMAND_SYNC_DEFER_SEC=%.1f — waiting before command sync to ease API bursts",
+                            defer,
+                        )
+                        await asyncio.sleep(defer)
+
+                    jitter_max = float(os.getenv("DISCORD_COMMAND_SYNC_JITTER_SEC", "0") or "0")
+                    if jitter_max > 0:
+                        j = random.uniform(0.0, jitter_max)
+                        logger.info(
+                            "⏳ Random pre-sync delay %.2fs (DISCORD_COMMAND_SYNC_JITTER_SEC=%.1f) to stagger parallel deploys",
+                            j,
+                            jitter_max,
+                        )
+                        await asyncio.sleep(j)
+
+                    connected_guild_ids = {g.id for g in self.guilds}
+                    configured_guild_ids = set(self.guild_ids)
+
+                    if configured_guild_ids:
+                        target_guild_ids = sorted(connected_guild_ids & configured_guild_ids)
+                        missing = sorted(configured_guild_ids - connected_guild_ids)
+                        if missing:
+                            logger.warning(
+                                "⚠️ Bot is not in configured guild id(s) (no command sync there until invited): "
+                                f"{missing}"
+                            )
+                    else:
+                        target_guild_ids = sorted(connected_guild_ids)
+                        if len(target_guild_ids) > 1:
+                            logger.warning(
+                                "⚠️ No GUILD_IDS / GUILD_ID in env — syncing slash commands to all "
+                                f"{len(target_guild_ids)} connected guild(s). Set GUILD_IDS to your guild id(s) to reduce "
+                                "API load and avoid application-command rate limits."
+                            )
+
+                    if target_guild_ids:
+                        try:
+                            await self.sync_commands(guild_ids=target_guild_ids, force=False)
+                            logger.info(f"✓ Commands synced to guild(s): {target_guild_ids}")
+                        except discord.Forbidden as e:
+                            logger.error(f"❌ Guild command sync forbidden: {e}")
+                            await self.sync_commands(force=False)
+                            logger.info("✓ Fallback: global slash commands synced")
+                    else:
+                        if configured_guild_ids:
+                            logger.warning(
+                                "⚠️ No overlap between connected guilds and env guild list — registering commands globally."
+                            )
+                        await self.sync_commands(force=False)
+                        logger.info("✓ Global slash commands synced")
+            except Exception as e:
+                logger.error(f"❌ Command sync failed: {e}")
+
+            cmds = self.application_commands
+            logger.info(f"✓ Registered {len(cmds)} commands: {', '.join([c.name for c in cmds])}")
+
+            if not getattr(self, "_dashboard_heartbeat_started", False):
+                self._dashboard_heartbeat_started = True
+                try:
+                    self.loop.create_task(self._dashboard_discord_heartbeat())
+                except Exception:
+                    pass
         else:
-            logger.info(f"⏳ Syncing commands... (Found {len(self.application_commands)} app commands)")
+            logger.info(
+                "✓ on_ready fired again (%s guild(s)) — refreshing presence and dashboard telemetry (no re-sync)",
+                len(self.guilds),
+            )
 
         try:
-            if skip_sync:
-                pass
-            else:
-                defer = float(os.getenv("DISCORD_COMMAND_SYNC_DEFER_SEC", "0") or "0")
-                if defer > 0:
-                    logger.info(
-                        "⏳ DISCORD_COMMAND_SYNC_DEFER_SEC=%.1f — waiting before command sync to ease API bursts",
-                        defer,
-                    )
-                    await asyncio.sleep(defer)
-
-                jitter_max = float(os.getenv("DISCORD_COMMAND_SYNC_JITTER_SEC", "0") or "0")
-                if jitter_max > 0:
-                    j = random.uniform(0.0, jitter_max)
-                    logger.info(
-                        "⏳ Random pre-sync delay %.2fs (DISCORD_COMMAND_SYNC_JITTER_SEC=%.1f) to stagger parallel deploys",
-                        j,
-                        jitter_max,
-                    )
-                    await asyncio.sleep(j)
-
-                connected_guild_ids = {g.id for g in self.guilds}
-                configured_guild_ids = set(self.guild_ids)
-
-                if configured_guild_ids:
-                    # Only sync guilds listed in GUILD_ID / GUILD_ID2 / GUILD_IDS — avoids work for every invite.
-                    target_guild_ids = sorted(connected_guild_ids & configured_guild_ids)
-                    missing = sorted(configured_guild_ids - connected_guild_ids)
-                    if missing:
-                        logger.warning(
-                            "⚠️ Bot is not in configured guild id(s) (no command sync there until invited): "
-                            f"{missing}"
-                        )
-                else:
-                    # Legacy: env had no guild list — sync all connected (heavy if the bot is in many servers).
-                    target_guild_ids = sorted(connected_guild_ids)
-                    if len(target_guild_ids) > 1:
-                        logger.warning(
-                            "⚠️ No GUILD_IDS / GUILD_ID in env — syncing slash commands to all "
-                            f"{len(target_guild_ids)} connected guild(s). Set GUILD_IDS to your guild id(s) to reduce "
-                            "API load and avoid application-command rate limits."
-                        )
-
-                # One sync_commands() for all target guilds. A per-guild loop made py-cord repeat the internal
-                # "global commands" pass (GET /applications/.../commands) once per iteration, multiplying load on
-                # the same rate-limit bucket.
-                if target_guild_ids:
-                    try:
-                        await self.sync_commands(guild_ids=target_guild_ids, force=False)
-                        logger.info(f"✓ Commands synced to guild(s): {target_guild_ids}")
-                    except discord.Forbidden as e:
-                        logger.error(f"❌ Guild command sync forbidden: {e}")
-                        await self.sync_commands(force=False)
-                        logger.info("✓ Fallback: global slash commands synced")
-                else:
-                    if configured_guild_ids:
-                        logger.warning(
-                            "⚠️ No overlap between connected guilds and env guild list — registering commands globally."
-                        )
-                    await self.sync_commands(force=False)
-                    logger.info("✓ Global slash commands synced")
+            await self.change_presence(
+                activity=discord.Game(name="Albion Analytics | !ping"),
+                status=discord.Status.online,
+            )
         except Exception as e:
-            logger.error(f"❌ Command sync failed: {e}")
-        
-        # Final logging
-        cmds = self.application_commands
-        logger.info(f"✓ Registered {len(cmds)} commands: {', '.join([c.name for c in cmds])}")
-        
-        # Set status
-        await self.change_presence(
-            activity=discord.Game(name="Albion Analytics | !ping"),
-            status=discord.Status.online
-        )
+            logger.warning("change_presence after ready failed: %s", e)
 
         try:
             from keep_alive import set_bot_ready
 
             set_bot_ready(
-                touch_ready=True,
+                touch_ready=first,
                 bot_username=str(self.user),
                 bot_user_id=self.user.id,
                 guilds_connected=len(self.guilds),
@@ -273,11 +291,6 @@ class AlbionBot(commands.Bot):
         except Exception:
             pass
 
-        try:
-            self.loop.create_task(self._dashboard_discord_heartbeat())
-        except Exception:
-            pass
-    
     async def on_application_command_error(self, ctx, error):
         logger.exception("Application command error: %s", error)
         try:
