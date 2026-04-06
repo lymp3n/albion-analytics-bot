@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import random
+import re
 import socket
 import discord
 from discord.ext import commands
@@ -81,6 +82,40 @@ def _exception_chain_text(exc: BaseException) -> str:
             pass
         cur = cur.__cause__ or cur.__context__
     return " | ".join(p for p in parts if p)
+
+
+def _compact_startup_error_text(message: str) -> str:
+    """Reduce noisy startup errors (especially Cloudflare HTML) to a concise single-line summary."""
+    if not message:
+        return ""
+    text = " ".join(str(message).split())
+    low = text.lower()
+
+    if "<html" in low or "</html>" in low or "cloudflare" in low:
+        ray = None
+        m = re.search(r"ray id[:\s]+([a-zA-Z0-9-]+)", text, flags=re.IGNORECASE)
+        if m:
+            ray = m.group(1)
+        if not ray:
+            m2 = re.search(r"__CF\$cv\$params=\{r:'([^']+)'", text)
+            if m2:
+                ray = m2.group(1)
+        parts = ["Cloudflare HTML response from discord.com"]
+        if "1015" in low:
+            parts.append("error=1015")
+        if ray:
+            parts.append(f"ray_id={ray}")
+        return " | ".join(parts)
+
+    raw = (os.getenv("DISCORD_STARTUP_ERROR_LOG_MAX_CHARS") or "320").strip()
+    try:
+        max_len = int(raw or "320")
+    except ValueError:
+        max_len = 320
+    max_len = max(120, min(max_len, 4000))
+    if len(text) > max_len:
+        return text[:max_len] + "... [truncated]"
+    return text
 
 
 def _slash_command_tree_fingerprint(
@@ -475,6 +510,7 @@ async def main():
                 pass
             attempt += 1
             err_text = _exception_chain_text(e)
+            compact = _compact_startup_error_text(err_text)
             wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
             if _discord_response_looks_like_cf1015_ip_ban(err_text):
                 logger.error(
@@ -485,7 +521,7 @@ async def main():
             else:
                 logger.error(
                     "❌ Discord gateway unavailable (temporary outage or rate limit): %s",
-                    e,
+                    compact or e,
                 )
             logger.warning(
                 "⏳ Reconnect attempt #%s in %ss (longer waits if CF 1015; DISCORD_CF1015_RETRY_AFTER_SEC)",
@@ -496,11 +532,12 @@ async def main():
         except discord.HTTPException as e:
             # Handle startup-level 429/Cloudflare responses without crash loops.
             err_text = _exception_chain_text(e)
+            compact = _compact_startup_error_text(err_text)
             if e.status == 429 or "1015" in err_text:
                 try:
                     from keep_alive import set_discord_api_blocked
 
-                    set_discord_api_blocked(True, err_text)
+                    set_discord_api_blocked(True, compact or err_text)
                 except Exception:
                     pass
                 attempt += 1
@@ -514,26 +551,28 @@ async def main():
                         wait_seconds,
                     )
                 else:
-                    logger.error("❌ Discord HTTP rate limit during startup: %s", e)
+                    logger.error("❌ Discord HTTP rate limit during startup: %s", compact or e)
                 logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
                 await asyncio.sleep(wait_seconds)
             else:
-                logger.exception(f"❌ Fatal HTTP error: {e}")
+                logger.exception("❌ Fatal HTTP error: %s", compact or e)
                 break
         except (asyncio.TimeoutError, ConnectionError, OSError, socket.gaierror) as e:
             # Network/provider hiccups during startup should not kill the process.
             attempt += 1
             err_text = _exception_chain_text(e)
+            compact = _compact_startup_error_text(err_text)
             wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
-            logger.error("❌ Startup network error while connecting to Discord: %s", e)
+            logger.error("❌ Startup network error while connecting to Discord: %s", compact or e)
             logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
             await asyncio.sleep(wait_seconds)
         except Exception as e:
             # Last-resort safety net: keep process alive and retry.
             attempt += 1
             err_text = _exception_chain_text(e)
+            compact = _compact_startup_error_text(err_text)
             wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
-            logger.exception("❌ Unexpected startup error (will retry): %s", e)
+            logger.exception("❌ Unexpected startup error (will retry): %s", compact or e)
             logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
             await asyncio.sleep(wait_seconds)
         finally:
