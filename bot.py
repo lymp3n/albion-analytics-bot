@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import random
+import socket
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -65,6 +66,21 @@ def _discord_startup_reconnect_delay_seconds(attempt: int, err_text: str) -> int
     max_backoff = 900
     wait_seconds = min(max_backoff, base_backoff * (2 ** min(attempt - 1, 5)))
     return wait_seconds + random.randint(0, 20)
+
+
+def _exception_chain_text(exc: BaseException) -> str:
+    """Flatten exception + causes/contexts into one lowercase-searchable text blob."""
+    parts = []
+    seen = set()
+    cur = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        try:
+            parts.append(str(cur))
+        except Exception:
+            pass
+        cur = cur.__cause__ or cur.__context__
+    return " | ".join(p for p in parts if p)
 
 
 def _slash_command_tree_fingerprint(
@@ -458,7 +474,7 @@ async def main():
             except Exception:
                 pass
             attempt += 1
-            err_text = str(e)
+            err_text = _exception_chain_text(e)
             wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
             if _discord_response_looks_like_cf1015_ip_ban(err_text):
                 logger.error(
@@ -479,7 +495,7 @@ async def main():
             await asyncio.sleep(wait_seconds)
         except discord.HTTPException as e:
             # Handle startup-level 429/Cloudflare responses without crash loops.
-            err_text = str(e)
+            err_text = _exception_chain_text(e)
             if e.status == 429 or "1015" in err_text:
                 try:
                     from keep_alive import set_discord_api_blocked
@@ -504,9 +520,22 @@ async def main():
             else:
                 logger.exception(f"❌ Fatal HTTP error: {e}")
                 break
+        except (asyncio.TimeoutError, ConnectionError, OSError, socket.gaierror) as e:
+            # Network/provider hiccups during startup should not kill the process.
+            attempt += 1
+            err_text = _exception_chain_text(e)
+            wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
+            logger.error("❌ Startup network error while connecting to Discord: %s", e)
+            logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
+            await asyncio.sleep(wait_seconds)
         except Exception as e:
-            logger.exception(f"❌ Fatal error: {e}")
-            break
+            # Last-resort safety net: keep process alive and retry.
+            attempt += 1
+            err_text = _exception_chain_text(e)
+            wait_seconds = _discord_startup_reconnect_delay_seconds(attempt, err_text)
+            logger.exception("❌ Unexpected startup error (will retry): %s", e)
+            logger.warning("⏳ Reconnect attempt #%s in %ss", attempt, wait_seconds)
+            await asyncio.sleep(wait_seconds)
         finally:
             try:
                 await bot.close()
