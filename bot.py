@@ -12,6 +12,7 @@ except ImportError:
         print("Warning: audioop not found. Voice features may fail.")
 
 import asyncio
+import time
 import hashlib
 import json
 import logging
@@ -271,10 +272,21 @@ class AlbionBot(commands.Bot):
 
     async def on_resumed(self):
         """Discord gateway RESUME succeeded — same session, not a disconnect. This is normal."""
-        logger.info(
-            "✓ Gateway RESUMED — websocket session continued; slash commands should work. "
-            "If commands still fail, check for a second bot process using the same token."
-        )
+        now = time.time()
+        count = int(getattr(self, "_resume_count", 0)) + 1
+        self._resume_count = count
+        last_info_ts = float(getattr(self, "_resume_last_info_ts", 0.0))
+        interval_sec = 1800.0  # keep logs readable; frequent resume bursts are common on hosted networks
+
+        if (now - last_info_ts) >= interval_sec or count <= 2:
+            self._resume_last_info_ts = now
+            logger.info(
+                "✓ Gateway RESUMED — websocket session continued (resume_count=%s). "
+                "This is usually normal network jitter; commands keep working.",
+                count,
+            )
+        else:
+            logger.debug("Gateway RESUMED (resume_count=%s)", count)
 
     async def on_ready(self):
         """First ready: DB, permissions, slash sync, heartbeat task. Later ready: refresh presence + dashboard meta."""
