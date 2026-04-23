@@ -19,10 +19,21 @@ class EconomyCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def _guild_allowed(self, ctx: discord.ApplicationContext, *, use_guild2: bool = False) -> bool:
+        if not ctx.guild:
+            return False
+        target = int(self.bot.guild_id2 if use_guild2 else self.bot.guild_id)
+        if target <= 0:
+            return True
+        return int(ctx.guild.id) == target
+
     economy_group = discord.SlashCommandGroup("economy", "Economy operations")
 
     @economy_group.command(name="kpi", description="Show current economy KPIs")
     async def economy_kpi(self, ctx: discord.ApplicationContext):
+        if not self._guild_allowed(ctx, use_guild2=False):
+            await ctx.respond("❌ This command is available only on the main command server (GUILD_ID).", ephemeral=True)
+            return
         if not await self.bot.permissions.require_economy(ctx.author):
             await ctx.respond("❌ Economy access required.", ephemeral=True)
             return
@@ -64,6 +75,9 @@ class EconomyCommands(commands.Cog):
         amount: int,
         description: str,
     ):
+        if not self._guild_allowed(ctx, use_guild2=False):
+            await ctx.respond("❌ This command is available only on the main command server (GUILD_ID).", ephemeral=True)
+            return
         if not await self.bot.permissions.require_economy(ctx.author):
             await ctx.respond("❌ Economy access required.", ephemeral=True)
             return
@@ -112,6 +126,9 @@ class EconomyCommands(commands.Cog):
         screenshot_url: str,
         note: str = "",
     ):
+        if not self._guild_allowed(ctx, use_guild2=True):
+            await ctx.respond("❌ Regear ticket can be created only on the ticket server (GUILD_ID2).", ephemeral=True)
+            return
         if not await self.bot.permissions.require_member(ctx.author):
             await ctx.respond("❌ Member access required.", ephemeral=True)
             return
