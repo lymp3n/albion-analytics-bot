@@ -86,11 +86,30 @@ async def _send_role_infocard(
         event_id,
     )
     if not event:
+        logger.warning("infocard_skip: event not found (event_id=%s role=%s user=%s)", event_id, role_name, target_user_id)
         return False
 
     template_name = (event.get("template_name") or event.get("content_name") or "").strip()
+    template_dir = _resolve_special_template_dir(template_name)
+    if not template_dir:
+        logger.info(
+            "infocard_skip: no matching template folder (event_id=%s template=%r role=%r user=%s)",
+            event_id,
+            template_name,
+            role_name,
+            target_user_id,
+        )
+        return False
+
     card_path = _find_infocard_for_role(template_name, role_name)
     if not card_path:
+        logger.warning(
+            "infocard_skip: role card file missing (event_id=%s template_dir=%s role=%r user=%s)",
+            event_id,
+            template_dir,
+            role_name,
+            target_user_id,
+        )
         return False
 
     msg = (
@@ -102,16 +121,30 @@ async def _send_role_infocard(
         try:
             await interaction.followup.send(msg, file=discord.File(str(card_path)), ephemeral=True)
             return True
-        except Exception:
-            pass
+        except Exception as ex:
+            logger.warning(
+                "infocard_ephemeral_failed: event_id=%s role=%r user=%s err=%s",
+                event_id,
+                role_name,
+                target_user_id,
+                ex,
+            )
 
     try:
         user = bot.get_user(target_user_id) or await bot.fetch_user(target_user_id)
         if not user:
+            logger.warning("infocard_dm_failed: user lookup failed (event_id=%s role=%r user=%s)", event_id, role_name, target_user_id)
             return False
         await user.send(msg, file=discord.File(str(card_path)))
         return True
-    except Exception:
+    except Exception as ex:
+        logger.warning(
+            "infocard_dm_failed: event_id=%s role=%r user=%s err=%s",
+            event_id,
+            role_name,
+            target_user_id,
+            ex,
+        )
         return False
 
 
