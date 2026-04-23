@@ -1,6 +1,5 @@
 import re
 import os
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Union
 
@@ -19,10 +18,6 @@ _INFOCARD_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
 def _normalize_for_match(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().casefold())
-
-
-def _name_similarity(a: str, b: str) -> float:
-    return SequenceMatcher(None, _normalize_for_match(a), _normalize_for_match(b)).ratio()
 
 
 def _infocard_root_candidates() -> list[Path]:
@@ -45,11 +40,10 @@ def _infocard_root_candidates() -> list[Path]:
     return out
 
 
-def _resolve_special_template_dir(template_name: str, threshold: float = 0.9) -> Path | None:
+def _resolve_special_template_dir(template_name: str) -> Path | None:
     if not template_name:
         return None
-    best_dir: Path | None = None
-    best_score = 0.0
+    wanted = _normalize_for_match(template_name)
     for root in _infocard_root_candidates():
         try:
             if not root.is_dir():
@@ -57,14 +51,10 @@ def _resolve_special_template_dir(template_name: str, threshold: float = 0.9) ->
             for entry in root.iterdir():
                 if not entry.is_dir():
                     continue
-                score = _name_similarity(template_name, entry.name)
-                if score > best_score:
-                    best_score = score
-                    best_dir = entry
+                if _normalize_for_match(entry.name) == wanted:
+                    return entry
         except Exception:
             continue
-    if best_dir and best_score >= threshold:
-        return best_dir
     return None
 
 
@@ -73,67 +63,12 @@ def _find_infocard_for_role(template_name: str, role_name: str) -> Path | None:
     if not tpl_dir or not role_name:
         return None
 
-    # Prefer exact stem match (case-insensitive), then fuzzy role filename match.
+    # Strict role filename match inside matched template directory (case-insensitive stem).
     role_norm = _normalize_for_match(role_name)
     files = [p for p in tpl_dir.iterdir() if p.is_file() and p.suffix.lower() in _INFOCARD_EXTS]
     for p in files:
         if _normalize_for_match(p.stem) == role_norm:
             return p
-
-    best_file: Path | None = None
-    best_score = 0.0
-    for p in files:
-        score = _name_similarity(role_name, p.stem)
-        if score > best_score:
-            best_score = score
-            best_file = p
-    if best_file and best_score >= 0.9:
-        return best_file
-    return None
-
-
-def _find_infocard_for_role_in_dir(card_dir: Path, role_name: str) -> Path | None:
-    if not card_dir or not role_name:
-        return None
-    files = [p for p in card_dir.iterdir() if p.is_file() and p.suffix.lower() in _INFOCARD_EXTS]
-    role_norm = _normalize_for_match(role_name)
-    for p in files:
-        if _normalize_for_match(p.stem) == role_norm:
-            return p
-    best_file: Path | None = None
-    best_score = 0.0
-    for p in files:
-        score = _name_similarity(role_name, p.stem)
-        if score > best_score:
-            best_score = score
-            best_file = p
-    if best_file and best_score >= 0.9:
-        return best_file
-    return None
-
-
-async def _resolve_legacy_flat_infocard_dir_for_event(bot, event_id: int) -> Path | None:
-    """Fallback for flat Infocards layout (files directly in root, no template subfolder)."""
-    role_rows = await bot.db.fetch("SELECT role_name FROM event_signups WHERE event_id = $1", event_id)
-    roles = sorted({_normalize_for_match(r.get("role_name") or "") for r in role_rows if r.get("role_name")})
-    if not roles:
-        return None
-
-    for root in _infocard_root_candidates():
-        try:
-            if not root.is_dir():
-                continue
-            flat_files = [p for p in root.iterdir() if p.is_file() and p.suffix.lower() in _INFOCARD_EXTS]
-            if len(flat_files) < 8:
-                continue
-            stems = {_normalize_for_match(p.stem) for p in flat_files}
-            matched = sum(1 for role in roles if role in stems)
-            ratio = matched / max(1, len(roles))
-            # Safety gate: only treat as "special" if most roster roles have cards in this flat root.
-            if matched >= 8 and ratio >= 0.6:
-                return root
-        except Exception:
-            continue
     return None
 
 
@@ -155,10 +90,6 @@ async def _send_role_infocard(
 
     template_name = (event.get("template_name") or event.get("content_name") or "").strip()
     card_path = _find_infocard_for_role(template_name, role_name)
-    if not card_path:
-        flat_dir = await _resolve_legacy_flat_infocard_dir_for_event(bot, event_id)
-        if flat_dir:
-            card_path = _find_infocard_for_role_in_dir(flat_dir, role_name)
     if not card_path:
         return False
 
