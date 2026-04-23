@@ -3,6 +3,7 @@ from typing import Optional, Set, Tuple
 import discord
 
 from utils.role_config import effective_sets_from_override_row, sets_from_assignment_rows
+from utils.role_config import parse_discord_snowflake_string
 
 # Additional role IDs requested for another server (defaults when DB has no override).
 EXTRA_MEMBER_ROLE_IDS = {
@@ -118,7 +119,17 @@ class Permissions:
         if not g:
             return False
         assigns = await self.bot.db.fetch_guild_role_assignments(int(g["id"]))
-        econ_ids = {int(str(r["discord_role_id"]).strip()) for r in assigns if str(r.get("tier") or "").strip().lower() == "economy"}
+        econ_ids = set()
+        for r in assigns:
+            if str(r.get("tier") or "").strip().lower() != "economy":
+                continue
+            rid_str = parse_discord_snowflake_string(r.get("discord_role_id"))
+            if not rid_str:
+                continue
+            try:
+                econ_ids.add(int(rid_str))
+            except ValueError:
+                continue
         if not econ_ids:
             return False
         return self.has_any_role_id(member, econ_ids)

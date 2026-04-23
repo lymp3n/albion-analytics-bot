@@ -397,7 +397,16 @@ class SlotSelectView(ui.View):
             return await interaction.followup.send("❌ This slot is already taken!", ephemeral=True)
 
         await self.bot.db.execute(
-            "UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3",
+            """
+            UPDATE event_signups
+            SET player_id = CASE
+                WHEN slot_number = $3 THEN $1
+                WHEN player_id = $1 THEN NULL
+                ELSE player_id
+            END
+            WHERE event_id = $2
+              AND (slot_number = $3 OR player_id = $1)
+            """,
             self.player_id,
             self.event_id,
             slot_num,
@@ -467,12 +476,16 @@ class ManageAddModal(ui.Modal):
             return await interaction.followup.send("❌ Slot does not exist. Use Add Extra for new slots.", ephemeral=True)
 
         await self.bot.db.execute(
-            "UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id = $2",
-            self.event_id,
-            player["id"],
-        )
-        await self.bot.db.execute(
-            "UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3",
+            """
+            UPDATE event_signups
+            SET player_id = CASE
+                WHEN slot_number = $3 THEN $1
+                WHEN player_id = $1 THEN NULL
+                ELSE player_id
+            END
+            WHERE event_id = $2
+              AND (slot_number = $3 OR player_id = $1)
+            """,
             player["id"],
             self.event_id,
             slot,
@@ -951,9 +964,17 @@ class EventCommands(commands.Cog):
         if not player:
             return await ctx.followup.send("❌ Failed to create/get player profile.", ephemeral=True)
 
-        await self.bot.db.execute("UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id = $2", event_id, player["id"])
         await self.bot.db.execute(
-            "UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3",
+            """
+            UPDATE event_signups
+            SET player_id = CASE
+                WHEN slot_number = $3 THEN $1
+                WHEN player_id = $1 THEN NULL
+                ELSE player_id
+            END
+            WHERE event_id = $2
+              AND (slot_number = $3 OR player_id = $1)
+            """,
             player["id"],
             event_id,
             slot,
@@ -1029,9 +1050,23 @@ class EventCommands(commands.Cog):
         if not s1 or not s2:
             return await ctx.followup.send("❌ Both users must already be in this event.", ephemeral=True)
 
-        await self.bot.db.execute("UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id IN ($2, $3)", event_id, p1["id"], p2["id"])
-        await self.bot.db.execute("UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3", p1["id"], event_id, s2["slot_number"])
-        await self.bot.db.execute("UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3", p2["id"], event_id, s1["slot_number"])
+        await self.bot.db.execute(
+            """
+            UPDATE event_signups
+            SET player_id = CASE
+                WHEN slot_number = $2 THEN $4
+                WHEN slot_number = $3 THEN $5
+                ELSE player_id
+            END
+            WHERE event_id = $1
+              AND slot_number IN ($2, $3)
+            """,
+            event_id,
+            s1["slot_number"],
+            s2["slot_number"],
+            p2["id"],
+            p1["id"],
+        )
         new_role_for_a = await self.bot.db.fetchrow(
             "SELECT role_name FROM event_signups WHERE event_id = $1 AND slot_number = $2",
             event_id,

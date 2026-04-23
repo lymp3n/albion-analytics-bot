@@ -18,6 +18,14 @@ def _since(days: int) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _safe_snowflake_sort_key(raw: object) -> tuple:
+    s = str(raw or "").strip()
+    try:
+        return (0, int(s), s)
+    except (TypeError, ValueError):
+        return (1, 0, s)
+
+
 def ensure_guilds_dashboard_columns(conn, backend: str) -> None:
     cur = conn.cursor()
     try:
@@ -250,7 +258,7 @@ def list_guild_roles_dashboard(conn, backend: str) -> List[dict]:
                 row["discord_id"] = str(row["discord_id"])
         row["assignments"] = sorted(
             by_guild.get(gid, []),
-            key=lambda x: (x["tier"], int(x["discord_role_id"])),
+            key=lambda x: (x["tier"],) + _safe_snowflake_sort_key(x["discord_role_id"]),
         )
         row["legacy_override"] = ov_by.get(gid)
         row["has_explicit_assignments"] = len(row["assignments"]) > 0

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from difflib import SequenceMatcher
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -98,6 +99,52 @@ def ensure_economy_schema(conn, backend: str) -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_audit_log (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                mutation_type TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                actor TEXT,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_import_discrepancies (
+                id SERIAL PRIMARY KEY,
+                import_id INTEGER REFERENCES econ_game_log_imports(id) ON DELETE CASCADE,
+                row_ref TEXT,
+                raw_name TEXT,
+                matched_name TEXT,
+                expected_amount BIGINT,
+                actual_amount BIGINT,
+                tolerance BIGINT,
+                score NUMERIC(5,4),
+                status TEXT DEFAULT 'open',
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_alerts (
+                id SERIAL PRIMARY KEY,
+                alert_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                message TEXT NOT NULL,
+                threshold_value BIGINT,
+                current_value BIGINT,
+                status TEXT DEFAULT 'open',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TIMESTAMP
+            )
+            """
+        )
     else:
         cur.execute(
             """
@@ -179,6 +226,53 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 rows_count INTEGER NOT NULL,
                 summary_json TEXT NOT NULL,
                 imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                mutation_type TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                actor TEXT,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_import_discrepancies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                import_id INTEGER,
+                row_ref TEXT,
+                raw_name TEXT,
+                matched_name TEXT,
+                expected_amount INTEGER,
+                actual_amount INTEGER,
+                tolerance INTEGER,
+                score REAL,
+                status TEXT DEFAULT 'open',
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (import_id) REFERENCES econ_game_log_imports(id) ON DELETE CASCADE
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                message TEXT NOT NULL,
+                threshold_value INTEGER,
+                current_value INTEGER,
+                status TEXT DEFAULT 'open',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TIMESTAMP
             )
             """
         )
@@ -286,6 +380,27 @@ def _insert_line(conn, backend: str, entry_id: int, account_code: str, side: str
         )
 
 
+def _log_audit(conn, backend: str, *, mutation_type: str, entity_type: str, entity_id: str, actor: str, payload: dict) -> None:
+    data = json.dumps(payload or {}, default=str)
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            INSERT INTO econ_audit_log (mutation_type, entity_type, entity_id, actor, payload_json)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (mutation_type, entity_type, str(entity_id or ""), actor or "", data),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO econ_audit_log (mutation_type, entity_type, entity_id, actor, payload_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (mutation_type, entity_type, str(entity_id or ""), actor or "", data),
+        )
+
+
 def _validate_double_entry(lines: List[Tuple[str, str, int]]) -> None:
     debit = sum(int(a) for _, side, a in lines if side == "debit")
     credit = sum(int(a) for _, side, a in lines if side == "credit")
@@ -320,6 +435,15 @@ def create_routed_operation(
     _validate_double_entry(lines)
     for acc, side, a in lines:
         _insert_line(conn, backend, entry_id, acc, side, a)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="create_routed_operation",
+        entity_type="journal_entry",
+        entity_id=str(entry_id),
+        actor=actor,
+        payload={"category": category, "amount": amount, "source": source, "status": status},
+    )
     conn.commit()
     return {"entry_id": entry_id, "status": status, "category": category, "amount": amount}
 
@@ -383,6 +507,15 @@ def upsert_task(conn, backend: str, *, task_id: Optional[int], title: str, descr
                 """,
                 (title.strip(), description.strip(), reward_amount, 1 if active else 0, int(task_id)),
             )
+        _log_audit(
+            conn,
+            backend,
+            mutation_type="update_task",
+            entity_type="guild_bonus_task",
+            entity_id=str(int(task_id)),
+            actor="dashboard_admin",
+            payload={"title": title.strip(), "reward_amount": reward_amount, "active": bool(active)},
+        )
         conn.commit()
         return {"id": int(task_id), "updated": True}
 
@@ -405,6 +538,15 @@ def upsert_task(conn, backend: str, *, task_id: Optional[int], title: str, descr
             (title.strip(), description.strip(), reward_amount, 1 if active else 0),
         )
         new_id = int(cur.lastrowid)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="create_task",
+        entity_type="guild_bonus_task",
+        entity_id=str(new_id),
+        actor="dashboard_admin",
+        payload={"title": title.strip(), "reward_amount": reward_amount, "active": bool(active)},
+    )
     conn.commit()
     return {"id": new_id, "created": True}
 
@@ -415,6 +557,16 @@ def delete_task(conn, backend: str, task_id: int) -> int:
         cur.execute("DELETE FROM econ_guild_bonus_tasks WHERE id=%s", (int(task_id),))
     else:
         cur.execute("DELETE FROM econ_guild_bonus_tasks WHERE id=?", (int(task_id),))
+    if int(cur.rowcount or 0) > 0:
+        _log_audit(
+            conn,
+            backend,
+            mutation_type="delete_task",
+            entity_type="guild_bonus_task",
+            entity_id=str(int(task_id)),
+            actor="dashboard_admin",
+            payload={"task_id": int(task_id)},
+        )
     conn.commit()
     return int(cur.rowcount or 0)
 
@@ -437,6 +589,8 @@ def award_task_completion(
     )
     if not task:
         raise ValueError("Task not found")
+    if not bool(task.get("active")):
+        raise ValueError("Task is inactive")
     if int(quantity) <= 0:
         raise ValueError("quantity must be positive")
     if not player_nickname.strip():
@@ -479,6 +633,15 @@ def award_task_completion(
     _validate_double_entry(lines)
     for acc, side, amt in lines:
         _insert_line(conn, backend, entry_id, acc, side, amt)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="award_task_completion",
+        entity_type="guild_bonus_award",
+        entity_id=str(award_id),
+        actor=approved_by.strip(),
+        payload={"task_id": int(task_id), "entry_id": entry_id, "reward_total": reward_total},
+    )
     conn.commit()
     return {"award_id": award_id, "entry_id": entry_id, "reward_total": reward_total}
 
@@ -551,6 +714,20 @@ def upsert_routing_rule(
             """,
             (category.strip(), debit_account.strip(), credit_account.strip(), 1 if require_approval else 0, tag.strip() or None),
         )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="upsert_routing_rule",
+        entity_type="routing_rule",
+        entity_id=category.strip(),
+        actor="dashboard_admin",
+        payload={
+            "debit_account": debit_account.strip(),
+            "credit_account": credit_account.strip(),
+            "require_approval": bool(require_approval),
+            "tag": tag.strip() or "",
+        },
+    )
     conn.commit()
 
 
@@ -605,6 +782,18 @@ def import_game_log_csv(conn, backend: str, *, log_type: str, content: str) -> d
         import_id = int(cur.lastrowid)
     conn.commit()
     summary["import_id"] = import_id
+    discrepancies = _build_import_discrepancies(conn, backend, import_id=import_id, rows=rows)
+    summary["discrepancies"] = discrepancies
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="import_game_log_csv",
+        entity_type="game_log_import",
+        entity_id=str(import_id),
+        actor="dashboard_admin",
+        payload=summary,
+    )
+    conn.commit()
     return summary
 
 
@@ -639,6 +828,10 @@ def economy_kpis(conn, backend: str) -> dict:
     total_awards = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_guild_bonus_awards", ())
     pending = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_journal_entries WHERE status='pending'", ())
     rewards_sum = fetch_one(conn, backend, "SELECT COALESCE(SUM(reward_total),0) AS s FROM econ_guild_bonus_awards", ())
+    unresolved_discrepancies = fetch_one(
+        conn, backend, "SELECT COUNT(*) AS c FROM econ_import_discrepancies WHERE status='open'", ()
+    )
+    open_alerts = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_alerts WHERE status='open'", ())
     return {
         "accounts_count": len(accounts),
         "entries_count": int((total_entries or {}).get("c") or 0),
@@ -646,6 +839,467 @@ def economy_kpis(conn, backend: str) -> dict:
         "awards_count": int((total_awards or {}).get("c") or 0),
         "pending_entries": int((pending or {}).get("c") or 0),
         "awards_total": int((rewards_sum or {}).get("s") or 0),
+        "unresolved_discrepancies": int((unresolved_discrepancies or {}).get("c") or 0),
+        "open_alerts": int((open_alerts or {}).get("c") or 0),
+    }
+
+
+def list_pending_approvals(conn, backend: str, limit: int = 100) -> List[dict]:
+    lim = max(1, min(int(limit), 500))
+    return fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, created_at, category, amount, description, actor, source, status
+        FROM econ_journal_entries
+        WHERE status = 'pending'
+        ORDER BY id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+
+
+def review_pending_entry(conn, backend: str, *, entry_id: int, action: str, reviewed_by: str, note: str = "") -> dict:
+    action_norm = str(action or "").strip().lower()
+    if action_norm not in ("approve", "reject"):
+        raise ValueError("action must be approve or reject")
+    entry = fetch_one(
+        conn,
+        backend,
+        "SELECT id, status, category, amount FROM econ_journal_entries WHERE id=$1",
+        (int(entry_id),),
+    )
+    if not entry:
+        raise ValueError("Entry not found")
+    if str(entry.get("status") or "") != "pending":
+        raise ValueError("Entry is not pending")
+    new_status = "posted" if action_norm == "approve" else "rejected"
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute("UPDATE econ_journal_entries SET status=%s WHERE id=%s", (new_status, int(entry_id)))
+    else:
+        cur.execute("UPDATE econ_journal_entries SET status=? WHERE id=?", (new_status, int(entry_id)))
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="review_pending_entry",
+        entity_type="journal_entry",
+        entity_id=str(int(entry_id)),
+        actor=reviewed_by.strip() or "dashboard_admin",
+        payload={"action": action_norm, "new_status": new_status, "note": note.strip()},
+    )
+    conn.commit()
+    return {"entry_id": int(entry_id), "status": new_status}
+
+
+def list_audit_trail(conn, backend: str, limit: int = 250) -> List[dict]:
+    lim = max(1, min(int(limit), 1000))
+    rows = fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, created_at, mutation_type, entity_type, entity_id, actor, payload_json
+        FROM econ_audit_log
+        ORDER BY id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+    out: List[dict] = []
+    for row in rows:
+        rec = dict(row)
+        try:
+            rec["payload"] = json.loads(rec.get("payload_json") or "{}")
+        except Exception:
+            rec["payload"] = {}
+        out.append(rec)
+    return out
+
+
+def _guess_name(row: dict) -> str:
+    for key in ("Player", "Name", "Nickname", "Character", "player", "name", "nickname"):
+        if key in row and str(row.get(key) or "").strip():
+            return str(row.get(key)).strip()
+    return ""
+
+
+def _to_int_amount(val: object) -> int:
+    try:
+        return int(float(str(val or "0").strip().replace(",", "")))
+    except ValueError:
+        return 0
+
+
+def _build_import_discrepancies(conn, backend: str, *, import_id: int, rows: List[dict]) -> int:
+    known = fetch_all(
+        conn,
+        backend,
+        """
+        SELECT player_nickname, SUM(reward_total) AS total
+        FROM econ_guild_bonus_awards
+        GROUP BY player_nickname
+        """,
+        (),
+    )
+    known_names = [(str(r.get("player_nickname") or "").strip(), int(r.get("total") or 0)) for r in known if r.get("player_nickname")]
+    cur = conn.cursor()
+    count = 0
+    for idx, row in enumerate(rows, start=1):
+        raw_name = _guess_name(row)
+        actual = abs(_to_int_amount(row.get("Amount")))
+        expected_hint = _to_int_amount(row.get("ExpectedAmount"))
+        best_name = ""
+        best_score = 0.0
+        best_expected = expected_hint
+        if raw_name and known_names:
+            for candidate_name, candidate_total in known_names:
+                score = SequenceMatcher(None, raw_name.lower(), candidate_name.lower()).ratio()
+                if score > best_score:
+                    best_score = score
+                    best_name = candidate_name
+                    best_expected = expected_hint or candidate_total
+        tolerance = max(5000, int(abs(best_expected) * 0.05)) if best_expected else 5000
+        unmatched = bool(raw_name and not best_name)
+        low_confidence = bool(raw_name and best_name and best_score < 0.75)
+        amount_mismatch = bool(best_expected and abs(actual - best_expected) > tolerance)
+        if unmatched or low_confidence or amount_mismatch:
+            note = "unmatched record" if unmatched else ("low fuzzy confidence" if low_confidence else "amount outside tolerance")
+            if backend == "postgres":
+                cur.execute(
+                    """
+                    INSERT INTO econ_import_discrepancies
+                    (import_id, row_ref, raw_name, matched_name, expected_amount, actual_amount, tolerance, score, status, note)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'open', %s)
+                    """,
+                    (
+                        int(import_id),
+                        f"row_{idx}",
+                        raw_name or None,
+                        best_name or None,
+                        int(best_expected or 0),
+                        int(actual or 0),
+                        int(tolerance),
+                        float(best_score),
+                        note,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO econ_import_discrepancies
+                    (import_id, row_ref, raw_name, matched_name, expected_amount, actual_amount, tolerance, score, status, note)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
+                    """,
+                    (
+                        int(import_id),
+                        f"row_{idx}",
+                        raw_name or None,
+                        best_name or None,
+                        int(best_expected or 0),
+                        int(actual or 0),
+                        int(tolerance),
+                        float(best_score),
+                        note,
+                    ),
+                )
+            count += 1
+    return count
+
+
+def list_discrepancy_queue(conn, backend: str, limit: int = 200) -> List[dict]:
+    lim = max(1, min(int(limit), 500))
+    return fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, import_id, row_ref, raw_name, matched_name, expected_amount, actual_amount, tolerance, score, status, note, created_at
+        FROM econ_import_discrepancies
+        ORDER BY id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+
+
+def resolve_discrepancy(conn, backend: str, discrepancy_id: int, resolved_by: str, note: str = "") -> int:
+    did = int(discrepancy_id)
+    if did < 1:
+        raise ValueError("Invalid discrepancy id")
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            "UPDATE econ_import_discrepancies SET status='resolved', note=%s WHERE id=%s",
+            ((note or "").strip()[:500] or "resolved manually", did),
+        )
+    else:
+        cur.execute(
+            "UPDATE econ_import_discrepancies SET status='resolved', note=? WHERE id=?",
+            ((note or "").strip()[:500] or "resolved manually", did),
+        )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="resolve_discrepancy",
+        entity_type="import_discrepancy",
+        entity_id=str(did),
+        actor=resolved_by or "dashboard_admin",
+        payload={"note": (note or "").strip()[:500]},
+    )
+    conn.commit()
+    return int(cur.rowcount or 0)
+
+
+def list_alerts(conn, backend: str, limit: int = 100) -> List[dict]:
+    lim = max(1, min(int(limit), 500))
+    return fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, alert_type, severity, message, threshold_value, current_value, status, created_at, resolved_at
+        FROM econ_alerts
+        ORDER BY id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+
+
+def acknowledge_alert(conn, backend: str, alert_id: int, acknowledged_by: str, note: str = "") -> int:
+    aid = int(alert_id)
+    if aid < 1:
+        raise ValueError("Invalid alert id")
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            "UPDATE econ_alerts SET status='resolved', resolved_at=CURRENT_TIMESTAMP, message=message || %s WHERE id=%s",
+            (f" [ack:{(note or '').strip()[:200]}]" if (note or "").strip() else "", aid),
+        )
+    else:
+        cur.execute(
+            "UPDATE econ_alerts SET status='resolved', resolved_at=CURRENT_TIMESTAMP, message=message || ? WHERE id=?",
+            (f" [ack:{(note or '').strip()[:200]}]" if (note or "").strip() else "", aid),
+        )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="ack_alert",
+        entity_type="alert",
+        entity_id=str(aid),
+        actor=acknowledged_by or "dashboard_admin",
+        payload={"note": (note or "").strip()[:200]},
+    )
+    conn.commit()
+    return int(cur.rowcount or 0)
+
+
+def _set_alert_state(
+    conn, backend: str, *, alert_type: str, severity: str, message: str, threshold_value: int, current_value: int, should_open: bool
+) -> None:
+    existing = fetch_one(
+        conn,
+        backend,
+        "SELECT id, status FROM econ_alerts WHERE alert_type=$1 AND message=$2 AND status='open' ORDER BY id DESC LIMIT 1",
+        (alert_type, message),
+    )
+    cur = conn.cursor()
+    if should_open and not existing:
+        if backend == "postgres":
+            cur.execute(
+                """
+                INSERT INTO econ_alerts (alert_type, severity, message, threshold_value, current_value, status)
+                VALUES (%s, %s, %s, %s, %s, 'open')
+                """,
+                (alert_type, severity, message, int(threshold_value), int(current_value)),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO econ_alerts (alert_type, severity, message, threshold_value, current_value, status)
+                VALUES (?, ?, ?, ?, ?, 'open')
+                """,
+                (alert_type, severity, message, int(threshold_value), int(current_value)),
+            )
+    if (not should_open) and existing:
+        if backend == "postgres":
+            cur.execute(
+                "UPDATE econ_alerts SET status='resolved', resolved_at=CURRENT_TIMESTAMP WHERE id=%s",
+                (int(existing["id"]),),
+            )
+        else:
+            cur.execute(
+                "UPDATE econ_alerts SET status='resolved', resolved_at=CURRENT_TIMESTAMP WHERE id=?",
+                (int(existing["id"]),),
+            )
+
+
+def run_alert_threshold_checks(conn, backend: str) -> dict:
+    balance = balance_snapshot(conn, backend)
+    cash = int(balance.get("cash_balance") or 0)
+    pnl = pnl_summary(conn, backend, days=30)
+    expense_30 = int(pnl.get("expense_total") or 0)
+    unmatched = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_import_discrepancies WHERE status='open'", ())
+    unmatched_count = int((unmatched or {}).get("c") or 0)
+
+    _set_alert_state(
+        conn,
+        backend,
+        alert_type="low_cash",
+        severity="high",
+        message="Cash balance below threshold",
+        threshold_value=2_000_000,
+        current_value=cash,
+        should_open=cash < 2_000_000,
+    )
+    _set_alert_state(
+        conn,
+        backend,
+        alert_type="high_expense",
+        severity="medium",
+        message="30-day expense above threshold",
+        threshold_value=25_000_000,
+        current_value=expense_30,
+        should_open=expense_30 > 25_000_000,
+    )
+    _set_alert_state(
+        conn,
+        backend,
+        alert_type="unmatched_records",
+        severity="medium",
+        message="Unmatched import records detected",
+        threshold_value=0,
+        current_value=unmatched_count,
+        should_open=unmatched_count > 0,
+    )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="run_alert_threshold_checks",
+        entity_type="alerts",
+        entity_id="threshold_check",
+        actor="dashboard_system",
+        payload={"cash_balance": cash, "expense_30d": expense_30, "unmatched_records": unmatched_count},
+    )
+    conn.commit()
+    return {"cash_balance": cash, "expense_30d": expense_30, "unmatched_records": unmatched_count}
+
+
+def balance_snapshot(conn, backend: str) -> dict:
+    rows = fetch_all(
+        conn,
+        backend,
+        """
+        SELECT a.code, a.name, a.kind,
+               COALESCE(SUM(CASE WHEN l.side='debit' THEN l.amount ELSE 0 END),0) AS debit_total,
+               COALESCE(SUM(CASE WHEN l.side='credit' THEN l.amount ELSE 0 END),0) AS credit_total
+        FROM econ_accounts a
+        LEFT JOIN econ_journal_lines l ON l.account_code = a.code
+        LEFT JOIN econ_journal_entries e ON e.id = l.entry_id AND e.status='posted'
+        GROUP BY a.code, a.name, a.kind
+        ORDER BY a.code
+        """,
+        (),
+    )
+    items: List[dict] = []
+    for r in rows:
+        debit_total = int(r.get("debit_total") or 0)
+        credit_total = int(r.get("credit_total") or 0)
+        kind = str(r.get("kind") or "")
+        balance = debit_total - credit_total if kind in ("asset", "expense") else credit_total - debit_total
+        rec = dict(r)
+        rec["balance"] = int(balance)
+        items.append(rec)
+    cash_balance = next((int(i.get("balance") or 0) for i in items if str(i.get("code")) == "1000"), 0)
+    return {"as_of_utc": _utc_now(), "cash_balance": cash_balance, "accounts": items}
+
+
+def pnl_summary(conn, backend: str, days: int = 30) -> dict:
+    ndays = max(1, min(int(days), 365))
+    if backend == "sqlite":
+        rows = fetch_all(
+            conn,
+            backend,
+            """
+            SELECT a.kind,
+                   COALESCE(SUM(CASE WHEN l.side='debit' THEN l.amount ELSE 0 END),0) AS debit_total,
+                   COALESCE(SUM(CASE WHEN l.side='credit' THEN l.amount ELSE 0 END),0) AS credit_total
+            FROM econ_journal_lines l
+            JOIN econ_journal_entries e ON e.id = l.entry_id
+            JOIN econ_accounts a ON a.code = l.account_code
+            WHERE e.status='posted' AND e.created_at >= datetime('now', '-' || $1 || ' day')
+            GROUP BY a.kind
+            """,
+            (ndays,),
+        )
+    else:
+        rows = fetch_all(
+            conn,
+            backend,
+            """
+            SELECT a.kind,
+                   COALESCE(SUM(CASE WHEN l.side='debit' THEN l.amount ELSE 0 END),0) AS debit_total,
+                   COALESCE(SUM(CASE WHEN l.side='credit' THEN l.amount ELSE 0 END),0) AS credit_total
+            FROM econ_journal_lines l
+            JOIN econ_journal_entries e ON e.id = l.entry_id
+            JOIN econ_accounts a ON a.code = l.account_code
+            WHERE e.status='posted' AND e.created_at >= (CURRENT_TIMESTAMP - ($1 * INTERVAL '1 day'))
+            GROUP BY a.kind
+            """,
+            (ndays,),
+        )
+    income_total = 0
+    expense_total = 0
+    for row in rows:
+        kind = str(row.get("kind") or "")
+        debit_total = int(row.get("debit_total") or 0)
+        credit_total = int(row.get("credit_total") or 0)
+        if kind == "income":
+            income_total += credit_total - debit_total
+        if kind == "expense":
+            expense_total += debit_total - credit_total
+    return {"days": ndays, "income_total": income_total, "expense_total": expense_total, "net_profit": income_total - expense_total}
+
+
+def cashflow_summary(conn, backend: str, days: int = 30) -> dict:
+    ndays = max(1, min(int(days), 365))
+    row = None
+    if backend == "postgres":
+        row = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COALESCE(SUM(CASE WHEN l.side='debit' THEN l.amount ELSE -l.amount END),0) AS net_cash
+            FROM econ_journal_lines l
+            JOIN econ_journal_entries e ON e.id = l.entry_id
+            WHERE l.account_code='1000' AND e.status='posted' AND e.created_at >= (CURRENT_TIMESTAMP - ($1 * INTERVAL '1 day'))
+            """,
+            (ndays,),
+        )
+    else:
+        row = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COALESCE(SUM(CASE WHEN l.side='debit' THEN l.amount ELSE -l.amount END),0) AS net_cash
+            FROM econ_journal_lines l
+            JOIN econ_journal_entries e ON e.id = l.entry_id
+            WHERE l.account_code='1000' AND e.status='posted' AND e.created_at >= datetime('now', '-' || $1 || ' day')
+            """,
+            (ndays,),
+        )
+    net_cash = int((row or {}).get("net_cash") or 0)
+    return {"days": ndays, "net_cash": net_cash, "avg_daily_cashflow": round(net_cash / float(ndays), 2)}
+
+
+def forecast_summary(conn, backend: str) -> dict:
+    cash_now = int(balance_snapshot(conn, backend).get("cash_balance") or 0)
+    cf7 = cashflow_summary(conn, backend, days=7)
+    cf30 = cashflow_summary(conn, backend, days=30)
+    return {
+        "cash_now": cash_now,
+        "forecast_7d": int(round(cash_now + (float(cf7.get("avg_daily_cashflow") or 0) * 7))),
+        "forecast_30d": int(round(cash_now + (float(cf30.get("avg_daily_cashflow") or 0) * 30))),
+        "basis": {"avg_daily_7d": cf7.get("avg_daily_cashflow"), "avg_daily_30d": cf30.get("avg_daily_cashflow")},
     }
 
 

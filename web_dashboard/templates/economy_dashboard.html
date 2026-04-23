@@ -131,6 +131,58 @@
         </table>
       </div>
     </section>
+
+    <section class="ds-panel">
+      <h2>Approval Workflow (High Value Ops)</h2>
+      <div class="ds-two-col">
+        <div>
+          <div class="ds-field"><label>Reviewed by</label><input id="review-by" value="dashboard_admin" /></div>
+          <div class="ds-field"><label>Review note</label><input id="review-note" placeholder="optional reason" /></div>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-pending-approvals">
+            <thead><tr><th>ID</th><th>Category</th><th>Amount</th><th>Actor</th><th>Description</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Alerts + Discrepancy Queue</h2>
+      <div class="ds-two-col">
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-alerts">
+            <thead><tr><th>ID</th><th>Type</th><th>Severity</th><th>Message</th><th>Current</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-discrepancies">
+            <thead><tr><th>ID</th><th>Import</th><th>Raw</th><th>Matched</th><th>Expected</th><th>Actual</th><th>Score</th><th>Note</th><th>Action</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Financial Reports + Forecast</h2>
+      <div class="ds-two-col">
+        <pre class="ds-json" id="reports-json">{}</pre>
+        <pre class="ds-json" id="forecast-json">{}</pre>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Audit Trail</h2>
+      <div class="ds-table-wrap ds-scroll-y">
+        <table class="ds-table" id="tbl-audit">
+          <thead><tr><th>ID</th><th>Time</th><th>Mutation</th><th>Entity</th><th>Actor</th><th>Payload</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -169,7 +221,9 @@
         `<div class="ds-kpi"><div class="v">${esc(k.pending_entries)}</div><div class="l">Pending</div></div>` +
         `<div class="ds-kpi"><div class="v">${esc(k.tasks_count)}</div><div class="l">Tasks</div></div>` +
         `<div class="ds-kpi"><div class="v">${esc(k.awards_count)}</div><div class="l">Task payouts</div></div>` +
-        `<div class="ds-kpi"><div class="v">${esc((k.awards_total || 0).toLocaleString())}</div><div class="l">Task payout total</div></div>`;
+        `<div class="ds-kpi"><div class="v">${esc((k.awards_total || 0).toLocaleString())}</div><div class="l">Task payout total</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc(k.unresolved_discrepancies || 0)}</div><div class="l">Unmatched records</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc(k.open_alerts || 0)}</div><div class="l">Open alerts</div></div>`;
 
       const tasks = out.tasks || [];
       $("#tbl-tasks tbody").innerHTML = tasks.map(t =>
@@ -205,6 +259,78 @@
         `<tr><td>${esc(e.id)}</td><td>${esc(e.created_at)}</td><td>${esc(e.category)}</td><td>${esc((e.amount || 0).toLocaleString())}</td>` +
         `<td>${esc(e.status)}</td><td>${esc(e.actor || "")}</td><td>${esc(e.description || "")}</td><td>${esc(e.debit_sum || 0)}</td><td>${esc(e.credit_sum || 0)}</td></tr>`
       ).join("") || '<tr><td colspan="9">No journal entries</td></tr>';
+
+      const pending = out.pending_approvals || [];
+      $("#tbl-pending-approvals tbody").innerHTML = pending.map(p =>
+        `<tr><td>${esc(p.id)}</td><td>${esc(p.category)}</td><td>${esc((p.amount || 0).toLocaleString())}</td><td>${esc(p.actor || "")}</td><td>${esc(p.description || "")}</td>` +
+        `<td><button class="ds-btn ds-btn-primary btn-approve" data-id="${esc(p.id)}">Approve</button> <button class="ds-btn ds-btn-ghost btn-reject" data-id="${esc(p.id)}">Reject</button></td></tr>`
+      ).join("") || '<tr><td colspan="6">No pending entries</td></tr>';
+      document.querySelectorAll(".btn-approve").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const out = await post("/dashboard/api/economy/review-entry", {
+            entry_id: parseInt(btn.getAttribute("data-id"), 10),
+            action: "approve",
+            reviewed_by: $("#review-by").value || "dashboard_admin",
+            note: $("#review-note").value || "",
+          });
+          if (!out.ok) return showErr(out.error || "Approve failed");
+          await load();
+        });
+      });
+      document.querySelectorAll(".btn-reject").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const out = await post("/dashboard/api/economy/review-entry", {
+            entry_id: parseInt(btn.getAttribute("data-id"), 10),
+            action: "reject",
+            reviewed_by: $("#review-by").value || "dashboard_admin",
+            note: $("#review-note").value || "",
+          });
+          if (!out.ok) return showErr(out.error || "Reject failed");
+          await load();
+        });
+      });
+
+      const alerts = out.alerts || [];
+      $("#tbl-alerts tbody").innerHTML = alerts.map(a =>
+        `<tr><td>${esc(a.id)}</td><td>${esc(a.alert_type)}</td><td>${esc(a.severity)}</td><td>${esc(a.message)}</td><td>${esc(a.current_value || 0)}</td><td>${esc(a.status)}</td>` +
+        `<td>${a.status === "open" ? `<button class="ds-btn ds-btn-ghost btn-alert-ack" data-id="${esc(a.id)}">Acknowledge</button>` : "—"}</td></tr>`
+      ).join("") || '<tr><td colspan="7">No alerts</td></tr>';
+
+      const discrepancies = out.discrepancies || [];
+      $("#tbl-discrepancies tbody").innerHTML = discrepancies.map(d =>
+        `<tr><td>${esc(d.id)}</td><td>${esc(d.import_id)}</td><td>${esc(d.raw_name || "")}</td><td>${esc(d.matched_name || "—")}</td><td>${esc(d.expected_amount || 0)}</td><td>${esc(d.actual_amount || 0)}</td><td>${esc(Number(d.score || 0).toFixed(2))}</td><td>${esc(d.note || "")}</td>` +
+        `<td>${d.status === "open" ? `<button class="ds-btn ds-btn-ghost btn-disc-resolve" data-id="${esc(d.id)}">Resolve</button>` : "—"}</td></tr>`
+      ).join("") || '<tr><td colspan="9">No discrepancies</td></tr>';
+      document.querySelectorAll(".btn-alert-ack").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const out = await post("/dashboard/api/economy/alert/ack", {
+            id: parseInt(btn.getAttribute("data-id"), 10),
+            acknowledged_by: $("#review-by").value || "dashboard_admin",
+            note: $("#review-note").value || "",
+          });
+          if (!out.ok) return showErr(out.error || "Alert acknowledge failed");
+          await load();
+        });
+      });
+      document.querySelectorAll(".btn-disc-resolve").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const out = await post("/dashboard/api/economy/discrepancy/resolve", {
+            id: parseInt(btn.getAttribute("data-id"), 10),
+            resolved_by: $("#review-by").value || "dashboard_admin",
+            note: $("#review-note").value || "",
+          });
+          if (!out.ok) return showErr(out.error || "Discrepancy resolve failed");
+          await load();
+        });
+      });
+
+      $("#reports-json").textContent = JSON.stringify(out.reports || {}, null, 2);
+      $("#forecast-json").textContent = JSON.stringify(out.forecast || {}, null, 2);
+
+      const audit = out.audit_trail || [];
+      $("#tbl-audit tbody").innerHTML = audit.map(a =>
+        `<tr><td>${esc(a.id)}</td><td>${esc(a.created_at)}</td><td>${esc(a.mutation_type)}</td><td>${esc((a.entity_type || "") + ":" + (a.entity_id || ""))}</td><td>${esc(a.actor || "")}</td><td>${esc(JSON.stringify(a.payload || {}))}</td></tr>`
+      ).join("") || '<tr><td colspan="6">No audit records</td></tr>';
     }
 
     $("#btn-refresh").addEventListener("click", load);

@@ -41,16 +41,28 @@ from web_dashboard.discord_roles_client import fetch_discord_guild_roles
 from web_dashboard.economy_db_sync import get_economy_sync_connection
 from web_dashboard.economy_service import (
     award_task_completion,
+    balance_snapshot,
+    cashflow_summary,
     create_routed_operation,
     economy_kpis,
     ensure_economy_schema,
     fetch_market_price,
+    forecast_summary,
     import_game_log_csv,
+    list_alerts,
+    list_audit_trail,
     list_bonus_awards,
+    list_discrepancy_queue,
+    list_pending_approvals,
     list_game_log_imports,
     list_recent_entries,
     list_routing_rules,
     list_tasks,
+    resolve_discrepancy,
+    acknowledge_alert,
+    pnl_summary,
+    review_pending_entry,
+    run_alert_threshold_checks,
     upsert_routing_rule,
     upsert_task,
     delete_task,
@@ -520,6 +532,7 @@ def register_dashboard(app: Flask) -> None:
         try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
+                run_alert_threshold_checks(conn, backend)
                 payload = {
                     "ok": True,
                     "kpis": economy_kpis(conn, backend),
@@ -528,6 +541,16 @@ def register_dashboard(app: Flask) -> None:
                     "entries": list_recent_entries(conn, backend, 160),
                     "routing_rules": list_routing_rules(conn, backend),
                     "imports": list_game_log_imports(conn, backend, 40),
+                    "pending_approvals": list_pending_approvals(conn, backend, 120),
+                    "audit_trail": list_audit_trail(conn, backend, 180),
+                    "discrepancies": list_discrepancy_queue(conn, backend, 180),
+                    "alerts": list_alerts(conn, backend, 100),
+                    "reports": {
+                        "balance_snapshot": balance_snapshot(conn, backend),
+                        "pnl_summary": pnl_summary(conn, backend, 30),
+                        "cashflow_summary": cashflow_summary(conn, backend, 30),
+                    },
+                    "forecast": forecast_summary(conn, backend),
                 }
         except Exception as e:
             return app.response_class(
@@ -628,6 +651,73 @@ def register_dashboard(app: Flask) -> None:
             )
         return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
 
+    @app.route("/dashboard/api/economy/review-entry", methods=["POST"])
+    @login_required
+    def dashboard_economy_review_entry():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = review_pending_entry(
+                    conn,
+                    backend,
+                    entry_id=int(body.get("entry_id") or 0),
+                    action=str(body.get("action") or "").strip().lower(),
+                    reviewed_by=str(body.get("reviewed_by") or "dashboard_admin").strip(),
+                    note=str(body.get("note") or "").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/discrepancy/resolve", methods=["POST"])
+    @login_required
+    def dashboard_economy_resolve_discrepancy():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                updated = resolve_discrepancy(
+                    conn,
+                    backend,
+                    discrepancy_id=int(body.get("id") or 0),
+                    resolved_by=str(body.get("resolved_by") or "dashboard_admin").strip(),
+                    note=str(body.get("note") or "").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "updated": updated}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/alert/ack", methods=["POST"])
+    @login_required
+    def dashboard_economy_ack_alert():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                updated = acknowledge_alert(
+                    conn,
+                    backend,
+                    alert_id=int(body.get("id") or 0),
+                    acknowledged_by=str(body.get("acknowledged_by") or "dashboard_admin").strip(),
+                    note=str(body.get("note") or "").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "updated": updated}, default=str), mimetype="application/json")
+
     @app.route("/dashboard/api/economy/routing-rule", methods=["POST"])
     @login_required
     def dashboard_economy_routing_rule():
@@ -686,3 +776,29 @@ def register_dashboard(app: Flask) -> None:
             status=status,
             mimetype="application/json",
         )
+
+    @app.route("/dashboard/api/economy/reports", methods=["GET"])
+    @login_required
+    def dashboard_economy_reports():
+        try:
+            days = int(request.args.get("days", 30))
+        except ValueError:
+            days = 30
+        days = max(1, min(days, 365))
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = {
+                    "ok": True,
+                    "balance_snapshot": balance_snapshot(conn, backend),
+                    "pnl_summary": pnl_summary(conn, backend, days),
+                    "cashflow_summary": cashflow_summary(conn, backend, days),
+                    "forecast": forecast_summary(conn, backend),
+                }
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps(out, default=str), mimetype="application/json")

@@ -304,6 +304,16 @@ class Database:
                 FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
             )
         """)
+        # Integrity for roster operations under reconnect/race conditions.
+        await self.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_event_signups_unique_slot ON event_signups(event_id, slot_number)"
+        )
+        try:
+            await self.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_event_signups_unique_player ON event_signups(event_id, player_id) WHERE player_id IS NOT NULL"
+            )
+        except Exception:
+            pass
         
         # Per-guild Discord role overrides (dashboard); NULL/blank column = inherit config.yaml + extras
         await self.execute(f"""
@@ -345,6 +355,9 @@ class Database:
         await self.execute("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_sessions_player_date ON sessions(player_id, session_date)")
         await self.execute("CREATE INDEX IF NOT EXISTS idx_events_message ON events(discord_message_id)")
+        await self.execute("CREATE INDEX IF NOT EXISTS idx_events_status_created_guild ON events(status, created_at, guild_id)")
+        await self.execute("CREATE INDEX IF NOT EXISTS idx_event_signups_event_player ON event_signups(event_id, player_id)")
+        await self.execute("CREATE INDEX IF NOT EXISTS idx_event_signups_player_event ON event_signups(player_id, event_id)")
         
         if self.is_sqlite:
             await self.execute("""
