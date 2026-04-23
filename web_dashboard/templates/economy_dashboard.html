@@ -31,8 +31,18 @@
         .badge { position:absolute; top:-4px; right:-4px; background:var(--neon-magenta); color:#fff; font-size:10px; font-weight:700; padding:2px 5px; border-radius:10px; box-shadow:0 0 10px var(--neon-magenta); }
         .avatar { width:40px; height:40px; border:1px solid rgba(0,245,255,0.3); border-radius:50%; background:linear-gradient(135deg,var(--neon-purple),var(--neon-magenta)); display:flex; align-items:center; justify-content:center; cursor:pointer; }
         .error { display:none; margin:0 0 16px; padding:10px 12px; border-radius:8px; border:1px solid rgba(239,68,68,0.6); background:rgba(239,68,68,0.15); color:#fecaca; font-size:13px; }
-        .filters { background:var(--bg-card); backdrop-filter:blur(10px); border:1px solid rgba(0,245,255,0.2); border-radius:12px; padding:16px; margin-bottom:24px; }
-        .filters-grid { display:grid; grid-template-columns:repeat(6,minmax(120px,1fr)); gap:12px; }
+        .dashboard-layout { display:grid; grid-template-columns: 320px 1fr; gap:16px; margin-bottom:16px; align-items:start; }
+        .filters-toggle { margin-bottom:10px; width: auto; max-width: 220px; padding: 8px 12px; }
+        .filters {
+            background:var(--bg-card); backdrop-filter:blur(10px); border:1px solid rgba(0,245,255,0.2);
+            border-radius:12px; padding:14px; margin-bottom:0;
+        }
+        .filters.is-collapsed { display:none; }
+        .filters-grid { display:flex; flex-direction:column; gap:10px; }
+        .filters-actions { display:flex; gap:8px; margin-top:6px; }
+        .filters-actions .btn { flex: 0 0 auto; width: auto; min-width: 86px; padding: 8px 10px; }
+        .compact-main { display:flex; flex-direction:column; gap:16px; min-width:0; }
+        .overview-grid { display:grid; grid-template-columns:repeat(2,minmax(200px,1fr)); gap:12px; }
         .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:24px; }
         .kpi-card { background:var(--bg-card); backdrop-filter:blur(10px); border:1px solid rgba(0,245,255,0.2); border-radius:12px; padding:20px; box-shadow:0 0 20px rgba(0,245,255,0.1); transition:all .3s ease; }
         .kpi-card:hover { transform:translateY(-2px); box-shadow:0 4px 30px rgba(0,245,255,0.2); }
@@ -41,13 +51,17 @@
         .kpi-value.cyan{ color:var(--neon-cyan); text-shadow:0 0 20px rgba(0,245,255,.5); } .kpi-value.magenta{ color:var(--neon-magenta); text-shadow:0 0 20px rgba(255,0,170,.5); }
         .kpi-delta { font-size:12px; display:flex; align-items:center; gap:4px; color:var(--text-secondary); }
         .kpi-delta.positive{ color:var(--success);} .kpi-delta.negative{ color:var(--neon-magenta);}
-        .main-grid { display:grid; grid-template-columns:280px 1fr 350px; gap:24px; margin-bottom:24px; align-items:start; }
+        .main-grid { display:grid; grid-template-columns:1fr 360px; gap:16px; margin-bottom:16px; align-items:start; }
         .quick-actions,.chart-container,.modal-preview,.table-container { background:var(--bg-card); backdrop-filter:blur(10px); border:1px solid rgba(0,245,255,0.2); border-radius:12px; padding:20px; }
         .section-title { font-size:14px; font-weight:600; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
         .action-btn { width:100%; padding:12px 16px; background:transparent; border:1px solid rgba(0,245,255,.3); border-radius:8px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; gap:12px; margin-bottom:12px; transition:all .3s ease; font-family:'Inter',sans-serif; }
         .action-btn:hover { background:rgba(0,245,255,.1); border-color:var(--neon-cyan); color:var(--neon-cyan); box-shadow:0 0 15px rgba(0,245,255,.2); transform:translateX(4px); }
         .action-btn.primary { background:linear-gradient(135deg,rgba(0,245,255,.2),rgba(123,44,191,.2)); border-color:var(--neon-cyan); color:var(--neon-cyan); }
         .chart-placeholder { height:250px; background:linear-gradient(180deg,rgba(0,245,255,.05),transparent); border:1px solid rgba(0,245,255,.1); border-radius:8px; position:relative; overflow:hidden; }
+        .real-chart { width:100%; height:100%; display:block; }
+        .chart-axis { stroke: rgba(148,163,184,.45); stroke-width: 1; }
+        .chart-path { fill: none; stroke: var(--neon-cyan); stroke-width: 2.25; filter: drop-shadow(0 0 7px rgba(0,245,255,.35)); }
+        .chart-area { fill: rgba(0,245,255,.14); }
         .chart-line { position:absolute; bottom:0; left:0; right:0; height:60%; background:linear-gradient(180deg,rgba(0,245,255,.3),transparent); clip-path:polygon(0 100%,0 40%,20% 60%,40% 30%,60% 50%,80% 20%,100% 40%,100% 100%); }
         .chart-grid { position:absolute; inset:0; background-image:linear-gradient(rgba(0,245,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,255,.05) 1px,transparent 1px); background-size:50px 50px; }
         .chart-loader {
@@ -84,6 +98,13 @@
             opacity:.55; cursor:not-allowed; transform:none !important; box-shadow:none !important;
         }
         .table-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; } .table-title{ font-size:16px; font-weight:600; }
+        .api-pill {
+            display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px;
+            font-size:11px; border:1px solid rgba(0,245,255,.35); color:#dbeafe; background: rgba(15,23,42,.7);
+        }
+        .api-dot { width:8px; height:8px; border-radius:50%; background: var(--warning); box-shadow: 0 0 8px rgba(245,158,11,.55); }
+        .api-pill.ok .api-dot { background: var(--success); box-shadow: 0 0 8px rgba(16,185,129,.55); }
+        .api-pill.bad .api-dot { background: var(--error); box-shadow: 0 0 8px rgba(239,68,68,.55); }
         .table-actions { display:flex; gap:8px; } .table-btn{ padding:8px 16px; background:transparent; border:1px solid rgba(0,245,255,.3); border-radius:6px; color:var(--text-secondary); cursor:pointer; font-size:13px; transition:all .3s ease; }
         .table-btn:hover{ background:rgba(0,245,255,.1); border-color:var(--neon-cyan); color:var(--neon-cyan); }
         .scroll-wrap { overflow:auto; max-height:360px; }
@@ -162,8 +183,8 @@
         .toast.error { border-color: rgba(239,68,68,.55); color: #fecaca; }
         .toast.success { border-color: rgba(16,185,129,.55); color: #d1fae5; }
         @keyframes toastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(3,1fr);} }
-        @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .nav-tabs{ display:none;} .filters-grid{ grid-template-columns:1fr;} .reconciliation{ grid-template-columns:1fr;} }
+        @media (max-width:1200px){ .dashboard-layout{ grid-template-columns:1fr; } .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .overview-grid{ grid-template-columns:1fr;} }
+        @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .nav-tabs{ display:none;} .reconciliation{ grid-template-columns:1fr;} }
     </style>
 </head>
 <body>
@@ -185,48 +206,75 @@
 
         <div class="error" id="err-box"></div>
 
-        <section class="filters">
-            <div class="section-title">🎛️ Filters + Alert Thresholds</div>
-            <div class="filters-grid">
-                <div class="form-group"><label class="form-label">Days</label><input id="flt-days" class="form-input" type="number" min="1" max="365" value="30"></div>
-                <div class="form-group"><label class="form-label">Entry status</label><select id="flt-status" class="form-select"><option value="">all</option><option value="posted">posted</option><option value="pending">pending</option><option value="rejected">rejected</option></select></div>
-                <div class="form-group"><label class="form-label">Category contains</label><input id="flt-category" class="form-input" placeholder="deposit"></div>
-                <div class="form-group"><label class="form-label">Source contains</label><input id="flt-source" class="form-input" placeholder="dashboard"></div>
-                <div class="form-group"><label class="form-label">Low cash threshold</label><input id="cfg-low-cash" class="form-input" type="number" min="0"></div>
-                <div class="form-group"><label class="form-label">High expense 30d</label><input id="cfg-high-expense" class="form-input" type="number" min="0"></div>
-                <div class="form-group"><label class="form-label">Unmatched threshold</label><input id="cfg-unmatched" class="form-input" type="number" min="0"></div>
-                <div class="form-group"><label class="form-label">Reviewed by</label><input id="review-by" class="form-input" value="dashboard_admin"></div>
-                <div class="form-group"><label class="form-label">Review note</label><input id="review-note" class="form-input" placeholder="optional reason"></div>
-                <div class="form-group"><label class="form-label"> </label><button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Применить период/фильтры к данным и отчетам.">Apply</button></div>
-                <div class="form-group"><label class="form-label"> </label><button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Сбросить фильтры к значениям по умолчанию.">Reset</button></div>
-                <div class="form-group"><label class="form-label"> </label><button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Сохранить пороги алертов (cash/expense/unmatched).">Save thresholds</button></div>
+        <div class="dashboard-layout">
+            <div>
+                <button class="btn btn-secondary filters-toggle" id="btn-toggle-filters">Show filters & alerts</button>
+                <section class="filters is-collapsed" id="filters-panel">
+                    <div class="section-title">🎛️ Filters + Alert Thresholds</div>
+                    <div class="filters-grid">
+                        <div class="form-group"><label class="form-label">Days</label><input id="flt-days" class="form-input" type="number" min="1" max="365" value="30"></div>
+                        <div class="form-group"><label class="form-label">Entry status</label><select id="flt-status" class="form-select"><option value="">all</option><option value="posted">posted</option><option value="pending">pending</option><option value="rejected">rejected</option></select></div>
+                        <div class="form-group"><label class="form-label">Category contains</label><input id="flt-category" class="form-input" placeholder="deposit"></div>
+                        <div class="form-group"><label class="form-label">Source contains</label><input id="flt-source" class="form-input" placeholder="dashboard"></div>
+                        <div class="form-group"><label class="form-label">Low cash threshold</label><input id="cfg-low-cash" class="form-input" type="number" min="0"></div>
+                        <div class="form-group"><label class="form-label">High expense 30d</label><input id="cfg-high-expense" class="form-input" type="number" min="0"></div>
+                        <div class="form-group"><label class="form-label">Unmatched threshold</label><input id="cfg-unmatched" class="form-input" type="number" min="0"></div>
+                        <div class="form-group"><label class="form-label">Reviewed by</label><input id="review-by" class="form-input" value="dashboard_admin"></div>
+                        <div class="form-group"><label class="form-label">Review note</label><input id="review-note" class="form-input" placeholder="optional reason"></div>
+                    </div>
+                    <div class="filters-actions">
+                        <button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Применить период/фильтры к данным и отчетам.">Apply</button>
+                        <button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Сбросить фильтры к значениям по умолчанию.">Reset</button>
+                        <button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Сохранить пороги алертов (cash/expense/unmatched).">Save thresholds</button>
+                    </div>
+                    <p class="mono" id="alert-state"></p>
+                </section>
             </div>
-            <p class="mono" id="alert-state"></p>
-        </section>
 
-        <div class="kpi-grid">
-            <div class="kpi-card"><div class="kpi-label">Balance</div><div class="kpi-value cyan" id="kpi-balance">0</div><div class="kpi-delta positive"><span>▲</span><span id="kpi-balance-note">cash balance</span></div></div>
-            <div class="kpi-card"><div class="kpi-label">Weekly Profit</div><div class="kpi-value cyan" id="kpi-profit">0</div><div class="kpi-delta positive"><span>📈</span><span id="kpi-profit-note">from pnl</span></div></div>
-            <div class="kpi-card"><div class="kpi-label">Cash Gap</div><div class="kpi-value magenta" id="kpi-gap">0</div><div class="kpi-delta negative"><span>🔻</span><span id="kpi-gap-note">forecast delta</span></div></div>
-            <div class="kpi-card"><div class="kpi-label">Mismatches</div><div class="kpi-value magenta" id="kpi-mismatch">0</div><div class="kpi-delta negative"><span>⚠️</span><span id="kpi-mismatch-note">requires review</span></div></div>
+            <div class="compact-main">
+                <div class="table-container">
+                    <div class="section-title">🧩 Overview Category</div>
+                    <div class="overview-grid">
+                        <div class="kpi-card"><div class="kpi-label">Balance</div><div class="kpi-value cyan" id="kpi-balance">0</div><div class="kpi-delta positive"><span>▲</span><span id="kpi-balance-note">cash balance</span></div></div>
+                        <div class="kpi-card"><div class="kpi-label">Weekly Profit</div><div class="kpi-value cyan" id="kpi-profit">0</div><div class="kpi-delta positive"><span>📈</span><span id="kpi-profit-note">from pnl</span></div></div>
+                        <div class="kpi-card"><div class="kpi-label">Cash Gap</div><div class="kpi-value magenta" id="kpi-gap">0</div><div class="kpi-delta negative"><span>🔻</span><span id="kpi-gap-note">forecast delta</span></div></div>
+                        <div class="kpi-card"><div class="kpi-label">Mismatches</div><div class="kpi-value magenta" id="kpi-mismatch">0</div><div class="kpi-delta negative"><span>⚠️</span><span id="kpi-mismatch-note">requires review</span></div></div>
+                    </div>
+                    <div class="quick-actions mt-20">
+                        <div class="section-title">⚡ Quick Actions</div>
+                        <button class="action-btn primary tooltip" id="btn-focus-op" data-tip="Перейти к форме ручной операции с автопроводкой."><span>➕</span><span>New Operation</span></button>
+                        <button class="action-btn tooltip" id="btn-import-csv" data-tip="Перейти к блоку импорта game CSV (silver/energy)."><span>📥</span><span>Import CSV</span></button>
+                        <button class="action-btn tooltip" id="btn-open-routing" data-tip="Открыть блок правил маршрутизации Dt/Kt."><span>📋</span><span>Routing Rules</span></button>
+                        <button class="action-btn tooltip" id="btn-open-settings" data-tip="Быстрый переход к настройкам порогов алертов."><span>⚙️</span><span>Alerts Settings</span></button>
+                    </div>
+                </div>
+
+                <div class="main-grid">
+                    <div class="chart-container micro-pop" id="chart-box">
+                        <div class="section-title">📊 Cash Flow (real data)</div>
+                        <div class="chart-placeholder chart-animate" id="chart-placeholder">
+                            <div class="chart-grid"></div>
+                            <svg class="real-chart" id="cashflow-chart" viewBox="0 0 800 250" preserveAspectRatio="none">
+                                <line class="chart-axis" x1="0" y1="220" x2="800" y2="220"></line>
+                                <path class="chart-area" id="chart-area" d=""></path>
+                                <path class="chart-path" id="chart-path" d=""></path>
+                            </svg>
+                            <div class="chart-loader" id="chart-loader"><div class="chart-spinner"></div></div>
+                        </div>
+                        <div class="mono mt-20" id="reports-inline"></div>
+                    </div>
+
+                    <div class="table-container">
+                        <div class="section-title">🔌 API Status</div>
+                        <div class="api-pill" id="api-internal-pill"><span class="api-dot"></span><span id="api-internal-text">Internal API checking...</span></div>
+                        <div class="api-pill mt-20" id="api-external-pill"><span class="api-dot"></span><span id="api-external-text">Albion API checking...</span></div>
+                        <div class="mono mt-20" id="api-meta"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="main-grid">
-            <div class="quick-actions">
-                <div class="section-title">⚡ Quick Actions</div>
-                <button class="action-btn primary tooltip" id="btn-focus-op" data-tip="Перейти к форме ручной операции с автопроводкой."><span>➕</span><span>New Operation</span></button>
-                <button class="action-btn tooltip" id="btn-import-csv" data-tip="Перейти к блоку импорта game CSV (silver/energy)."><span>📥</span><span>Import CSV</span></button>
-                <button class="action-btn tooltip" id="btn-open-routing" data-tip="Открыть блок правил маршрутизации Dt/Kt."><span>📋</span><span>Routing Rules</span></button>
-                <button class="action-btn tooltip" id="btn-open-settings" data-tip="Быстрый переход к настройкам порогов алертов."><span>⚙️</span><span>Alerts Settings</span></button>
-            </div>
-
-            <div class="chart-container micro-pop" id="chart-box">
-                <div class="section-title">📊 Cash Flow (visual)</div>
-                <div class="chart-placeholder chart-animate" id="chart-placeholder"><div class="chart-grid"></div><div class="chart-line"></div><div class="chart-loader" id="chart-loader"><div class="chart-spinner"></div></div></div>
-                <div class="mono mt-20" id="reports-inline"></div>
-            </div>
-
-            <div class="modal-preview" id="operation-card">
+        <div class="modal-preview" id="operation-card">
                 <div class="modal-header">➕ New Operation</div>
                 <div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div>
                 <div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div>
@@ -244,7 +292,6 @@
                     <button class="btn btn-primary" id="btn-op-create">✅ Confirm</button>
                 </div>
             </div>
-        </div>
 
         <div class="table-container">
             <div class="table-header">
@@ -420,6 +467,76 @@
           el.style.animation = `microPop .24s ease-out ${Math.min(i * 35, 180)}ms both`;
         });
       }
+      function renderRealChart(entries) {
+        const path = $("#chart-path");
+        const area = $("#chart-area");
+        if (!path || !area) return;
+        const posted = (entries || []).filter((e) => String(e.status || "").toLowerCase() === "posted");
+        const src = posted.slice(0, 24).reverse();
+        if (!src.length) {
+          path.setAttribute("d", "");
+          area.setAttribute("d", "");
+          return;
+        }
+        const values = [];
+        let acc = 0;
+        src.forEach((e) => {
+          acc += num(e.amount);
+          values.push(acc);
+        });
+        const minV = Math.min(...values, 0);
+        const maxV = Math.max(...values, 1);
+        const span = Math.max(1, maxV - minV);
+        const w = 800;
+        const h = 220;
+        const step = values.length === 1 ? w : w / (values.length - 1);
+        const pts = values.map((v, i) => {
+          const x = i * step;
+          const y = h - ((v - minV) / span) * (h - 20);
+          return [x, y];
+        });
+        const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(" ");
+        const ad = `${d} L ${w} ${h} L 0 ${h} Z`;
+        path.setAttribute("d", d);
+        area.setAttribute("d", ad);
+      }
+      async function updateApiHealth() {
+        const intPill = $("#api-internal-pill");
+        const extPill = $("#api-external-pill");
+        const intText = $("#api-internal-text");
+        const extText = $("#api-external-text");
+        const meta = $("#api-meta");
+        const t0 = performance.now();
+        const internal = await fetch("/dashboard/api/economy/reports?days=7", { credentials: "same-origin" })
+          .then((r) => r.json().then((j) => ({ ok: r.ok && !!j.ok, data: j })))
+          .catch((e) => ({ ok: false, error: String(e) }));
+        const t1 = performance.now();
+        const intMs = Math.max(1, Math.round(t1 - t0));
+        intPill.classList.remove("ok", "bad");
+        if (internal.ok) {
+          intPill.classList.add("ok");
+          intText.textContent = `Internal API OK (${intMs}ms)`;
+        } else {
+          intPill.classList.add("bad");
+          intText.textContent = `Internal API FAIL (${intMs}ms)`;
+        }
+        const qs = new URLSearchParams({ item_id: "T4_BAG", location: "Caerleon", quality: "1" });
+        const t2 = performance.now();
+        const external = await fetch("/dashboard/api/economy/price?" + qs.toString(), { credentials: "same-origin" })
+          .then((r) => r.json().then((j) => ({ ok: r.ok && !!j.ok, data: j })))
+          .catch((e) => ({ ok: false, error: String(e) }));
+        const t3 = performance.now();
+        const extMs = Math.max(1, Math.round(t3 - t2));
+        extPill.classList.remove("ok", "bad");
+        if (external.ok) {
+          extPill.classList.add("ok");
+          extText.textContent = `Albion API OK (${extMs}ms)`;
+        } else {
+          extPill.classList.add("bad");
+          extText.textContent = `Albion API FAIL (${extMs}ms)`;
+        }
+        meta.textContent = `Last check: ${new Date().toLocaleString("ru-RU")} | internal=${intMs}ms | external=${extMs}ms`;
+      }
       function statusBadge(status) {
         if (status === "posted" || status === "approved") return '<span class="status approved">✅ Approved</span>';
         if (status === "pending") return '<span class="status pending">🔄 Pending</span>';
@@ -485,6 +602,7 @@
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
 
         const entries = out.entries || [];
+        renderRealChart(entries);
         $("#tbl-entries tbody").innerHTML = entries.map((e) => {
           const amount = num(e.amount);
           return `<tr><td>${esc(e.created_at)}</td><td>${esc(e.category)}</td><td>${esc(e.actor || "")}</td><td class="amount ${amount >= 0 ? "positive" : "negative"}">${amount >= 0 ? "+" : ""}${fmt(amount)}</td><td>${statusBadge(e.status)}</td></tr>`;
@@ -584,6 +702,7 @@
           toast("Discrepancy resolved");
           await load();
         }));
+        updateApiHealth().catch(() => {});
       }
 
       $$(".nav-tab").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.target)));
@@ -722,7 +841,22 @@
       $("#btn-focus-op").addEventListener("click", () => { switchTab("operation"); $("#operation-card").scrollIntoView({ behavior: "smooth", block: "start" }); });
       $("#btn-import-csv").addEventListener("click", () => switchTab("operation"));
       $("#btn-open-routing").addEventListener("click", () => switchTab("recon"));
-      $("#btn-open-settings").addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+      $("#btn-toggle-filters").addEventListener("click", () => {
+        const p = $("#filters-panel");
+        const b = $("#btn-toggle-filters");
+        p.classList.toggle("is-collapsed");
+        const opened = !p.classList.contains("is-collapsed");
+        b.textContent = opened ? "Hide filters & alerts" : "Show filters & alerts";
+      });
+      $("#btn-open-settings").addEventListener("click", () => {
+        const p = $("#filters-panel");
+        const b = $("#btn-toggle-filters");
+        if (p.classList.contains("is-collapsed")) {
+          p.classList.remove("is-collapsed");
+          b.textContent = "Hide filters & alerts";
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
       $("#btn-journal").addEventListener("click", () => switchTab("journal"));
       $("#btn-approval").addEventListener("click", () => switchTab("journal"));
       $("#btn-export-reports").addEventListener("click", () => switchTab("reports"));
