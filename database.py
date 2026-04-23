@@ -132,10 +132,14 @@ class Database:
             pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
             bigint_type = "BIGINT"
             timestamp_default = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            cta_type = "INTEGER"
+            cta_default = "0"
         else:
             pk_type = "SERIAL PRIMARY KEY"
             bigint_type = "BIGINT"
             timestamp_default = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            cta_type = "BOOLEAN"
+            cta_default = "FALSE"
         
         # Guilds table
         await self.execute(f"""
@@ -263,6 +267,7 @@ class Database:
                 event_time TEXT NOT NULL,
                 created_by INTEGER,
                 template_name TEXT,
+                is_cta {cta_type} DEFAULT {cta_default},
                 status TEXT DEFAULT 'open',
                 created_at {timestamp_default}
             )
@@ -276,6 +281,13 @@ class Database:
             pass
         try:
             await self.execute("ALTER TABLE events ADD COLUMN template_name TEXT")
+        except Exception:
+            pass
+        try:
+            if self.is_sqlite:
+                await self.execute("ALTER TABLE events ADD COLUMN is_cta INTEGER DEFAULT 0")
+            else:
+                await self.execute("ALTER TABLE events ADD COLUMN is_cta BOOLEAN DEFAULT FALSE")
         except Exception:
             pass
 

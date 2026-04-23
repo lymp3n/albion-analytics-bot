@@ -839,7 +839,8 @@ class EventCommands(commands.Cog):
 
     @event_group.command(name="create", description="Create a new event in this channel or thread")
     @option("template", description="Role template", autocomplete=get_template_choices)
-    async def create(self, ctx: discord.ApplicationContext, content: str, time: str, template: str):
+    @option("cta", description="CTA event?", choices=["yes", "no"], required=False)
+    async def create(self, ctx: discord.ApplicationContext, content: str, time: str, template: str, cta: str = "no"):
         try:
             await ctx.defer(ephemeral=True)
         except discord.NotFound:
@@ -855,10 +856,11 @@ class EventCommands(commands.Cog):
         player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         channel = ctx.channel
 
+        is_cta = str(cta or "no").strip().lower() in ("yes", "true", "1")
         event_id = await self.bot.db.execute(
             """
-            INSERT INTO events (discord_channel_id, guild_id, content_name, event_time, created_by, template_name)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+            INSERT INTO events (discord_channel_id, guild_id, content_name, event_time, created_by, template_name, is_cta)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
             """,
             channel.id,
             player["guild_id"] if player else None,
@@ -866,6 +868,7 @@ class EventCommands(commands.Cog):
             time,
             player["id"] if player else None,
             template,
+            is_cta,
         )
 
         for i, role in enumerate(templates[template], 1):
@@ -879,7 +882,10 @@ class EventCommands(commands.Cog):
         embed = await build_event_embed(self.bot, event_id)
         msg = await channel.send(embed=embed, view=EventControlView(self.bot))
         await self.bot.db.execute("UPDATE events SET discord_message_id = $1 WHERE id = $2", msg.id, event_id)
-        await ctx.followup.send("✅ Event published here!", ephemeral=True)
+        await ctx.followup.send(
+            f"✅ Event published here! CTA: {'yes' if is_cta else 'no'}",
+            ephemeral=True,
+        )
 
     @event_group.command(name="close", description="Close an event and lock attendance")
     @option("event_id", description="Event ID (found at the bottom of the post)", autocomplete=get_event_id_choices)

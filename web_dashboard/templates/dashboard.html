@@ -213,6 +213,7 @@
                 <th style="width:2.5rem;"></th>
                 <th>ID</th>
                 <th>Status</th>
+                <th>CTA</th>
                 <th>Content</th>
                 <th>Guild</th>
                 <th>Event time</th>
@@ -921,6 +922,7 @@
       ["Tickets closed (period)", ov.tickets_closed_period],
       ["Sessions (period)", ov.sessions_period],
       ["Closed events (period)", ov.events_period],
+      ["Closed CTA events (period)", ov.events_period_cta ?? 0],
     ]);
     $("#overview-since").textContent = "Window: last " + ov.period_days + " days · since " + (ov.since_utc || "");
 
@@ -952,6 +954,11 @@
       ["Closed events in period", ev.events_in_period],
       ["Avg players / event (overall)", ev.avg_players_per_event_overall ?? "—"],
       ["Avg ÷ unique pool", ev.ratio_avg_to_unique ?? "—"],
+      ["CTA unique participants", ev.cta_unique_participants_period ?? 0],
+      ["CTA participation %", (ev.cta_participation_pct_of_roster ?? "—") + (roster ? "%" : "")],
+      ["CTA closed events", ev.cta_events_in_period ?? 0],
+      ["CTA avg players / event", ev.cta_avg_players_per_event_overall ?? "—"],
+      ["CTA avg ÷ unique pool", ev.cta_ratio_avg_to_unique ?? "—"],
     ]);
 
     const pctRoster = (u) => (roster ? ((Number(u) / roster) * 100).toFixed(1) : "—");
@@ -961,6 +968,38 @@
       `<td>${esc(r.unique_players_on_content)}</td><td>${esc(pctRoster(r.unique_players_on_content))}${roster ? "%" : ""}</td>` +
       `<td>${esc(r.max_slots_seen)}</td></tr>`
     ).join("") || '<tr><td colspan="6">No events in window</td></tr>';
+
+    const ecCta = ev.cta_per_content || [];
+    const ctaTblHtml =
+      '<h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Per content (CTA only)</h3>' +
+      '<div class="ds-table-wrap">' +
+      '<table class="ds-table" id="tbl-events-content-cta">' +
+      "<thead><tr><th>Content</th><th>CTA events</th><th>Avg players / event</th><th>Unique players</th><th>% of roster</th><th>Max slots seen</th></tr></thead>" +
+      "<tbody>" +
+      (ecCta
+        .map(
+          (r) =>
+            `<tr><td>${esc(r.content_name)}</td><td>${esc(r.events_count)}</td><td>${esc(r.avg_players_per_event)}</td>` +
+            `<td>${esc(r.unique_players_on_content)}</td><td>${esc(pctRoster(r.unique_players_on_content))}${roster ? "%" : ""}</td>` +
+            `<td>${esc(r.max_slots_seen)}</td></tr>`
+        )
+        .join("") || '<tr><td colspan="6">No CTA events in window</td></tr>') +
+      "</tbody></table></div>";
+    const eventsPanel = document.querySelector('.ds-tab-panel[data-panel="events"]');
+    if (eventsPanel) {
+      let wrap = document.getElementById("cta-events-content-wrap");
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.id = "cta-events-content-wrap";
+        const anchor = document.getElementById("tbl-events-content");
+        if (anchor && anchor.closest(".ds-table-wrap")) {
+          anchor.closest(".ds-table-wrap").insertAdjacentElement("afterend", wrap);
+        } else {
+          eventsPanel.appendChild(wrap);
+        }
+      }
+      wrap.innerHTML = ctaTblHtml;
+    }
 
     const nev = ev.never_attended || [];
     $("#tbl-never tbody").innerHTML = nev.map((r) =>
@@ -980,9 +1019,9 @@
     const cat = data.events_catalog || [];
     $("#tbl-events-catalog tbody").innerHTML = cat.map((r) =>
       `<tr><td><input type="checkbox" class="ev-del-cb" value="${esc(r.id)}" aria-label="Select event ${esc(r.id)}" /></td>` +
-      `<td>${esc(r.id)}</td><td>${esc(r.status)}</td><td>${esc(r.content_name)}</td>` +
+      `<td>${esc(r.id)}</td><td>${esc(r.status)}</td><td>${r.is_cta ? "yes" : "no"}</td><td>${esc(r.content_name)}</td>` +
       `<td>${esc(r.guild_name || "—")}</td><td>${esc(r.event_time)}</td><td>${esc(r.created_at)}</td></tr>`
-    ).join("") || '<tr><td colspan="7">No events in catalog</td></tr>';
+    ).join("") || '<tr><td colspan="8">No events in catalog</td></tr>';
 
     const m = data.mentors || {};
     $("#kpi-mentors").innerHTML = kpiHTML([

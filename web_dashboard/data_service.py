@@ -30,6 +30,18 @@ def ensure_guilds_dashboard_columns(conn, backend: str) -> None:
         conn.rollback()
 
 
+def ensure_events_cta_column(conn, backend: str) -> None:
+    cur = conn.cursor()
+    try:
+        if backend == "postgres":
+            cur.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS is_cta BOOLEAN DEFAULT FALSE")
+        else:
+            cur.execute("ALTER TABLE events ADD COLUMN is_cta INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
 def list_guilds(conn, backend: str) -> List[dict]:
     ensure_guilds_dashboard_columns(conn, backend)
     if backend == "postgres":
@@ -406,6 +418,7 @@ def get_active_players_count(conn, backend: str, guild_db_id: Optional[int]) -> 
 
 
 def get_overview(conn, backend: str, guild_db_id: Optional[int], days: int) -> dict:
+    ensure_events_cta_column(conn, backend)
     since = _since(days)
 
     if backend == "postgres":
@@ -447,6 +460,17 @@ def get_overview(conn, backend: str, guild_db_id: Optional[int], days: int) -> d
             SELECT COUNT(*) AS c FROM events e
             WHERE e.created_at >= $2::timestamp AND ($1::int IS NULL OR e.guild_id = $1::int)
               AND e.status = 'closed'
+            """,
+            (guild_db_id, since),
+        )
+        ev_period_cta = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COUNT(*) AS c FROM events e
+            WHERE e.created_at >= $2::timestamp AND ($1::int IS NULL OR e.guild_id = $1::int)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, FALSE) = TRUE
             """,
             (guild_db_id, since),
         )
@@ -492,12 +516,24 @@ def get_overview(conn, backend: str, guild_db_id: Optional[int], days: int) -> d
             """,
             (since, guild_db_id, guild_db_id),
         )
+        ev_period_cta = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COUNT(*) AS c FROM events e
+            WHERE e.created_at >= ? AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, 0) = 1
+            """,
+            (since, guild_db_id, guild_db_id),
+        )
 
     return {
         "tickets_open": int(t_open["c"]) if t_open else 0,
         "tickets_closed_period": int(t_closed_period["c"]) if t_closed_period else 0,
         "sessions_period": int(sess_period["c"]) if sess_period else 0,
         "events_period": int(ev_period["c"]) if ev_period else 0,
+        "events_period_cta": int(ev_period_cta["c"]) if ev_period_cta else 0,
         "period_days": days,
         "since_utc": since,
     }
@@ -621,6 +657,7 @@ def get_tickets_breakdown(conn, backend: str, guild_db_id: Optional[int], days: 
 
 
 def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: int) -> dict:
+    ensure_events_cta_column(conn, backend)
     since = _since(days)
     active_roster = get_active_players_count(conn, backend, guild_db_id)
     fill_rows = None
@@ -770,6 +807,91 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
               AND a.events_attended >= GREATEST(1, (SELECT tc FROM total) / 3)
             ORDER BY attendance_pct DESC, events_attended DESC
             LIMIT 40
+            """,
+            (guild_db_id, since),
+        )
+        cta_unique_participants = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COUNT(DISTINCT es.player_id) AS c
+            FROM event_signups es
+            JOIN events e ON e.id = es.event_id
+            WHERE es.player_id IS NOT NULL
+              AND e.created_at >= $2::timestamp
+              AND ($1::int IS NULL OR e.guild_id = $1::int)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, FALSE) = TRUE
+            """,
+            (guild_db_id, since),
+        )
+        cta_total_events = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COUNT(*) AS c FROM events e
+            WHERE e.created_at >= $2::timestamp
+              AND ($1::int IS NULL OR e.guild_id = $1::int)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, FALSE) = TRUE
+            """,
+            (guild_db_id, since),
+        )
+        cta_avg_players = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT ROUND(AVG(cnt)::numeric, 2) AS a FROM (
+                SELECT COUNT(DISTINCT CASE WHEN es.player_id IS NOT NULL THEN es.player_id END) AS cnt
+                FROM events e
+                LEFT JOIN event_signups es ON es.event_id = e.id
+                WHERE e.created_at >= $2::timestamp
+                  AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
+                  AND COALESCE(e.is_cta, FALSE) = TRUE
+                GROUP BY e.id
+            ) x
+            """,
+            (guild_db_id, since),
+        )
+        cta_per_content = fetch_all(
+            conn,
+            backend,
+            """
+            WITH ev_fill AS (
+                SELECT
+                    e.id AS event_id,
+                    e.content_name,
+                    COUNT(DISTINCT CASE WHEN es.player_id IS NOT NULL THEN es.player_id END) AS players_in_event,
+                    COUNT(*) AS slot_count
+                FROM events e
+                LEFT JOIN event_signups es ON es.event_id = e.id
+                WHERE e.created_at >= $2::timestamp
+                  AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
+                  AND COALESCE(e.is_cta, FALSE) = TRUE
+                GROUP BY e.id, e.content_name
+            ),
+            content_uniq AS (
+                SELECT e.content_name, COUNT(DISTINCT es.player_id) AS uniq_players
+                FROM events e
+                JOIN event_signups es ON es.event_id = e.id AND es.player_id IS NOT NULL
+                WHERE e.created_at >= $2::timestamp
+                  AND ($1::int IS NULL OR e.guild_id = $1::int)
+                  AND e.status = 'closed'
+                  AND COALESCE(e.is_cta, FALSE) = TRUE
+                GROUP BY e.content_name
+            )
+            SELECT
+                f.content_name,
+                COUNT(*)::int AS events_count,
+                ROUND(AVG(f.players_in_event)::numeric, 2) AS avg_players_per_event,
+                ROUND(MAX(f.slot_count)::numeric, 0) AS max_slots_seen,
+                COALESCE(u.uniq_players, 0)::int AS unique_players_on_content
+            FROM ev_fill f
+            LEFT JOIN content_uniq u ON u.content_name = f.content_name
+            GROUP BY f.content_name, u.uniq_players
+            ORDER BY events_count DESC
             """,
             (guild_db_id, since),
         )
@@ -931,10 +1053,99 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
             """,
             (since, guild_db_id, guild_db_id),
         )
+        cta_unique_participants = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COUNT(DISTINCT es.player_id) AS c
+            FROM event_signups es
+            JOIN events e ON e.id = es.event_id
+            WHERE es.player_id IS NOT NULL
+              AND e.created_at >= ?
+              AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, 0) = 1
+            """,
+            (since, guild_db_id, guild_db_id),
+        )
+        cta_total_events = fetch_one(
+            conn,
+            backend,
+            """
+            SELECT COUNT(*) AS c FROM events e
+            WHERE e.created_at >= ?
+              AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, 0) = 1
+            """,
+            (since, guild_db_id, guild_db_id),
+        )
+        cta_fill_rows = fetch_all(
+            conn,
+            backend,
+            """
+            SELECT
+                e.id AS event_id,
+                e.content_name,
+                COUNT(DISTINCT CASE WHEN es.player_id IS NOT NULL THEN es.player_id END) AS players_in_event,
+                COUNT(*) AS slot_count
+            FROM events e
+            LEFT JOIN event_signups es ON es.event_id = e.id
+            WHERE e.created_at >= ?
+              AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, 0) = 1
+            GROUP BY e.id, e.content_name
+            """,
+            (since, guild_db_id, guild_db_id),
+        )
+        cta_uniq_rows = fetch_all(
+            conn,
+            backend,
+            """
+            SELECT DISTINCT e.content_name, es.player_id
+            FROM events e
+            JOIN event_signups es ON es.event_id = e.id AND es.player_id IS NOT NULL
+            WHERE e.created_at >= ?
+              AND (? IS NULL OR e.guild_id = ?)
+              AND e.status = 'closed'
+              AND COALESCE(e.is_cta, 0) = 1
+            """,
+            (since, guild_db_id, guild_db_id),
+        )
+        cta_uniq_by_content: dict = defaultdict(set)
+        for ur in cta_uniq_rows:
+            cta_uniq_by_content[ur["content_name"]].add(ur["player_id"])
+        cta_agg: dict = defaultdict(lambda: {"events": 0, "sum_players": 0, "max_slots": 0})
+        for fr in cta_fill_rows:
+            cn = fr["content_name"]
+            cta_agg[cn]["events"] += 1
+            cta_agg[cn]["sum_players"] += int(fr["players_in_event"] or 0)
+            cta_agg[cn]["max_slots"] = max(cta_agg[cn]["max_slots"], int(fr["slot_count"] or 0))
+        cta_per_content = []
+        for cn, v in sorted(cta_agg.items(), key=lambda x: -x[1]["events"]):
+            ec = v["events"]
+            cta_per_content.append(
+                {
+                    "content_name": cn,
+                    "events_count": ec,
+                    "avg_players_per_event": round(v["sum_players"] / ec, 2) if ec else 0,
+                    "max_slots_seen": v["max_slots"],
+                    "unique_players_on_content": len(cta_uniq_by_content.get(cn, set())),
+                }
+            )
+        cta_avg_players = (
+            {"a": round(sum(int(r["players_in_event"] or 0) for r in cta_fill_rows) / len(cta_fill_rows), 2)}
+            if cta_fill_rows
+            else {"a": None}
+        )
 
     uc = int(unique_participants["c"]) if unique_participants and unique_participants.get("c") is not None else 0
     te = int(total_events["c"]) if total_events and total_events.get("c") is not None else 0
+    cta_uc = int(cta_unique_participants["c"]) if cta_unique_participants and cta_unique_participants.get("c") is not None else 0
+    cta_te = int(cta_total_events["c"]) if cta_total_events and cta_total_events.get("c") is not None else 0
     part_pct = round(100.0 * uc / active_roster, 1) if active_roster > 0 else 0.0
+    cta_part_pct = round(100.0 * cta_uc / active_roster, 1) if active_roster > 0 else 0.0
     avg_players_overall = None
     if te > 0 and backend == "postgres":
         r = fetch_one(
@@ -958,32 +1169,43 @@ def get_events_analytics(conn, backend: str, guild_db_id: Optional[int], days: i
         if fill_rows:
             s = sum(int(r["players_in_event"] or 0) for r in fill_rows)
             avg_players_overall = round(s / len(fill_rows), 2)
+    cta_avg_players_overall = float(cta_avg_players["a"]) if cta_avg_players and cta_avg_players.get("a") is not None else None
 
     return {
         "active_roster_count": active_roster,
         "unique_participants_period": uc,
         "events_in_period": te,
+        "cta_events_in_period": cta_te,
         "participation_pct_of_roster": part_pct,
+        "cta_participation_pct_of_roster": cta_part_pct,
         "avg_players_per_event_overall": avg_players_overall,
+        "cta_avg_players_per_event_overall": cta_avg_players_overall,
         "per_content": per_content,
+        "cta_per_content": cta_per_content,
         "never_attended": never_rows,
         "low_attendance": attendance,
         "stable_attendance": stable,
+        "cta_unique_participants_period": cta_uc,
         "ratio_avg_to_unique": (
             round((avg_players_overall or 0) / uc, 3) if uc and avg_players_overall else None
+        ),
+        "cta_ratio_avg_to_unique": (
+            round((cta_avg_players_overall or 0) / cta_uc, 3) if cta_uc and cta_avg_players_overall else None
         ),
         "only_closed_events": True,
     }
 
 
 def list_events_catalog(conn, backend: str, guild_db_id: Optional[int], limit: int = 100) -> List[dict]:
+    ensure_events_cta_column(conn, backend)
     lim = max(1, min(int(limit), 200))
     if backend == "postgres":
         return fetch_all(
             conn,
             backend,
             f"""
-            SELECT e.id, e.content_name, e.event_time, e.status, e.created_at, e.guild_id, g.name AS guild_name
+            SELECT e.id, e.content_name, e.event_time, e.status, e.created_at, e.guild_id, g.name AS guild_name,
+                   COALESCE(e.is_cta, FALSE) AS is_cta
             FROM events e
             LEFT JOIN guilds g ON g.id = e.guild_id
             WHERE ($1::int IS NULL OR e.guild_id = $1::int)
@@ -996,7 +1218,8 @@ def list_events_catalog(conn, backend: str, guild_db_id: Optional[int], limit: i
         conn,
         backend,
         f"""
-        SELECT e.id, e.content_name, e.event_time, e.status, e.created_at, e.guild_id, g.name AS guild_name
+        SELECT e.id, e.content_name, e.event_time, e.status, e.created_at, e.guild_id, g.name AS guild_name,
+               COALESCE(e.is_cta, 0) AS is_cta
         FROM events e
         LEFT JOIN guilds g ON g.id = e.guild_id
         WHERE (? IS NULL OR e.guild_id = ?)
