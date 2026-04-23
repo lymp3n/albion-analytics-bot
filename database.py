@@ -262,6 +262,7 @@ class Database:
                 content_name TEXT NOT NULL,
                 event_time TEXT NOT NULL,
                 created_by INTEGER,
+                template_name TEXT,
                 status TEXT DEFAULT 'open',
                 created_at {timestamp_default}
             )
@@ -272,6 +273,10 @@ class Database:
             await self.execute("ALTER TABLE events ADD COLUMN status TEXT DEFAULT 'open'")
         except Exception:
             # Column already exists
+            pass
+        try:
+            await self.execute("ALTER TABLE events ADD COLUMN template_name TEXT")
+        except Exception:
             pass
 
 

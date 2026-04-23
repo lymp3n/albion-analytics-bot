@@ -1,4 +1,7 @@
 import re
+import os
+from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Union
 
 import discord
@@ -10,6 +13,175 @@ import logging
 from event_templates_store import load_templates_dict as get_templates
 from utils.shotcaller_role_ids import SHOTCALLER_ROLE_IDS
 logger = logging.getLogger("albion-bot")
+
+_INFOCARD_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _normalize_for_match(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip().casefold())
+
+
+def _name_similarity(a: str, b: str) -> float:
+    return SequenceMatcher(None, _normalize_for_match(a), _normalize_for_match(b)).ratio()
+
+
+def _infocard_root_candidates() -> list[Path]:
+    # commands/events.py -> repo root
+    repo_root = Path(__file__).resolve().parent.parent
+    env_root = (os.getenv("INFOCARDS_ROOT") or "").strip()
+    candidates = []
+    if env_root:
+        candidates.append(Path(env_root).expanduser())
+    candidates.append(repo_root / "Infocards")
+    candidates.append(repo_root.parent / "Infocards")
+    out: list[Path] = []
+    seen: set[str] = set()
+    for c in candidates:
+        key = str(c).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    return out
+
+
+def _resolve_special_template_dir(template_name: str, threshold: float = 0.9) -> Path | None:
+    if not template_name:
+        return None
+    best_dir: Path | None = None
+    best_score = 0.0
+    for root in _infocard_root_candidates():
+        try:
+            if not root.is_dir():
+                continue
+            for entry in root.iterdir():
+                if not entry.is_dir():
+                    continue
+                score = _name_similarity(template_name, entry.name)
+                if score > best_score:
+                    best_score = score
+                    best_dir = entry
+        except Exception:
+            continue
+    if best_dir and best_score >= threshold:
+        return best_dir
+    return None
+
+
+def _find_infocard_for_role(template_name: str, role_name: str) -> Path | None:
+    tpl_dir = _resolve_special_template_dir(template_name)
+    if not tpl_dir or not role_name:
+        return None
+
+    # Prefer exact stem match (case-insensitive), then fuzzy role filename match.
+    role_norm = _normalize_for_match(role_name)
+    files = [p for p in tpl_dir.iterdir() if p.is_file() and p.suffix.lower() in _INFOCARD_EXTS]
+    for p in files:
+        if _normalize_for_match(p.stem) == role_norm:
+            return p
+
+    best_file: Path | None = None
+    best_score = 0.0
+    for p in files:
+        score = _name_similarity(role_name, p.stem)
+        if score > best_score:
+            best_score = score
+            best_file = p
+    if best_file and best_score >= 0.9:
+        return best_file
+    return None
+
+
+def _find_infocard_for_role_in_dir(card_dir: Path, role_name: str) -> Path | None:
+    if not card_dir or not role_name:
+        return None
+    files = [p for p in card_dir.iterdir() if p.is_file() and p.suffix.lower() in _INFOCARD_EXTS]
+    role_norm = _normalize_for_match(role_name)
+    for p in files:
+        if _normalize_for_match(p.stem) == role_norm:
+            return p
+    best_file: Path | None = None
+    best_score = 0.0
+    for p in files:
+        score = _name_similarity(role_name, p.stem)
+        if score > best_score:
+            best_score = score
+            best_file = p
+    if best_file and best_score >= 0.9:
+        return best_file
+    return None
+
+
+async def _resolve_legacy_flat_infocard_dir_for_event(bot, event_id: int) -> Path | None:
+    """Fallback for flat Infocards layout (files directly in root, no template subfolder)."""
+    role_rows = await bot.db.fetch("SELECT role_name FROM event_signups WHERE event_id = $1", event_id)
+    roles = sorted({_normalize_for_match(r.get("role_name") or "") for r in role_rows if r.get("role_name")})
+    if not roles:
+        return None
+
+    for root in _infocard_root_candidates():
+        try:
+            if not root.is_dir():
+                continue
+            flat_files = [p for p in root.iterdir() if p.is_file() and p.suffix.lower() in _INFOCARD_EXTS]
+            if len(flat_files) < 8:
+                continue
+            stems = {_normalize_for_match(p.stem) for p in flat_files}
+            matched = sum(1 for role in roles if role in stems)
+            ratio = matched / max(1, len(roles))
+            # Safety gate: only treat as "special" if most roster roles have cards in this flat root.
+            if matched >= 8 and ratio >= 0.6:
+                return root
+        except Exception:
+            continue
+    return None
+
+
+async def _send_role_infocard(
+    bot,
+    event_id: int,
+    role_name: str,
+    target_user_id: int,
+    *,
+    interaction: discord.Interaction | None = None,
+    prefer_ephemeral: bool = False,
+) -> bool:
+    event = await bot.db.fetchrow(
+        "SELECT id, template_name, content_name, event_time FROM events WHERE id = $1",
+        event_id,
+    )
+    if not event:
+        return False
+
+    template_name = (event.get("template_name") or event.get("content_name") or "").strip()
+    card_path = _find_infocard_for_role(template_name, role_name)
+    if not card_path:
+        flat_dir = await _resolve_legacy_flat_infocard_dir_for_event(bot, event_id)
+        if flat_dir:
+            card_path = _find_infocard_for_role_in_dir(flat_dir, role_name)
+    if not card_path:
+        return False
+
+    msg = (
+        f"🃏 Your role card for event **{event.get('content_name') or template_name}**\n"
+        f"Role: **{role_name}**"
+    )
+
+    if prefer_ephemeral and interaction and interaction.user and interaction.user.id == target_user_id:
+        try:
+            await interaction.followup.send(msg, file=discord.File(str(card_path)), ephemeral=True)
+            return True
+        except Exception:
+            pass
+
+    try:
+        user = bot.get_user(target_user_id) or await bot.fetch_user(target_user_id)
+        if not user:
+            return False
+        await user.send(msg, file=discord.File(str(card_path)))
+        return True
+    except Exception:
+        return False
 
 
 async def build_event_embed(bot, event_id: int):
@@ -253,7 +425,7 @@ class SlotSelectView(ui.View):
         slot_num = int(interaction.data["values"][0])
 
         check = await self.bot.db.fetchrow(
-            "SELECT player_id FROM event_signups WHERE event_id = $1 AND slot_number = $2",
+            "SELECT player_id, role_name FROM event_signups WHERE event_id = $1 AND slot_number = $2",
             self.event_id,
             slot_num,
         )
@@ -268,6 +440,18 @@ class SlotSelectView(ui.View):
         )
         await refresh_event_message(self.bot, self.event_id)
         await interaction.edit_original_response(content=f"✅ You have taken slot #{slot_num}!", view=None)
+        try:
+            role_name = (check.get("role_name") if check else "") or f"Slot #{slot_num}"
+            await _send_role_infocard(
+                self.bot,
+                self.event_id,
+                role_name,
+                interaction.user.id,
+                interaction=interaction,
+                prefer_ephemeral=True,
+            )
+        except Exception:
+            pass
 
 
 class ManageAddModal(ui.Modal):
@@ -329,8 +513,15 @@ class ManageAddModal(ui.Modal):
             self.event_id,
             slot,
         )
+        role_row = await self.bot.db.fetchrow(
+            "SELECT role_name FROM event_signups WHERE event_id = $1 AND slot_number = $2",
+            self.event_id,
+            slot,
+        )
         await refresh_event_message(self.bot, self.event_id)
         logger.info("manage_modal_add_move event_id=%s target_id=%s slot=%s by=%s", self.event_id, target_member.id, slot, interaction.user.id)
+        if role_row and role_row.get("role_name"):
+            await _send_role_infocard(self.bot, self.event_id, role_row["role_name"], target_member.id)
         await interaction.followup.send(f"✅ Assigned <@{target_member.id}> to slot #{slot}.", ephemeral=True)
 
 
@@ -456,6 +647,7 @@ class ManageAddExtraModal(ui.Modal):
         )
         await refresh_event_message(self.bot, self.event_id)
         logger.info("manage_modal_add_extra event_id=%s target_id=%s new_slot=%s role=%s by=%s", self.event_id, target_member.id, next_slot, role_name, interaction.user.id)
+        await _send_role_infocard(self.bot, self.event_id, role_name[:50], target_member.id)
         await interaction.followup.send(
             f"✅ Added extra slot #{next_slot} ({role_name}) for <@{target_member.id}>.",
             ephemeral=True,
@@ -701,14 +893,15 @@ class EventCommands(commands.Cog):
 
         event_id = await self.bot.db.execute(
             """
-            INSERT INTO events (discord_channel_id, guild_id, content_name, event_time, created_by)
-            VALUES ($1, $2, $3, $4, $5) RETURNING id
+            INSERT INTO events (discord_channel_id, guild_id, content_name, event_time, created_by, template_name)
+            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
             """,
             channel.id,
             player["guild_id"] if player else None,
             content,
             time,
             player["id"] if player else None,
+            template,
         )
 
         for i, role in enumerate(templates[template], 1):
@@ -795,8 +988,15 @@ class EventCommands(commands.Cog):
             event_id,
             slot,
         )
+        role_row = await self.bot.db.fetchrow(
+            "SELECT role_name FROM event_signups WHERE event_id = $1 AND slot_number = $2",
+            event_id,
+            slot,
+        )
         await refresh_event_message(self.bot, event_id)
         logger.info("slash_add_player event_id=%s target=%s slot=%s by=%s", event_id, user.id, slot, ctx.author.id)
+        if role_row and role_row.get("role_name"):
+            await _send_role_infocard(self.bot, event_id, role_row["role_name"], user.id)
         await ctx.followup.send(f"✅ Assigned {user.mention} to slot #{slot}.", ephemeral=True)
 
     @event_group.command(name="remove_player", description="Remove player from event roster")
@@ -862,8 +1062,22 @@ class EventCommands(commands.Cog):
         await self.bot.db.execute("UPDATE event_signups SET player_id = NULL WHERE event_id = $1 AND player_id IN ($2, $3)", event_id, p1["id"], p2["id"])
         await self.bot.db.execute("UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3", p1["id"], event_id, s2["slot_number"])
         await self.bot.db.execute("UPDATE event_signups SET player_id = $1 WHERE event_id = $2 AND slot_number = $3", p2["id"], event_id, s1["slot_number"])
+        new_role_for_a = await self.bot.db.fetchrow(
+            "SELECT role_name FROM event_signups WHERE event_id = $1 AND slot_number = $2",
+            event_id,
+            s2["slot_number"],
+        )
+        new_role_for_b = await self.bot.db.fetchrow(
+            "SELECT role_name FROM event_signups WHERE event_id = $1 AND slot_number = $2",
+            event_id,
+            s1["slot_number"],
+        )
         await refresh_event_message(self.bot, event_id)
         logger.info("slash_swap_players event_id=%s user_a=%s slot_a=%s user_b=%s slot_b=%s by=%s", event_id, user_a.id, s1['slot_number'], user_b.id, s2['slot_number'], ctx.author.id)
+        if new_role_for_a and new_role_for_a.get("role_name"):
+            await _send_role_infocard(self.bot, event_id, new_role_for_a["role_name"], user_a.id)
+        if new_role_for_b and new_role_for_b.get("role_name"):
+            await _send_role_infocard(self.bot, event_id, new_role_for_b["role_name"], user_b.id)
         await ctx.followup.send(
             f"✅ Swapped {user_a.mention} (slot #{s1['slot_number']}) and {user_b.mention} (slot #{s2['slot_number']}).",
             ephemeral=True,
@@ -909,6 +1123,7 @@ class EventCommands(commands.Cog):
         )
         await refresh_event_message(self.bot, event_id)
         logger.info("slash_add_extra event_id=%s target=%s new_slot=%s role=%s by=%s", event_id, user.id, next_slot, role_name, ctx.author.id)
+        await _send_role_infocard(self.bot, event_id, role_name[:50], user.id)
         await ctx.followup.send(f"✅ Added extra slot #{next_slot} ({role_name}) for {user.mention}.", ephemeral=True)
 
 
