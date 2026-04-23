@@ -145,6 +145,55 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
   - `regear_requests`
 - Все ключевые действия пишут audit trail.
 
+#### Гайд для новых пользователей: категории и функции (RU)
+
+Ниже — практическая карта интерфейса Economy Ops, чтобы новый офицер мог начать работу без обучения в голосе.
+
+**Категория: Dashboard**
+- **KPI Balance** — текущий cash/баланс для оценки ликвидности.
+- **KPI Weekly Profit** — прибыль за выбранный период (фильтр `days`).
+- **KPI Cash Gap** — разница между текущим балансом и прогнозом.
+- **KPI Mismatches** — количество незакрытых расхождений.
+- **Open Alerts / Discrepancies preview** — быстрый triage проблемных записей.
+
+**Категория: Filters + Thresholds**
+- **Days** — окно аналитики для PnL/Cashflow и части KPI.
+- **Entry status / Category / Source** — фильтрация журнала проводок.
+- **Low cash threshold** — порог предупреждения по кассе.
+- **High expense 30d threshold** — порог тревоги по расходам за 30 дней.
+- **Unmatched threshold** — допустимый объем несопоставленных записей.
+- **Apply / Reset / Save thresholds** — применение фильтров и сохранение риск-настроек.
+
+**Категория: Operation**
+- **New Operation** — ручная операция по routing category (`/route-op` API).
+- **Posting preview** — визуальная проверка пары `Dr/Cr` до отправки.
+- **Task + Award** — создание задач и подтверждение выплат с проводкой.
+- **Routing Rule** — создание/изменение автопроводок для категорий.
+- **Import CSV** — загрузка игровых логов и первичная сверка.
+- **Market Price** — запрос рыночной цены (Albion Data API).
+- **Loot Buyback** — создание заявки с фиксированной ценой `market -20%`.
+- **Regear Request** — заявка регира с обязательным скриншотом смерти.
+
+**Категория: Journal**
+- **Pending Approvals** — очередь проводок, требующих подтверждения.
+- **Approve / Reject** — контроль высокого риска до публикации в журнал.
+
+**Категория: Reconciliation**
+- **Tasks / Awards / Rules / Imports** — сопоставление операционных сущностей.
+- **Loot Buyback list** — контроль статусов buyback-заявок.
+- **Regear list + Issue** — выдача регира с финальным списанием 1210.
+
+**Категория: Reports**
+- **Reports JSON** — Balance Snapshot, PnL Summary, Cashflow Summary.
+- **Forecast JSON** — прогноз денежных остатков.
+- **Audit Trail** — неизменяемый журнал действий офицеров/казначеев.
+
+**Микро-UX в интерфейсе**
+- Кнопки имеют loading/disabled-состояния.
+- Для основных действий показываются toast-уведомления успеха/ошибки.
+- У ключевых элементов есть встроенные инфо-тултипы.
+- Графический блок имеет анимацию загрузки и плавный вход.
+
 ### Быстрый старт
 1. Используйте `/register <code>`, чтобы привязать Discord-аккаунт к гильдии.
 2. Откройте `/menu` для быстрого доступа к основным функциям.
@@ -319,6 +368,55 @@ Two production modules were added to the economy subsystem and integrated into d
   - `loot_buybacks`
   - `regear_requests`
 - All key operations are audit-logged.
+
+#### New user guide: categories and functions (EN)
+
+This section helps new guild staff operate Economy Ops without prior internal onboarding.
+
+**Category: Dashboard**
+- **KPI Balance** — current cash/liquidity position.
+- **KPI Weekly Profit** — profit for selected analytics window (`days`).
+- **KPI Cash Gap** — delta between current balance and forecast.
+- **KPI Mismatches** — unresolved reconciliation issues count.
+- **Open Alerts / Discrepancies preview** — quick risk triage panel.
+
+**Category: Filters + Thresholds**
+- **Days** — analytics/reporting window for PnL/Cashflow.
+- **Entry status / Category / Source** — journal filtering controls.
+- **Low cash threshold** — warning trigger for treasury balance.
+- **High expense 30d threshold** — expense risk trigger.
+- **Unmatched threshold** — allowed unresolved mismatch amount.
+- **Apply / Reset / Save thresholds** — operational filtering and risk config.
+
+**Category: Operation**
+- **New Operation** — manual routed operation (`/route-op`).
+- **Posting preview** — visual Dr/Cr validation before posting.
+- **Task + Award** — task management and payout posting workflow.
+- **Routing Rule** — category-to-account mapping maintenance.
+- **Import CSV** — ingest game logs for reconciliation.
+- **Market Price** — live price fetch from Albion Data API.
+- **Loot Buyback** — request with fixed `market -20%` pricing snapshot.
+- **Regear Request** — insurance claim with mandatory death screenshot URL.
+
+**Category: Journal**
+- **Pending Approvals** — high-risk entries waiting for review.
+- **Approve / Reject** — governance controls before final posting.
+
+**Category: Reconciliation**
+- **Tasks / Awards / Rules / Imports** — operational consistency views.
+- **Loot Buyback list** — request status and payout tracking.
+- **Regear list + Issue** — fulfill claim and post `Dr 5210 / Cr 1210`.
+
+**Category: Reports**
+- **Reports JSON** — Balance Snapshot, PnL Summary, Cashflow Summary.
+- **Forecast JSON** — projected cash position.
+- **Audit Trail** — immutable operational action log.
+
+**Micro UX improvements**
+- All critical actions use loading/disabled button states.
+- Success/error toast notifications are shown for user feedback.
+- Built-in info-tooltips are added to key controls.
+- Chart block now includes loading and entrance animations.
 
 ### Quick Start
 1. Run `/register <code>` to link your Discord account to the guild.

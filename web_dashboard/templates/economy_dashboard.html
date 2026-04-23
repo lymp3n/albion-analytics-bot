@@ -50,6 +50,22 @@
         .chart-placeholder { height:250px; background:linear-gradient(180deg,rgba(0,245,255,.05),transparent); border:1px solid rgba(0,245,255,.1); border-radius:8px; position:relative; overflow:hidden; }
         .chart-line { position:absolute; bottom:0; left:0; right:0; height:60%; background:linear-gradient(180deg,rgba(0,245,255,.3),transparent); clip-path:polygon(0 100%,0 40%,20% 60%,40% 30%,60% 50%,80% 20%,100% 40%,100% 100%); }
         .chart-grid { position:absolute; inset:0; background-image:linear-gradient(rgba(0,245,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,255,.05) 1px,transparent 1px); background-size:50px 50px; }
+        .chart-loader {
+            position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+            background:linear-gradient(180deg, rgba(15,23,42,.75), rgba(15,23,42,.45));
+            z-index:3; transition:opacity .35s ease, visibility .35s ease;
+        }
+        .chart-loader.is-hidden { opacity:0; visibility:hidden; pointer-events:none; }
+        .chart-spinner {
+            width:34px; height:34px; border-radius:50%;
+            border:3px solid rgba(0,245,255,.2); border-top-color:var(--neon-cyan); border-right-color:var(--neon-magenta);
+            animation: spin .9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .chart-animate .chart-line { animation: chartRise 1s ease-out both; transform-origin: bottom; }
+        .chart-animate .chart-grid { animation: pulseGrid 1.4s ease-out both; }
+        @keyframes chartRise { 0% { transform: translateY(28px) scaleY(.7); opacity: .1; } 100% { transform: translateY(0) scaleY(1); opacity: 1; } }
+        @keyframes pulseGrid { 0% { opacity: .1; } 100% { opacity: 1; } }
         .modal-header { font-size:16px; font-weight:600; margin-bottom:20px; color:var(--neon-cyan); text-shadow:0 0 10px rgba(0,245,255,.5); }
         .form-group { margin-bottom:16px; } .form-label { display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em; }
         .form-input,.form-select { width:100%; padding:10px 12px; background:rgba(15,23,42,.6); border:1px solid rgba(0,245,255,.3); border-radius:6px; color:var(--text-primary); font-family:'Inter',sans-serif; transition:all .3s ease; }
@@ -64,6 +80,9 @@
         .btn-secondary:hover { border-color:var(--text-secondary); color:var(--text-primary); }
         .btn-primary { background:linear-gradient(135deg,var(--neon-cyan),var(--neon-purple)); color:#fff; box-shadow:0 0 20px rgba(0,245,255,.3); }
         .btn-primary:hover { box-shadow:0 0 30px rgba(0,245,255,.5); transform:translateY(-2px); }
+        .btn:disabled, .table-btn:disabled, .action-btn:disabled {
+            opacity:.55; cursor:not-allowed; transform:none !important; box-shadow:none !important;
+        }
         .table-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; } .table-title{ font-size:16px; font-weight:600; }
         .table-actions { display:flex; gap:8px; } .table-btn{ padding:8px 16px; background:transparent; border:1px solid rgba(0,245,255,.3); border-radius:6px; color:var(--text-secondary); cursor:pointer; font-size:13px; transition:all .3s ease; }
         .table-btn:hover{ background:rgba(0,245,255,.1); border-color:var(--neon-cyan); color:var(--neon-cyan); }
@@ -85,6 +104,64 @@
         .mt-20 { margin-top:20px; } .hidden { display:none !important; }
         .mono { font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-secondary); margin-top:8px; }
         .row-actions button{ margin-right:6px; }
+        .micro-pop { animation: microPop .22s ease-out; }
+        @keyframes microPop { from { transform: scale(.985); opacity: .8; } to { transform: scale(1); opacity: 1; } }
+        .tooltip {
+            position: relative;
+        }
+        .tooltip::after {
+            content: attr(data-tip);
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 10px);
+            transform: translateX(-50%) translateY(3px);
+            min-width: 180px;
+            max-width: 280px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #dbeafe;
+            padding: 8px 9px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,245,255,.28);
+            background: rgba(15,23,42,.92);
+            box-shadow: 0 10px 24px rgba(2,6,23,.35);
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: all .18s ease;
+            z-index: 20;
+            text-align: left;
+            white-space: normal;
+        }
+        .tooltip:hover::after, .tooltip:focus-visible::after {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast-wrap {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            min-width: 220px;
+            max-width: 360px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,245,255,.35);
+            background: rgba(15,23,42,.95);
+            box-shadow: 0 12px 24px rgba(2,6,23,.35);
+            font-size: 12px;
+            color: #dbeafe;
+            animation: toastIn .22s ease-out;
+        }
+        .toast.error { border-color: rgba(239,68,68,.55); color: #fecaca; }
+        .toast.success { border-color: rgba(16,185,129,.55); color: #d1fae5; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(3,1fr);} }
         @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .nav-tabs{ display:none;} .filters-grid{ grid-template-columns:1fr;} .reconciliation{ grid-template-columns:1fr;} }
     </style>
@@ -94,14 +171,14 @@
         <header class="header">
             <div class="logo"><span>🏰</span><span>GUILD ACCOUNTING</span></div>
             <nav class="nav-tabs">
-                <button class="nav-tab active" data-target="dashboard">📊 Dashboard</button>
-                <button class="nav-tab" data-target="operation">➕ Operation</button>
-                <button class="nav-tab" data-target="journal">📋 Journal</button>
-                <button class="nav-tab" data-target="recon">🔄 Reconciliation</button>
-                <button class="nav-tab" data-target="reports">📈 Reports</button>
+                <button class="nav-tab tooltip active" data-target="dashboard" data-tip="Главный обзор: KPI, ключевые таблицы и статус сверки.">📊 Dashboard</button>
+                <button class="nav-tab tooltip" data-target="operation" data-tip="Создание операций, buyback/regear заявок, импортов и правил.">➕ Operation</button>
+                <button class="nav-tab tooltip" data-target="journal" data-tip="Очередь подтверждений и ручная модерация проводок.">📋 Journal</button>
+                <button class="nav-tab tooltip" data-target="recon" data-tip="Сверка сущностей: задачи, импорты, buyback и regear.">🔄 Reconciliation</button>
+                <button class="nav-tab tooltip" data-target="reports" data-tip="Финансовые отчеты, прогнозы и аудит-трейл.">📈 Reports</button>
             </nav>
             <div class="header-right">
-                <button class="icon-btn" id="btn-refresh">↻<span class="badge" id="alerts-badge">0</span></button>
+                <button class="icon-btn tooltip" id="btn-refresh" data-tip="Обновить все данные и пересчитать виджеты.">↻<span class="badge" id="alerts-badge">0</span></button>
                 <a class="avatar" href="/dashboard" title="Back">⬅</a>
             </div>
         </header>
@@ -120,9 +197,9 @@
                 <div class="form-group"><label class="form-label">Unmatched threshold</label><input id="cfg-unmatched" class="form-input" type="number" min="0"></div>
                 <div class="form-group"><label class="form-label">Reviewed by</label><input id="review-by" class="form-input" value="dashboard_admin"></div>
                 <div class="form-group"><label class="form-label">Review note</label><input id="review-note" class="form-input" placeholder="optional reason"></div>
-                <div class="form-group"><label class="form-label"> </label><button class="btn btn-primary" id="btn-apply-filters">Apply</button></div>
-                <div class="form-group"><label class="form-label"> </label><button class="btn btn-secondary" id="btn-reset-filters">Reset</button></div>
-                <div class="form-group"><label class="form-label"> </label><button class="btn btn-primary" id="btn-save-thresholds">Save thresholds</button></div>
+                <div class="form-group"><label class="form-label"> </label><button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Применить период/фильтры к данным и отчетам.">Apply</button></div>
+                <div class="form-group"><label class="form-label"> </label><button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Сбросить фильтры к значениям по умолчанию.">Reset</button></div>
+                <div class="form-group"><label class="form-label"> </label><button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Сохранить пороги алертов (cash/expense/unmatched).">Save thresholds</button></div>
             </div>
             <p class="mono" id="alert-state"></p>
         </section>
@@ -137,15 +214,15 @@
         <div class="main-grid">
             <div class="quick-actions">
                 <div class="section-title">⚡ Quick Actions</div>
-                <button class="action-btn primary" id="btn-focus-op"><span>➕</span><span>New Operation</span></button>
-                <button class="action-btn" id="btn-import-csv"><span>📥</span><span>Import CSV</span></button>
-                <button class="action-btn" id="btn-open-routing"><span>📋</span><span>Routing Rules</span></button>
-                <button class="action-btn" id="btn-open-settings"><span>⚙️</span><span>Alerts Settings</span></button>
+                <button class="action-btn primary tooltip" id="btn-focus-op" data-tip="Перейти к форме ручной операции с автопроводкой."><span>➕</span><span>New Operation</span></button>
+                <button class="action-btn tooltip" id="btn-import-csv" data-tip="Перейти к блоку импорта game CSV (silver/energy)."><span>📥</span><span>Import CSV</span></button>
+                <button class="action-btn tooltip" id="btn-open-routing" data-tip="Открыть блок правил маршрутизации Dt/Kt."><span>📋</span><span>Routing Rules</span></button>
+                <button class="action-btn tooltip" id="btn-open-settings" data-tip="Быстрый переход к настройкам порогов алертов."><span>⚙️</span><span>Alerts Settings</span></button>
             </div>
 
-            <div class="chart-container">
+            <div class="chart-container micro-pop" id="chart-box">
                 <div class="section-title">📊 Cash Flow (visual)</div>
-                <div class="chart-placeholder"><div class="chart-grid"></div><div class="chart-line"></div></div>
+                <div class="chart-placeholder chart-animate" id="chart-placeholder"><div class="chart-grid"></div><div class="chart-line"></div><div class="chart-loader" id="chart-loader"><div class="chart-spinner"></div></div></div>
                 <div class="mono mt-20" id="reports-inline"></div>
             </div>
 
@@ -208,23 +285,23 @@
                     <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div>
                     <div class="form-group"><label class="form-label">Reward</label><input class="form-input" id="task-reward" type="number" value="100000"></div>
                     <div class="form-group"><label class="form-label"><input id="task-active" type="checkbox" checked> Active</label></div>
-                    <button class="btn btn-primary" id="btn-task-save">Save task</button>
+                    <button class="btn btn-primary tooltip" id="btn-task-save" data-tip="Создать или обновить задачу гильд-бонуса.">Save task</button>
                     <div class="mt-20 form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div>
                     <div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player"></div>
                     <div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div>
                     <div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div>
                     <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div>
-                    <button class="btn btn-primary" id="btn-award">Approve payout</button>
+                    <button class="btn btn-primary tooltip" id="btn-award" data-tip="Подтвердить выплату по задаче и провести запись.">Approve payout</button>
                 </div>
                 <div>
                     <div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div>
                     <div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div>
                     <div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div>
                     <div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div>
-                    <button class="btn btn-primary" id="btn-rule-save">Save rule</button>
+                    <button class="btn btn-primary tooltip" id="btn-rule-save" data-tip="Сохранить правило автопроводки категории.">Save rule</button>
                     <div class="mt-20 form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div>
                     <div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:130px;"></textarea></div>
-                    <button class="btn btn-primary" id="btn-log-import">Import CSV</button>
+                    <button class="btn btn-primary tooltip" id="btn-log-import" data-tip="Импортировать CSV лог и сформировать сверочные записи.">Import CSV</button>
                     <div class="block-title">📥 Loot Buyback</div>
                     <div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X"></div>
                     <div class="compact-grid">
@@ -236,13 +313,13 @@
                         <div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="lb-quality" type="number" min="1" max="5" value="1"></div>
                     </div>
                     <div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div>
-                    <button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button>
+                    <button class="btn btn-primary tooltip" id="btn-loot-buyback" data-tip="Создать заявку скупки по Market-20%; авто-апрув по лимиту.">Create buyback request</button>
                 </div>
                 <div>
                     <div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="price-item" value="T4_BAG"></div>
                     <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div>
                     <div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div>
-                    <button class="btn btn-primary" id="btn-price">Fetch price</button>
+                    <button class="btn btn-primary tooltip" id="btn-price" data-tip="Получить рыночную цену из Albion Data API.">Fetch price</button>
                     <pre class="mono" id="price-json">{}</pre>
                     <div class="block-title">🛡️ Regear Request</div>
                     <div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y"></div>
@@ -253,7 +330,7 @@
                     </div>
                     <div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div>
                     <div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div>
-                    <button class="btn btn-primary" id="btn-regear-create">Create regear request</button>
+                    <button class="btn btn-primary tooltip" id="btn-regear-create" data-tip="Создать regear запрос с обязательным death screenshot.">Create regear request</button>
                 </div>
             </div>
         </div>
@@ -299,6 +376,8 @@
         </div>
     </div>
 
+    <div class="toast-wrap" id="toast-wrap"></div>
+
     <script>
     (function () {
       const $ = (s, r = document) => r.querySelector(s);
@@ -313,6 +392,34 @@
       function num(v, fallback = 0) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
       function fmt(n) { return num(n).toLocaleString("ru-RU"); }
       function showErr(msg) { const b = $("#err-box"); b.style.display = msg ? "block" : "none"; b.textContent = msg || ""; }
+      function toast(msg, kind = "success") {
+        const wrap = $("#toast-wrap");
+        if (!wrap) return;
+        const n = document.createElement("div");
+        n.className = "toast " + (kind || "");
+        n.textContent = msg;
+        wrap.appendChild(n);
+        setTimeout(() => { n.style.opacity = "0"; n.style.transform = "translateY(6px)"; }, 2200);
+        setTimeout(() => n.remove(), 2600);
+      }
+      function setBusy(btn, busy) {
+        if (!btn) return;
+        if (busy) {
+          btn.dataset.oldText = btn.textContent;
+          btn.textContent = "Loading...";
+          btn.disabled = true;
+        } else {
+          btn.disabled = false;
+          if (btn.dataset.oldText) btn.textContent = btn.dataset.oldText;
+        }
+      }
+      function animateKpiCards() {
+        $$(".kpi-card").forEach((el, i) => {
+          el.style.animation = "none";
+          void el.offsetHeight;
+          el.style.animation = `microPop .24s ease-out ${Math.min(i * 35, 180)}ms both`;
+        });
+      }
       function statusBadge(status) {
         if (status === "posted" || status === "approved") return '<span class="status approved">✅ Approved</span>';
         if (status === "pending") return '<span class="status pending">🔄 Pending</span>';
@@ -347,6 +454,8 @@
         const out = await fetch("/dashboard/api/economy/data?" + qs.toString(), { credentials: "same-origin" })
           .then((r) => r.json()).catch((e) => ({ ok: false, error: String(e) }));
         if (!out.ok) return showErr(out.error || "Failed to load economy data");
+        $("#chart-loader")?.classList.add("is-hidden");
+        animateKpiCards();
 
         const k = out.kpis || {};
         const rep = out.reports || {};
@@ -388,11 +497,13 @@
         $$(".btn-approve").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/review-entry", { entry_id: parseInt(btn.dataset.id, 10), action: "approve", reviewed_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Approve failed");
+          toast("Entry approved");
           await load();
         }));
         $$(".btn-reject").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/review-entry", { entry_id: parseInt(btn.dataset.id, 10), action: "reject", reviewed_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Reject failed");
+          toast("Entry rejected", "error");
           await load();
         }));
 
@@ -403,6 +514,7 @@
         $$(".btn-task-del").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/task/delete", { id: parseInt(btn.dataset.id, 10) });
           if (!out.ok) return showErr(out.error || "Delete failed");
+          toast("Task deleted");
           await load();
         }));
 
@@ -446,6 +558,7 @@
             note: $("#review-note").value || "",
           });
           if (!out.ok) return showErr(out.error || "Regear issue failed");
+          toast("Regear issued");
           await load();
         }));
 
@@ -460,6 +573,7 @@
         $$(".btn-alert-ack").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/alert/ack", { id: parseInt(btn.dataset.id, 10), acknowledged_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Alert acknowledge failed");
+          toast("Alert acknowledged");
           await load();
         }));
         const disc = out.discrepancies || [];
@@ -467,6 +581,7 @@
         $$(".btn-disc-resolve").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/discrepancy/resolve", { id: parseInt(btn.dataset.id, 10), resolved_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Discrepancy resolve failed");
+          toast("Discrepancy resolved");
           await load();
         }));
       }
@@ -476,6 +591,8 @@
       $("#btn-apply-filters").addEventListener("click", load);
       $("#btn-reset-filters").addEventListener("click", async () => { $("#flt-days").value = "30"; $("#flt-status").value = ""; $("#flt-category").value = ""; $("#flt-source").value = ""; await load(); });
       $("#btn-save-thresholds").addEventListener("click", async () => {
+        const btn = $("#btn-save-thresholds");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/config", {
           updated_by: $("#review-by").value || "dashboard_admin",
           values: {
@@ -484,10 +601,14 @@
             alert_unmatched_records_threshold: parseInt($("#cfg-unmatched").value || "0", 10),
           },
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Thresholds save failed");
+        toast("Thresholds saved");
         await load();
       });
       $("#btn-op-create").addEventListener("click", async () => {
+        const btn = $("#btn-op-create");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/route-op", {
           category: $("#op-cat").value || "",
           amount: parseInt($("#op-amount").value || "0", 10),
@@ -495,23 +616,31 @@
           actor: $("#op-actor").value || "dashboard",
           source: "economy_dashboard",
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Operation failed");
+        toast("Operation posted");
         await load();
       });
       $("#btn-op-clear").addEventListener("click", () => { $("#op-amount").value = "0"; $("#op-desc").value = ""; });
       $("#op-cat").addEventListener("input", load);
       $("#op-amount").addEventListener("input", () => { $("#preview-dr-sum").textContent = "+" + fmt($("#op-amount").value || 0); $("#preview-cr-sum").textContent = "-" + fmt($("#op-amount").value || 0); });
       $("#btn-task-save").addEventListener("click", async () => {
+        const btn = $("#btn-task-save");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/task", {
           title: $("#task-title").value || "",
           description: $("#task-desc").value || "",
           reward_amount: parseInt($("#task-reward").value || "0", 10),
           active: $("#task-active").checked,
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Task save failed");
+        toast("Task saved");
         await load();
       });
       $("#btn-award").addEventListener("click", async () => {
+        const btn = $("#btn-award");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/award", {
           task_id: parseInt($("#award-task-id").value || "0", 10),
           player_nickname: $("#award-player").value || "",
@@ -519,10 +648,14 @@
           approved_by: $("#award-by").value || "dashboard_admin",
           note: $("#award-note").value || "",
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Award failed");
+        toast("Payout approved");
         await load();
       });
       $("#btn-rule-save").addEventListener("click", async () => {
+        const btn = $("#btn-rule-save");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/routing-rule", {
           category: $("#rule-cat").value || "",
           debit_account: $("#rule-dt").value || "",
@@ -530,15 +663,23 @@
           require_approval: $("#rule-approval").checked,
           tag: $("#rule-tag").value || "",
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Rule save failed");
+        toast("Routing rule saved");
         await load();
       });
       $("#btn-log-import").addEventListener("click", async () => {
+        const btn = $("#btn-log-import");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/import-log", { log_type: $("#log-type").value || "silver", content: $("#log-content").value || "" });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Import failed");
+        toast("CSV imported");
         await load();
       });
       $("#btn-loot-buyback").addEventListener("click", async () => {
+        const btn = $("#btn-loot-buyback");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/loot-buyback", {
           seller_name: $("#lb-seller").value || "",
           item_id: $("#lb-item").value || "",
@@ -549,10 +690,14 @@
           approved_by: $("#review-by").value || "dashboard_admin",
           note: $("#review-note").value || "",
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Loot buyback failed");
+        toast("Buyback request created");
         await load();
       });
       $("#btn-regear-create").addEventListener("click", async () => {
+        const btn = $("#btn-regear-create");
+        setBusy(btn, true);
         const out = await post("/dashboard/api/economy/regear", {
           action: "create",
           player_name: $("#rg-player").value || "",
@@ -563,7 +708,9 @@
           screenshot_url: $("#rg-shot").value || "",
           note: $("#review-note").value || "",
         });
+        setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Regear request failed");
+        toast("Regear request created");
         await load();
       });
       $("#btn-price").addEventListener("click", async () => {
@@ -580,6 +727,7 @@
       $("#btn-approval").addEventListener("click", () => switchTab("journal"));
       $("#btn-export-reports").addEventListener("click", () => switchTab("reports"));
 
+      setTimeout(() => $("#chart-loader")?.classList.add("is-hidden"), 1200);
       load().catch((e) => showErr(String(e)));
     })();
     </script>
