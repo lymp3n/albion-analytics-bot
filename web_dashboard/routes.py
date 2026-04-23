@@ -36,7 +36,7 @@ from web_dashboard.data_service import (
     replace_guild_role_assignments_rows,
     update_guild_dashboard_meta,
 )
-from web_dashboard.db_sync import get_sync_connection
+from web_dashboard.db_sync import fetch_all, get_sync_connection
 from web_dashboard.discord_roles_client import fetch_discord_guild_roles
 from web_dashboard.economy_db_sync import get_economy_sync_connection
 from web_dashboard.economy_service import (
@@ -50,6 +50,7 @@ from web_dashboard.economy_service import (
     economy_kpis,
     ensure_economy_schema,
     fetch_market_price,
+    suggest_item_ids,
     forecast_summary,
     import_game_log_csv,
     get_config,
@@ -584,6 +585,26 @@ def register_dashboard(app: Flask) -> None:
                     },
                     "forecast": forecast_summary(conn, backend),
                 }
+            # Player nickname suggestions come from the main bot DB.
+            try:
+                with get_sync_connection() as (main_conn, main_backend):
+                    player_rows = fetch_all(
+                        main_conn,
+                        main_backend,
+                        """
+                        SELECT nickname
+                        FROM players
+                        WHERE nickname IS NOT NULL AND TRIM(nickname) <> ''
+                        ORDER BY nickname
+                        LIMIT 600
+                        """,
+                        (),
+                    )
+                    payload["player_suggestions"] = [
+                        str(r.get("nickname") or "").strip() for r in player_rows if str(r.get("nickname") or "").strip()
+                    ]
+            except Exception:
+                payload["player_suggestions"] = []
         except Exception as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
@@ -629,8 +650,6 @@ def register_dashboard(app: Flask) -> None:
                     seller_name=str(body.get("seller_name") or "").strip(),
                     item_id=str(body.get("item_id") or "").strip(),
                     quantity=int(body.get("quantity") or 0),
-                    location=str(body.get("location") or "Caerleon").strip(),
-                    quality=int(body.get("quality") or 1),
                     auto_approve_limit=int(body.get("auto_approve_limit") or 0),
                     approved_by=str(body.get("approved_by") or "dashboard_admin").strip(),
                     note=str(body.get("note") or "").strip(),
@@ -889,6 +908,22 @@ def register_dashboard(app: Flask) -> None:
         except ValueError:
             quality = 1
         out = fetch_market_price(item_id=item_id, location=location, quality=quality)
+        status = 200 if out.get("ok") else 502
+        return app.response_class(
+            response=json.dumps(out, default=str),
+            status=status,
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/economy/item-suggest", methods=["GET"])
+    @login_required
+    def dashboard_economy_item_suggest():
+        q = str(request.args.get("q") or "").strip()
+        try:
+            limit = int(request.args.get("limit", 20))
+        except ValueError:
+            limit = 20
+        out = suggest_item_ids(q, limit=max(1, min(limit, 30)))
         status = 200 if out.get("ok") else 502
         return app.response_class(
             response=json.dumps(out, default=str),

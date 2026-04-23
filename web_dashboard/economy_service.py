@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from services.pricing_client import get_item_price
+from services.pricing_client import get_item_price, get_item_price_24h_trimmed_mean, search_item_ids
 from web_dashboard.economy_db_sync import fetch_all, fetch_one
 
 
@@ -861,35 +861,27 @@ def create_loot_buyback_request(
     seller_name: str,
     item_id: str,
     quantity: int,
-    location: str,
-    quality: int,
     auto_approve_limit: int,
     approved_by: str = "",
     note: str = "",
 ) -> dict:
     seller_name = seller_name.strip()
     item_id = item_id.strip()
-    location = location.strip()
     quantity = int(quantity)
-    quality = int(quality)
     auto_approve_limit = int(auto_approve_limit)
     if not seller_name:
         raise ValueError("seller_name is required")
     if not item_id:
         raise ValueError("item_id is required")
-    if not location:
-        raise ValueError("location is required")
     if quantity <= 0:
         raise ValueError("quantity must be positive")
-    if quality < 1 or quality > 5:
-        raise ValueError("quality must be in 1..5")
     if auto_approve_limit < 0:
         raise ValueError("auto_approve_limit must be >= 0")
 
-    price_obj, err, stale = get_item_price(item_id=item_id, location=location, quality=quality)
+    price_obj, err, stale = get_item_price_24h_trimmed_mean(item_id=item_id)
     if not price_obj:
         raise ValueError(f"Failed to fetch market price: {err or 'unknown error'}")
-    market_unit = int(price_obj.get("sell_price_min") or price_obj.get("buy_price_max") or 0)
+    market_unit = int(price_obj.get("market_unit_price") or 0)
     if market_unit <= 0:
         raise ValueError("Market price is missing/zero for selected item")
     payout_total = int(round(market_unit * quantity * 0.8))
@@ -910,8 +902,8 @@ def create_loot_buyback_request(
                 seller_name,
                 item_id,
                 quantity,
-                location,
-                quality,
+                "ALL_CITIES_24H",
+                1,
                 market_unit,
                 payout_total,
                 auto_approve_limit,
@@ -934,8 +926,8 @@ def create_loot_buyback_request(
                 seller_name,
                 item_id,
                 quantity,
-                location,
-                quality,
+                "ALL_CITIES_24H",
+                1,
                 market_unit,
                 payout_total,
                 auto_approve_limit,
@@ -978,8 +970,8 @@ def create_loot_buyback_request(
             "seller_name": seller_name,
             "item_id": item_id,
             "quantity": quantity,
-            "location": location,
-            "quality": quality,
+            "location": "ALL_CITIES_24H",
+            "quality": 1,
             "market_unit_price": market_unit,
             "discount_percent": 20,
             "payout_total": payout_total,
@@ -1862,3 +1854,8 @@ def forecast_summary(conn, backend: str) -> dict:
 def fetch_market_price(item_id: str, location: str, quality: int) -> dict:
     data, err, stale = get_item_price(item_id=item_id, location=location, quality=quality)
     return {"ok": bool(data), "data": data, "error": err, "stale": bool(stale)}
+
+
+def suggest_item_ids(query: str, limit: int = 20) -> dict:
+    items, err = search_item_ids(query, limit=limit)
+    return {"ok": err is None, "items": items, "error": err}

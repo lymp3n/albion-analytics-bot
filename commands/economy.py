@@ -12,7 +12,29 @@ from web_dashboard.economy_service import (
     create_routed_operation,
     economy_kpis,
     ensure_economy_schema,
+    list_routing_rules,
 )
+
+
+async def get_route_category_choices(ctx: discord.AutocompleteContext):
+    raw_value = str(ctx.value or "").strip().casefold()
+    try:
+        with get_economy_sync_connection() as (conn, backend):
+            ensure_economy_schema(conn, backend)
+            rows = list_routing_rules(conn, backend)
+        out = []
+        for r in rows:
+            cat = str(r.get("category") or "").strip()
+            if not cat:
+                continue
+            if raw_value and raw_value not in cat.casefold():
+                continue
+            out.append(discord.OptionChoice(name=cat[:100], value=cat))
+            if len(out) >= 25:
+                break
+        return out
+    except Exception:
+        return []
 
 
 class EconomyCommands(commands.Cog):
@@ -65,7 +87,7 @@ class EconomyCommands(commands.Cog):
         await ctx.followup.send(embed=embed, ephemeral=True)
 
     @economy_group.command(name="route-op", description="Create routed economy operation")
-    @option("category", description="Operation category", required=True)
+    @option("category", description="Operation category", required=True, autocomplete=get_route_category_choices)
     @option("amount", description="Amount (>0)", required=True)
     @option("description", description="Operation description", required=True)
     async def economy_route_op(
@@ -114,17 +136,9 @@ class EconomyCommands(commands.Cog):
         )
 
     @economy_group.command(name="regear-ticket", description="Open regear ticket channel")
-    @option("item_id", description="Albion item id", required=True)
-    @option("quantity", description="Quantity", required=True)
-    @option("screenshot_url", description="Death screenshot URL", required=True)
-    @option("note", description="Optional note", required=False, default="")
     async def economy_regear_ticket(
         self,
         ctx: discord.ApplicationContext,
-        item_id: str,
-        quantity: int,
-        screenshot_url: str,
-        note: str = "",
     ):
         if not self._guild_allowed(ctx, use_guild2=True):
             await ctx.respond("❌ Regear ticket can be created only on the ticket server (GUILD_ID2).", ephemeral=True)
@@ -132,13 +146,6 @@ class EconomyCommands(commands.Cog):
         if not await self.bot.permissions.require_member(ctx.author):
             await ctx.respond("❌ Member access required.", ephemeral=True)
             return
-        if quantity <= 0:
-            await ctx.respond("❌ Quantity must be greater than zero.", ephemeral=True)
-            return
-        if not str(screenshot_url).strip().startswith(("http://", "https://")):
-            await ctx.respond("❌ Screenshot URL must start with http:// or https://", ephemeral=True)
-            return
-
         guild_id = ctx.guild.id if ctx.guild else 0
         category_id = (
             self.bot.regear_ticket_categories.get(guild_id)
@@ -180,9 +187,7 @@ class EconomyCommands(commands.Cog):
             await ctx.followup.send(f"❌ Failed to create regear channel: {e}", ephemeral=True)
             return
 
-        desc = f"item={item_id.strip()} qty={int(quantity)}"
-        if note.strip():
-            desc += f" | note={note.strip()}"
+        desc = "regear_request_opened_from_discord"
         ticket_id = await self.bot.db.execute(
             """
             INSERT INTO tickets (
@@ -192,7 +197,7 @@ class EconomyCommands(commands.Cog):
             """,
             channel.id,
             player["id"],
-            screenshot_url.strip(),
+            "regear_pending_screenshot",
             datetime.utcnow().date(),
             "Regear",
             desc,
@@ -201,21 +206,52 @@ class EconomyCommands(commands.Cog):
 
         embed = discord.Embed(
             title="🛡️ Regear Ticket",
-            description="Regear request created and queued for review.",
+            description="Regear ticket created. Please send your death screenshot in this channel.",
             color=discord.Color.orange(),
             timestamp=datetime.utcnow(),
         )
         embed.add_field(name="Player", value=ctx.author.mention, inline=True)
-        embed.add_field(name="Item", value=item_id.strip(), inline=True)
-        embed.add_field(name="Qty", value=str(int(quantity)), inline=True)
-        embed.add_field(name="Screenshot", value=screenshot_url.strip(), inline=False)
-        if note.strip():
-            embed.add_field(name="Note", value=note.strip(), inline=False)
+        embed.add_field(name="Status", value="Awaiting screenshot", inline=True)
+        embed.add_field(name="How to close", value="Use `/economy close-ticket` in this channel.", inline=False)
         embed.set_footer(text=f"Ticket ID: {ticket_id}")
 
         msg = await channel.send(content=ctx.author.mention, embed=embed)
         await self.bot.db.execute("UPDATE tickets SET discord_message_id = $1 WHERE id = $2", msg.id, ticket_id)
         await ctx.followup.send(f"✅ Regear ticket created: {channel.mention}", ephemeral=True)
+
+    @economy_group.command(name="close-ticket", description="Close current regear ticket channel")
+    async def economy_close_ticket(self, ctx: discord.ApplicationContext):
+        if not self._guild_allowed(ctx, use_guild2=True):
+            await ctx.respond("❌ Regear tickets are managed only on the ticket server (GUILD_ID2).", ephemeral=True)
+            return
+        if not ctx.guild or not ctx.channel:
+            await ctx.respond("❌ This command can only be used inside ticket channel.", ephemeral=True)
+            return
+        is_economy = await self.bot.permissions.require_economy(ctx.author)
+        is_mentor = await self.bot.permissions.require_mentor(ctx.author)
+        is_founder = await self.bot.permissions.require_founder(ctx.author)
+        if not (is_economy or is_mentor or is_founder):
+            await ctx.respond("❌ Staff/economy access required to close ticket.", ephemeral=True)
+            return
+        row = await self.bot.db.fetchrow(
+            "SELECT id, status FROM tickets WHERE discord_channel_id = $1",
+            ctx.channel.id,
+        )
+        if not row:
+            await ctx.respond("❌ This channel is not linked to a ticket.", ephemeral=True)
+            return
+        await self.bot.db.execute(
+            "UPDATE tickets SET status = $1, closed_at = $2 WHERE id = $3",
+            "closed",
+            datetime.utcnow(),
+            int(row["id"]),
+        )
+        await ctx.respond("✅ Ticket marked as closed. Channel will be deleted in 5 seconds.", ephemeral=True)
+        await asyncio.sleep(5)
+        try:
+            await ctx.channel.delete(reason=f"Regear ticket #{int(row['id'])} closed")
+        except Exception:
+            pass
 
 
 def setup(bot):

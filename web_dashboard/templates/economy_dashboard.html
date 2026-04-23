@@ -442,14 +442,14 @@
             </div>
         </div>
 
-        <div class="ops-modal-wrap" id="modal-op"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-op" aria-label="close">✕</button><div class="modal-header">➕ New Operation</div></div><div class="ops-modal-help">Create manual routed operation. Preview checks mapped debit/credit.</div><div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div><div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div><div class="form-row"><div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div><div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div></div><div class="posting-preview"><div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div><div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div></div><div class="btn-group"><button class="btn btn-secondary" id="btn-op-clear">Clear</button><button class="btn btn-primary" id="btn-op-create">✅ Confirm</button></div></div></div>
+        <div class="ops-modal-wrap" id="modal-op"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-op" aria-label="close">✕</button><div class="modal-header">➕ New Operation</div></div><div class="ops-modal-help">Create manual routed operation. Preview checks mapped debit/credit.</div><div class="form-group"><label class="form-label">Category</label><select id="op-cat" class="form-select"></select></div><div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div><div class="form-row"><div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div><div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div></div><div class="posting-preview"><div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div><div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div></div><div class="btn-group"><button class="btn btn-secondary" id="btn-op-clear">Clear</button><button class="btn btn-primary" id="btn-op-create">✅ Confirm</button></div></div></div>
         <div class="ops-modal-wrap" id="modal-task"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-task" aria-label="close">✕</button><div class="modal-header">🏆 Guild Tasks</div></div><div class="ops-modal-help">Configure repeating guild tasks used in bonus payout workflow.</div><div class="form-group"><label class="form-label">Task title</label><input class="form-input" id="task-title"></div><div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div><div class="form-group"><label class="form-label">Reward</label><input class="form-input" id="task-reward" type="number" value="100000"></div><div class="form-group"><label class="form-label"><input id="task-active" type="checkbox" checked> Active</label></div><button class="btn btn-primary" id="btn-task-save">Save task</button></div></div>
-        <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-award" aria-label="close">✕</button><div class="modal-header">💸 Award Payout</div></div><div class="ops-modal-help">Post reward payout for approved task completion.</div><div class="form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
+        <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-award" aria-label="close">✕</button><div class="modal-header">💸 Award Payout</div></div><div class="ops-modal-help">Post reward payout for approved task completion.</div><div class="form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player" list="player-nicknames"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
         <div class="ops-modal-wrap" id="modal-rule"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-rule" aria-label="close">✕</button><div class="modal-header">🧭 Routing Rules</div></div><div class="ops-modal-help">Define debit/credit accounts and approval behavior by operation category.</div><div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div><div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div><div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div><div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div><button class="btn btn-primary" id="btn-rule-save">Save rule</button></div></div>
         <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-import" aria-label="close">✕</button><div class="modal-header">📥 CSV Import</div></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><button class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
-        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-price" aria-label="close">✕</button><div class="modal-header">🏷️ Market Price</div></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="price-item" value="T4_BAG"></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json"></pre></div></div>
-        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-buyback" aria-label="close">✕</button><div class="modal-header">📦 Loot Buyback</div></div><div class="ops-modal-help">Create buyback request with auto-approval when payout is below limit.</div><div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="lb-item" placeholder="T6_BAG"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div></div><div class="compact-grid"><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="lb-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="lb-quality" type="number" min="1" max="5" value="1"></div></div><div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
-        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-regear" aria-label="close">✕</button><div class="modal-header">🛡️ Regear Request</div></div><div class="ops-modal-help">Create regear insurance request. Screenshot URL is mandatory.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="rg-item" placeholder="T8_MAIN_HOLY"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-price" aria-label="close">✕</button><div class="modal-header">🏷️ Market Price</div></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="price-item" value="T4_BAG" list="item-id-suggest"></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json"></pre></div></div>
+        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-buyback" aria-label="close">✕</button><div class="modal-header">📦 Loot Buyback</div></div><div class="ops-modal-help">Create buyback request using 24h trimmed mean price across all cities (outlier-safe).</div><div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X" list="player-nicknames"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="lb-item" placeholder="T6_BAG" list="item-id-suggest"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-regear" aria-label="close">✕</button><div class="modal-header">🛡️ Regear Request</div></div><div class="ops-modal-help">Create regear insurance request. Screenshot URL is mandatory.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y" list="player-nicknames"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="rg-item" placeholder="T8_MAIN_HOLY" list="item-id-suggest"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
 
         <div class="table-container hidden" id="section-journal">
             <div class="section-title">📋 Journal + Pending Approvals</div>
@@ -493,6 +493,8 @@
     </div>
 
     <div class="toast-wrap" id="toast-wrap"></div>
+    <datalist id="player-nicknames"></datalist>
+    <datalist id="item-id-suggest"></datalist>
 
     <script>
     (function () {
@@ -508,6 +510,7 @@
       let apiHealthTimer = null;
       const latencyHistory = { internal: [], external: [] };
       let currentLang = "en";
+      let _itemSuggestTimer = null;
       const I18N = {
         en: {
           tab_dashboard: "📊 Dashboard",
@@ -788,6 +791,29 @@
           if (btn.dataset.oldText) btn.textContent = btn.dataset.oldText;
         }
       }
+      function fillDatalist(id, values) {
+        const dl = $("#" + id);
+        if (!dl) return;
+        const uniq = Array.from(new Set((values || []).map((v) => String(v || "").trim()).filter(Boolean))).slice(0, 500);
+        dl.innerHTML = uniq.map((v) => `<option value="${esc(v)}"></option>`).join("");
+      }
+      function applyRouteCategories(rules) {
+        const sel = $("#op-cat");
+        if (!sel) return;
+        const old = String(sel.value || "").trim();
+        const cats = Array.from(new Set((rules || []).map((r) => String(r.category || "").trim()).filter(Boolean)));
+        sel.innerHTML = cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+        if (old && cats.includes(old)) sel.value = old;
+        if (!sel.value && cats.length) sel.value = cats[0];
+      }
+      async function suggestItemIds(query) {
+        const q = String(query || "").trim();
+        if (q.length < 2) return;
+        const qs = new URLSearchParams({ q, limit: "20" });
+        const out = await fetch("/dashboard/api/economy/item-suggest?" + qs.toString(), { credentials: "same-origin" })
+          .then((r) => r.json()).catch(() => ({ ok: false, items: [] }));
+        if (out.ok) fillDatalist("item-id-suggest", out.items || []);
+      }
       function animateKpiCards() {
         $$(".kpi-card").forEach((el, i) => {
           el.style.animation = "none";
@@ -1013,6 +1039,8 @@
         ).join("") || `<tr><td colspan="6">${tr("no_payouts")}</td></tr>`;
 
         const rules = out.routing_rules || [];
+        applyRouteCategories(rules);
+        fillDatalist("player-nicknames", out.player_suggestions || []);
         $("#tbl-rules tbody").innerHTML = rules.map((r) =>
           `<tr><td>${esc(r.category)}</td><td>${esc(r.debit_account)}</td><td>${esc(r.credit_account)}</td><td>${r.require_approval ? tr("yes") : tr("no")}</td><td>${esc(r.tag || "")}</td></tr>`
         ).join("") || `<tr><td colspan="5">${tr("no_rules")}</td></tr>`;
@@ -1117,7 +1145,7 @@
         await load();
       });
       on("#btn-op-clear", "click", () => { $("#op-amount").value = "0"; $("#op-desc").value = ""; });
-      on("#op-cat", "input", load);
+      on("#op-cat", "change", load);
       on("#op-amount", "input", () => { $("#preview-dr-sum").textContent = "+" + fmt($("#op-amount").value || 0); $("#preview-cr-sum").textContent = "-" + fmt($("#op-amount").value || 0); });
       on("#btn-task-save", "click", async () => {
         const btn = $("#btn-task-save");
@@ -1182,8 +1210,6 @@
           seller_name: $("#lb-seller").value || "",
           item_id: $("#lb-item").value || "",
           quantity: parseInt($("#lb-qty").value || "0", 10),
-          location: $("#lb-location").value || "Caerleon",
-          quality: parseInt($("#lb-quality").value || "1", 10),
           auto_approve_limit: parseInt($("#lb-limit").value || "0", 10),
           approved_by: $("#review-by").value || "dashboard_admin",
           note: $("#review-note").value || "",
@@ -1217,6 +1243,11 @@
           .then((r) => r.json()).catch((e) => ({ ok: false, error: String(e) }));
         $("#price-json").textContent = JSON.stringify(out, null, 2);
       });
+      $$(".js-item-id").forEach((inp) => inp.addEventListener("input", () => {
+        if (_itemSuggestTimer) clearTimeout(_itemSuggestTimer);
+        const q = inp.value || "";
+        _itemSuggestTimer = setTimeout(() => { suggestItemIds(q).catch(() => {}); }, 220);
+      }));
       $$(".js-open-modal").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.modal;
         const m = id ? $("#" + id) : null;

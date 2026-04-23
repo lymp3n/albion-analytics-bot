@@ -37,8 +37,8 @@ def get_role_assist_catalog() -> Dict[str, Any]:
         },
         {
             "tier": "Economy",
-            "commands": "Economy dashboard (`/dashboard/economy`) + `/economy kpi` + `/economy route-op` + `/economy regear-ticket`",
-            "details": "Dedicated finance tier (`require_economy`) for KPI/operations; regear ticket creation supports multi-server category routing by env config.",
+            "commands": "Economy dashboard (`/dashboard/economy`) + `/economy kpi` + `/economy route-op` + `/economy regear-ticket` + `/economy close-ticket`",
+            "details": "Dedicated finance tier (`require_economy`) for KPI/operations; regear ticket flow is no-parameter create + explicit close in ticket server (GUILD_ID2).",
         },
     ]
     return {"table": table, "shotcaller_role_ids": sorted(SHOTCALLER_ROLE_IDS)}

@@ -20,6 +20,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - Ивенты: шаблоны, слоты, join/leave/manage, ручные замены.
 - Роли и доступ: member / mentor / founder / economy.
 - Статистика игроков и payroll-инструменты.
+- Economy slash-команды: `/economy kpi`, `/economy route-op`, `/economy regear-ticket`, `/economy close-ticket`.
 
 #### 2) Web Dashboard
 - KPI и сводная аналитика по активности.
@@ -42,7 +43,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - Фильтры и пороги алертов (скрыты по умолчанию).
 
 #### Operation
-- Карточки с модальными формами (первая строка — широкая `New Operation`, далее две строки по 3 карточки):
+- Карточки с модальными формами (первая строка — широкая `New Operation`, далее карточки по 2 в ряд):
   - New Operation
   - Guild Tasks
   - Award Payout
@@ -69,7 +70,8 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 
 #### Loot Buyback
 - Выкуп лута у игроков: `market - 20%`.
-- Цена фиксируется в момент запроса через Albion pricing API.
+- Цена считается как средняя за 24ч по всем городам с фильтром выбросов:
+  города дешевле 50% от медианы автоматически исключаются.
 - Авто-апрув при сумме <= `auto_approve_limit`.
 - Бухгалтерия (при approved): `Дт 1200 / Кт 1000`.
 
@@ -106,6 +108,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - `POST /dashboard/api/economy/alert/ack`
 - `POST /dashboard/api/economy/discrepancy/resolve`
 - `GET /dashboard/api/economy/price`
+- `GET /dashboard/api/economy/item-suggest`
 - `POST /dashboard/api/economy/loot-buyback`
 - `POST /dashboard/api/economy/regear`
 
@@ -149,6 +152,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - Event lifecycle: templates, slot signup, roster management.
 - Role/access tiers: member / mentor / founder / economy.
 - Player analytics and mentor payroll tooling.
+- Economy slash commands: `/economy kpi`, `/economy route-op`, `/economy regear-ticket`, `/economy close-ticket`.
 
 #### 2) Web Dashboard
 - KPI and operational analytics.
@@ -171,7 +175,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - Collapsed-by-default filters and alert thresholds.
 
 #### Operation
-- Card-based modal layout (first row has a wide `New Operation`, next rows use 3 cards each):
+- Card-based modal layout (first row has a wide `New Operation`, next rows use 2 cards per row):
   - New Operation
   - Guild Tasks
   - Award Payout
@@ -198,7 +202,8 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 
 #### Loot Buyback
 - Player loot buyback at `market - 20%`.
-- Market snapshot pricing via Albion pricing API.
+- Price uses a 24h cross-city trimmed mean:
+  city prices below 50% of median are excluded as outliers.
 - Auto-approval under `auto_approve_limit`.
 - Accounting (approved): `Dr 1200 / Cr 1000`.
 
@@ -235,6 +240,7 @@ Schema initialization is non-destructive (`CREATE TABLE IF NOT EXISTS`), and see
 - `POST /dashboard/api/economy/alert/ack`
 - `POST /dashboard/api/economy/discrepancy/resolve`
 - `GET /dashboard/api/economy/price`
+- `GET /dashboard/api/economy/item-suggest`
 - `POST /dashboard/api/economy/loot-buyback`
 - `POST /dashboard/api/economy/regear`
 
