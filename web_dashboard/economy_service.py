@@ -145,6 +145,55 @@ def ensure_economy_schema(conn, backend: str) -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_loot_buyback_requests (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                seller_name TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                location TEXT NOT NULL,
+                quality INTEGER NOT NULL,
+                market_unit_price BIGINT NOT NULL,
+                discount_percent INTEGER NOT NULL DEFAULT 20,
+                payout_total BIGINT NOT NULL,
+                auto_approve_limit BIGINT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approved_by TEXT,
+                journal_entry_id INTEGER,
+                note TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_regear_requests (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                player_name TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_cost BIGINT NOT NULL,
+                screenshot_url TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                checked_by TEXT,
+                issued_by TEXT,
+                journal_entry_id INTEGER,
+                note TEXT
+            )
+            """
+        )
     else:
         cur.execute(
             """
@@ -276,6 +325,55 @@ def ensure_economy_schema(conn, backend: str) -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_loot_buyback_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                seller_name TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                location TEXT NOT NULL,
+                quality INTEGER NOT NULL,
+                market_unit_price INTEGER NOT NULL,
+                discount_percent INTEGER NOT NULL DEFAULT 20,
+                payout_total INTEGER NOT NULL,
+                auto_approve_limit INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approved_by TEXT,
+                journal_entry_id INTEGER,
+                note TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_regear_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                player_name TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_cost INTEGER NOT NULL,
+                screenshot_url TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                checked_by TEXT,
+                issued_by TEXT,
+                journal_entry_id INTEGER,
+                note TEXT
+            )
+            """
+        )
     conn.commit()
     _seed_defaults(conn, backend)
 
@@ -286,6 +384,7 @@ def _seed_defaults(conn, backend: str) -> None:
         ("1000", "Guild Cash (silver)", "asset"),
         ("1100", "Guild Energy", "asset"),
         ("1200", "Inventory / Gear", "asset"),
+        ("1210", "Regear Chest", "asset"),
         ("1300", "Receivables", "asset"),
         ("2000", "Payables", "liability"),
         ("3000", "Guild Capital", "equity"),
@@ -298,6 +397,7 @@ def _seed_defaults(conn, backend: str) -> None:
         ("5000", "COGS", "expense"),
         ("5100", "Rent Expense", "expense"),
         ("5200", "Rewards Expense", "expense"),
+        ("5210", "Regear Expense", "expense"),
         ("5300", "Consumables/Repairs", "expense"),
         ("6000", "Rounding / Reconciliation", "expense"),
     ]
@@ -322,6 +422,8 @@ def _seed_defaults(conn, backend: str) -> None:
         ("content_income", "1000", "4000", False, "content"),
         ("buy_gear", "1200", "1000", False, "gear"),
         ("reward_payout", "5200", "1000", True, "rewards"),
+        ("loot_buyback", "1200", "1000", True, "buyback"),
+        ("regear_issue", "5210", "1210", True, "regear"),
     ]
     for category, dt, kt, need_approval, tag in rules:
         if backend == "postgres":
@@ -341,6 +443,71 @@ def _seed_defaults(conn, backend: str) -> None:
                 """,
                 (category, dt, kt, 1 if need_approval else 0, tag),
             )
+    config_defaults = {
+        "alert_low_cash_threshold": "2000000",
+        "alert_high_expense_30d_threshold": "25000000",
+        "alert_unmatched_records_threshold": "0",
+    }
+    for k, v in config_defaults.items():
+        if backend == "postgres":
+            cur.execute(
+                """
+                INSERT INTO econ_config (key, value) VALUES (%s, %s)
+                ON CONFLICT (key) DO NOTHING
+                """,
+                (k, v),
+            )
+        else:
+            cur.execute(
+                "INSERT OR IGNORE INTO econ_config (key, value) VALUES (?, ?)",
+                (k, v),
+            )
+    conn.commit()
+
+
+def get_config(conn, backend: str) -> dict:
+    rows = fetch_all(conn, backend, "SELECT key, value FROM econ_config", ())
+    return {str(r.get("key")): str(r.get("value")) for r in rows if r.get("key") is not None}
+
+
+def set_config_values(conn, backend: str, values: dict, actor: str = "dashboard_admin") -> None:
+    if not isinstance(values, dict):
+        raise ValueError("values must be an object")
+    cur = conn.cursor()
+    for k, raw in values.items():
+        key = str(k or "").strip()
+        if not key.startswith("alert_"):
+            continue
+        val = str(raw or "").strip()
+        if not val or (not val.lstrip("-").isdigit()):
+            raise ValueError(f"Invalid numeric value for {key}")
+        if backend == "postgres":
+            cur.execute(
+                """
+                INSERT INTO econ_config (key, value, updated_at)
+                VALUES (%s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=CURRENT_TIMESTAMP
+                """,
+                (key, val),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO econ_config (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+                """,
+                (key, val),
+            )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="set_config",
+        entity_type="econ_config",
+        entity_id="alerts",
+        actor=actor,
+        payload={"values": values},
+    )
     conn.commit()
 
 
@@ -448,8 +615,30 @@ def create_routed_operation(
     return {"entry_id": entry_id, "status": status, "category": category, "amount": amount}
 
 
-def list_recent_entries(conn, backend: str, limit: int = 120) -> List[dict]:
+def list_recent_entries(
+    conn,
+    backend: str,
+    limit: int = 120,
+    *,
+    status: str = "",
+    category_like: str = "",
+    source_like: str = "",
+) -> List[dict]:
     lim = max(10, min(int(limit), 500))
+    where = []
+    params: List[object] = []
+    if status in ("posted", "pending", "rejected"):
+        where.append("e.status = $1")
+        params.append(status)
+    if category_like.strip():
+        idx = len(params) + 1
+        where.append(f"LOWER(e.category) LIKE LOWER(${idx})")
+        params.append(f"%{category_like.strip()}%")
+    if source_like.strip():
+        idx = len(params) + 1
+        where.append(f"LOWER(COALESCE(e.source,'')) LIKE LOWER(${idx})")
+        params.append(f"%{source_like.strip()}%")
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     rows = fetch_all(
         conn,
         backend,
@@ -459,11 +648,12 @@ def list_recent_entries(conn, backend: str, limit: int = 120) -> List[dict]:
                SUM(CASE WHEN l.side='credit' THEN l.amount ELSE 0 END) AS credit_sum
         FROM econ_journal_entries e
         LEFT JOIN econ_journal_lines l ON l.entry_id = e.id
+        {where_sql}
         GROUP BY e.id
         ORDER BY e.id DESC
         LIMIT {lim}
         """,
-        (),
+        tuple(params),
     )
     return rows
 
@@ -656,6 +846,344 @@ def list_bonus_awards(conn, backend: str, limit: int = 120) -> List[dict]:
         FROM econ_guild_bonus_awards a
         LEFT JOIN econ_guild_bonus_tasks t ON t.id = a.task_id
         ORDER BY a.id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+
+
+def create_loot_buyback_request(
+    conn,
+    backend: str,
+    *,
+    seller_name: str,
+    item_id: str,
+    quantity: int,
+    location: str,
+    quality: int,
+    auto_approve_limit: int,
+    approved_by: str = "",
+    note: str = "",
+) -> dict:
+    seller_name = seller_name.strip()
+    item_id = item_id.strip()
+    location = location.strip()
+    quantity = int(quantity)
+    quality = int(quality)
+    auto_approve_limit = int(auto_approve_limit)
+    if not seller_name:
+        raise ValueError("seller_name is required")
+    if not item_id:
+        raise ValueError("item_id is required")
+    if not location:
+        raise ValueError("location is required")
+    if quantity <= 0:
+        raise ValueError("quantity must be positive")
+    if quality < 1 or quality > 5:
+        raise ValueError("quality must be in 1..5")
+    if auto_approve_limit < 0:
+        raise ValueError("auto_approve_limit must be >= 0")
+
+    price_obj, err, stale = get_item_price(item_id=item_id, location=location, quality=quality)
+    if not price_obj:
+        raise ValueError(f"Failed to fetch market price: {err or 'unknown error'}")
+    market_unit = int(price_obj.get("sell_price_min") or price_obj.get("buy_price_max") or 0)
+    if market_unit <= 0:
+        raise ValueError("Market price is missing/zero for selected item")
+    payout_total = int(round(market_unit * quantity * 0.8))
+    status = "approved" if payout_total <= auto_approve_limit else "pending"
+
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            INSERT INTO econ_loot_buyback_requests (
+                seller_name, item_id, quantity, location, quality,
+                market_unit_price, discount_percent, payout_total,
+                auto_approve_limit, status, approved_by, note
+            ) VALUES (%s, %s, %s, %s, %s, %s, 20, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                seller_name,
+                item_id,
+                quantity,
+                location,
+                quality,
+                market_unit,
+                payout_total,
+                auto_approve_limit,
+                status,
+                approved_by.strip() or None,
+                note.strip() or None,
+            ),
+        )
+        req_id = int(cur.fetchone()[0])
+    else:
+        cur.execute(
+            """
+            INSERT INTO econ_loot_buyback_requests (
+                seller_name, item_id, quantity, location, quality,
+                market_unit_price, discount_percent, payout_total,
+                auto_approve_limit, status, approved_by, note
+            ) VALUES (?, ?, ?, ?, ?, ?, 20, ?, ?, ?, ?, ?)
+            """,
+            (
+                seller_name,
+                item_id,
+                quantity,
+                location,
+                quality,
+                market_unit,
+                payout_total,
+                auto_approve_limit,
+                status,
+                approved_by.strip() or None,
+                note.strip() or None,
+            ),
+        )
+        req_id = int(cur.lastrowid)
+
+    entry_id = None
+    if status == "approved":
+        entry_id = _insert_entry(
+            conn,
+            backend,
+            "loot_buyback",
+            payout_total,
+            f"Loot buyback {item_id} x{quantity} from {seller_name}. {note}".strip(),
+            approved_by.strip() or "system_auto",
+            "loot_buyback",
+            "posted",
+        )
+        lines = [("1200", "debit", payout_total), ("1000", "credit", payout_total)]
+        _validate_double_entry(lines)
+        for acc, side, amt in lines:
+            _insert_line(conn, backend, entry_id, acc, side, amt)
+        if backend == "postgres":
+            cur.execute("UPDATE econ_loot_buyback_requests SET journal_entry_id=%s WHERE id=%s", (entry_id, req_id))
+        else:
+            cur.execute("UPDATE econ_loot_buyback_requests SET journal_entry_id=? WHERE id=?", (entry_id, req_id))
+
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="create_loot_buyback_request",
+        entity_type="loot_buyback_request",
+        entity_id=str(req_id),
+        actor=approved_by.strip() or "dashboard_admin",
+        payload={
+            "seller_name": seller_name,
+            "item_id": item_id,
+            "quantity": quantity,
+            "location": location,
+            "quality": quality,
+            "market_unit_price": market_unit,
+            "discount_percent": 20,
+            "payout_total": payout_total,
+            "auto_approve_limit": auto_approve_limit,
+            "status": status,
+            "stale_price": bool(stale),
+            "journal_entry_id": entry_id,
+        },
+    )
+    conn.commit()
+    return {
+        "request_id": req_id,
+        "status": status,
+        "journal_entry_id": entry_id,
+        "market_unit_price": market_unit,
+        "discount_percent": 20,
+        "payout_total": payout_total,
+        "stale_price": bool(stale),
+        "price_error": err,
+    }
+
+
+def create_regear_request(
+    conn,
+    backend: str,
+    *,
+    player_name: str,
+    content_type: str,
+    item_id: str,
+    quantity: int,
+    unit_cost: int,
+    screenshot_url: str,
+    note: str = "",
+) -> dict:
+    player_name = player_name.strip()
+    content_type = content_type.strip()
+    item_id = item_id.strip()
+    screenshot_url = screenshot_url.strip()
+    quantity = int(quantity)
+    unit_cost = int(unit_cost)
+    if not player_name:
+        raise ValueError("player_name is required")
+    if not content_type:
+        raise ValueError("content_type is required")
+    if not item_id:
+        raise ValueError("item_id is required")
+    if quantity <= 0:
+        raise ValueError("quantity must be positive")
+    if unit_cost <= 0:
+        raise ValueError("unit_cost must be positive")
+    if not screenshot_url:
+        raise ValueError("screenshot_url is required")
+
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            INSERT INTO econ_regear_requests (
+                player_name, content_type, item_id, quantity, unit_cost, screenshot_url, status, note
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'pending', %s)
+            RETURNING id
+            """,
+            (player_name, content_type, item_id, quantity, unit_cost, screenshot_url, note.strip() or None),
+        )
+        req_id = int(cur.fetchone()[0])
+    else:
+        cur.execute(
+            """
+            INSERT INTO econ_regear_requests (
+                player_name, content_type, item_id, quantity, unit_cost, screenshot_url, status, note
+            ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (player_name, content_type, item_id, quantity, unit_cost, screenshot_url, note.strip() or None),
+        )
+        req_id = int(cur.lastrowid)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="create_regear_request",
+        entity_type="regear_request",
+        entity_id=str(req_id),
+        actor=player_name,
+        payload={
+            "content_type": content_type,
+            "item_id": item_id,
+            "quantity": quantity,
+            "unit_cost": unit_cost,
+            "screenshot_url": screenshot_url,
+        },
+    )
+    conn.commit()
+    return {"request_id": req_id, "status": "pending"}
+
+
+def issue_regear_request(
+    conn,
+    backend: str,
+    *,
+    request_id: int,
+    checked_by: str,
+    issued_by: str,
+    note: str = "",
+) -> dict:
+    req = fetch_one(
+        conn,
+        backend,
+        """
+        SELECT id, player_name, content_type, item_id, quantity, unit_cost, screenshot_url, status
+        FROM econ_regear_requests
+        WHERE id=$1
+        """,
+        (int(request_id),),
+    )
+    if not req:
+        raise ValueError("Regear request not found")
+    if str(req.get("status") or "").lower() == "issued":
+        raise ValueError("Regear request is already issued")
+    total_cost = int(req.get("quantity") or 0) * int(req.get("unit_cost") or 0)
+    if total_cost <= 0:
+        raise ValueError("Invalid total cost for regear request")
+
+    entry_id = _insert_entry(
+        conn,
+        backend,
+        "regear_issue",
+        total_cost,
+        f"Regear issue for {req.get('player_name')} ({req.get('item_id')} x{req.get('quantity')}). {note}".strip(),
+        issued_by.strip() or "dashboard_admin",
+        "regear_issue",
+        "posted",
+    )
+    lines = [("5210", "debit", total_cost), ("1210", "credit", total_cost)]
+    _validate_double_entry(lines)
+    for acc, side, amt in lines:
+        _insert_line(conn, backend, entry_id, acc, side, amt)
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            UPDATE econ_regear_requests
+            SET status='issued', checked_by=%s, issued_by=%s, journal_entry_id=%s, note=%s
+            WHERE id=%s
+            """,
+            (
+                checked_by.strip() or None,
+                issued_by.strip() or None,
+                entry_id,
+                note.strip() or None,
+                int(request_id),
+            ),
+        )
+    else:
+        cur.execute(
+            """
+            UPDATE econ_regear_requests
+            SET status='issued', checked_by=?, issued_by=?, journal_entry_id=?, note=?
+            WHERE id=?
+            """,
+            (
+                checked_by.strip() or None,
+                issued_by.strip() or None,
+                entry_id,
+                note.strip() or None,
+                int(request_id),
+            ),
+        )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="issue_regear_request",
+        entity_type="regear_request",
+        entity_id=str(int(request_id)),
+        actor=issued_by.strip() or "dashboard_admin",
+        payload={"entry_id": entry_id, "checked_by": checked_by.strip(), "total_cost": total_cost},
+    )
+    conn.commit()
+    return {"request_id": int(request_id), "status": "issued", "entry_id": entry_id, "total_cost": total_cost}
+
+
+def list_loot_buyback_requests(conn, backend: str, limit: int = 80) -> List[dict]:
+    lim = max(10, min(int(limit), 500))
+    return fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, created_at, seller_name, item_id, quantity, location, quality,
+               market_unit_price, discount_percent, payout_total, auto_approve_limit,
+               status, approved_by, journal_entry_id, note
+        FROM econ_loot_buyback_requests
+        ORDER BY id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+
+
+def list_regear_requests(conn, backend: str, limit: int = 80) -> List[dict]:
+    lim = max(10, min(int(limit), 500))
+    return fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, created_at, player_name, content_type, item_id, quantity, unit_cost,
+               screenshot_url, status, checked_by, issued_by, journal_entry_id, note
+        FROM econ_regear_requests
+        ORDER BY id DESC
         LIMIT {lim}
         """,
         (),
@@ -1134,6 +1662,10 @@ def _set_alert_state(
 
 
 def run_alert_threshold_checks(conn, backend: str) -> dict:
+    cfg = get_config(conn, backend)
+    low_cash_threshold = int(cfg.get("alert_low_cash_threshold") or 2_000_000)
+    high_expense_threshold = int(cfg.get("alert_high_expense_30d_threshold") or 25_000_000)
+    unmatched_threshold = int(cfg.get("alert_unmatched_records_threshold") or 0)
     balance = balance_snapshot(conn, backend)
     cash = int(balance.get("cash_balance") or 0)
     pnl = pnl_summary(conn, backend, days=30)
@@ -1147,9 +1679,9 @@ def run_alert_threshold_checks(conn, backend: str) -> dict:
         alert_type="low_cash",
         severity="high",
         message="Cash balance below threshold",
-        threshold_value=2_000_000,
+        threshold_value=low_cash_threshold,
         current_value=cash,
-        should_open=cash < 2_000_000,
+        should_open=cash < low_cash_threshold,
     )
     _set_alert_state(
         conn,
@@ -1157,9 +1689,9 @@ def run_alert_threshold_checks(conn, backend: str) -> dict:
         alert_type="high_expense",
         severity="medium",
         message="30-day expense above threshold",
-        threshold_value=25_000_000,
+        threshold_value=high_expense_threshold,
         current_value=expense_30,
-        should_open=expense_30 > 25_000_000,
+        should_open=expense_30 > high_expense_threshold,
     )
     _set_alert_state(
         conn,
@@ -1167,9 +1699,9 @@ def run_alert_threshold_checks(conn, backend: str) -> dict:
         alert_type="unmatched_records",
         severity="medium",
         message="Unmatched import records detected",
-        threshold_value=0,
+        threshold_value=unmatched_threshold,
         current_value=unmatched_count,
-        should_open=unmatched_count > 0,
+        should_open=unmatched_count > unmatched_threshold,
     )
     _log_audit(
         conn,
@@ -1181,7 +1713,16 @@ def run_alert_threshold_checks(conn, backend: str) -> dict:
         payload={"cash_balance": cash, "expense_30d": expense_30, "unmatched_records": unmatched_count},
     )
     conn.commit()
-    return {"cash_balance": cash, "expense_30d": expense_30, "unmatched_records": unmatched_count}
+    return {
+        "cash_balance": cash,
+        "expense_30d": expense_30,
+        "unmatched_records": unmatched_count,
+        "thresholds": {
+            "low_cash": low_cash_threshold,
+            "high_expense_30d": high_expense_threshold,
+            "unmatched_records": unmatched_threshold,
+        },
+    }
 
 
 def balance_snapshot(conn, backend: str) -> dict:

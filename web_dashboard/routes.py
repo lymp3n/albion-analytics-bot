@@ -40,6 +40,9 @@ from web_dashboard.db_sync import get_sync_connection
 from web_dashboard.discord_roles_client import fetch_discord_guild_roles
 from web_dashboard.economy_db_sync import get_economy_sync_connection
 from web_dashboard.economy_service import (
+    create_loot_buyback_request,
+    create_regear_request,
+    issue_regear_request,
     award_task_completion,
     balance_snapshot,
     cashflow_summary,
@@ -49,6 +52,8 @@ from web_dashboard.economy_service import (
     fetch_market_price,
     forecast_summary,
     import_game_log_csv,
+    get_config,
+    set_config_values,
     list_alerts,
     list_audit_trail,
     list_bonus_awards,
@@ -58,6 +63,8 @@ from web_dashboard.economy_service import (
     list_recent_entries,
     list_routing_rules,
     list_tasks,
+    list_loot_buyback_requests,
+    list_regear_requests,
     resolve_discrepancy,
     acknowledge_alert,
     pnl_summary,
@@ -530,25 +537,50 @@ def register_dashboard(app: Flask) -> None:
     @login_required
     def dashboard_economy_data():
         try:
+            days = int(request.args.get("days", 30))
+        except ValueError:
+            days = 30
+        days = max(1, min(days, 365))
+        entry_status = str(request.args.get("entry_status", "") or "").strip().lower()
+        category_q = str(request.args.get("category", "") or "").strip()
+        source_q = str(request.args.get("source", "") or "").strip()
+        try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
-                run_alert_threshold_checks(conn, backend)
+                alert_state = run_alert_threshold_checks(conn, backend)
                 payload = {
                     "ok": True,
+                    "filters": {
+                        "days": days,
+                        "entry_status": entry_status,
+                        "category": category_q,
+                        "source": source_q,
+                    },
                     "kpis": economy_kpis(conn, backend),
                     "tasks": list_tasks(conn, backend),
                     "awards": list_bonus_awards(conn, backend, 120),
-                    "entries": list_recent_entries(conn, backend, 160),
+                    "entries": list_recent_entries(
+                        conn,
+                        backend,
+                        160,
+                        status=entry_status,
+                        category_like=category_q,
+                        source_like=source_q,
+                    ),
                     "routing_rules": list_routing_rules(conn, backend),
+                    "loot_buybacks": list_loot_buyback_requests(conn, backend, 80),
+                    "regear_requests": list_regear_requests(conn, backend, 80),
                     "imports": list_game_log_imports(conn, backend, 40),
                     "pending_approvals": list_pending_approvals(conn, backend, 120),
                     "audit_trail": list_audit_trail(conn, backend, 180),
                     "discrepancies": list_discrepancy_queue(conn, backend, 180),
                     "alerts": list_alerts(conn, backend, 100),
+                    "alert_state": alert_state,
+                    "config": get_config(conn, backend),
                     "reports": {
                         "balance_snapshot": balance_snapshot(conn, backend),
-                        "pnl_summary": pnl_summary(conn, backend, 30),
-                        "cashflow_summary": cashflow_summary(conn, backend, 30),
+                        "pnl_summary": pnl_summary(conn, backend, days),
+                        "cashflow_summary": cashflow_summary(conn, backend, days),
                     },
                     "forecast": forecast_summary(conn, backend),
                 }
@@ -576,6 +608,70 @@ def register_dashboard(app: Flask) -> None:
                     reward_amount=int(body.get("reward_amount") or 0),
                     active=bool(body.get("active", True)),
                 )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/loot-buyback", methods=["POST"])
+    @login_required
+    def dashboard_economy_loot_buyback():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = create_loot_buyback_request(
+                    conn,
+                    backend,
+                    seller_name=str(body.get("seller_name") or "").strip(),
+                    item_id=str(body.get("item_id") or "").strip(),
+                    quantity=int(body.get("quantity") or 0),
+                    location=str(body.get("location") or "Caerleon").strip(),
+                    quality=int(body.get("quality") or 1),
+                    auto_approve_limit=int(body.get("auto_approve_limit") or 0),
+                    approved_by=str(body.get("approved_by") or "dashboard_admin").strip(),
+                    note=str(body.get("note") or "").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/regear", methods=["POST"])
+    @login_required
+    def dashboard_economy_regear():
+        body = request.get_json(silent=True) or {}
+        action = str(body.get("action") or "create").strip().lower()
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                if action == "issue":
+                    out = issue_regear_request(
+                        conn,
+                        backend,
+                        request_id=int(body.get("request_id") or 0),
+                        checked_by=str(body.get("checked_by") or "dashboard_admin").strip(),
+                        issued_by=str(body.get("issued_by") or "dashboard_admin").strip(),
+                        note=str(body.get("note") or "").strip(),
+                    )
+                else:
+                    out = create_regear_request(
+                        conn,
+                        backend,
+                        player_name=str(body.get("player_name") or "").strip(),
+                        content_type=str(body.get("content_type") or "").strip(),
+                        item_id=str(body.get("item_id") or "").strip(),
+                        quantity=int(body.get("quantity") or 0),
+                        unit_cost=int(body.get("unit_cost") or 0),
+                        screenshot_url=str(body.get("screenshot_url") or "").strip(),
+                        note=str(body.get("note") or "").strip(),
+                    )
         except Exception as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
@@ -695,6 +791,29 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "updated": updated}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/config", methods=["POST"])
+    @login_required
+    def dashboard_economy_set_config():
+        body = request.get_json(silent=True) or {}
+        try:
+            values = body.get("values")
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                set_config_values(
+                    conn,
+                    backend,
+                    values=values,
+                    actor=str(body.get("updated_by") or "dashboard_admin").strip(),
+                )
+                cfg = get_config(conn, backend)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "config": cfg}, default=str), mimetype="application/json")
 
     @app.route("/dashboard/api/economy/alert/ack", methods=["POST"])
     @login_required

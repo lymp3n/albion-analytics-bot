@@ -83,6 +83,68 @@ EN: A Discord bot for Albion Online coaching, analytics, event management, and m
   - `/event add_extra`
 - Улучшена устойчивость к `Unknown interaction` в кнопках управления событием.
 
+### Экономика гильдии: новые модули (RU)
+
+Ниже добавлены 2 прикладных модуля экономики, встроенных в контур двойной записи и дашборд:
+
+#### 1) Loot Buyback (Скупка лута)
+
+**Что делает**
+- Позволяет гильдии выкупать лут у игроков по формуле `рынок - 20%`.
+- Цена фиксируется в момент создания заявки (через Albion Data API).
+- Заявка автоматически становится `approved`, если сумма выплаты не превышает лимит автоодобрения; иначе `pending`.
+
+**Бизнес-логика**
+- Участники: продавец (игрок) и гильдия/казначей.
+- Расчет выплаты: `sell_price_min * quantity * 0.8`.
+- В UI отражаются: seller, item, quantity, market price, payout, status.
+
+**Бухгалтерская логика**
+- При автоодобрении система сразу создает проводку:
+  - `Дт 1200` (Inventory / Gear)
+  - `Кт 1000` (Guild Cash)
+- При статусе `pending` проводка не создается до ручного решения.
+
+**Новый API-роут**
+- `POST /dashboard/api/economy/loot-buyback`
+- Пример body:
+  - `seller_name`, `item_id`, `quantity`, `location`, `quality`, `auto_approve_limit`, `approved_by`, `note`
+
+#### 2) Regear / Insurance (Регир)
+
+**Что делает**
+- Поддерживает компенсацию экипировки после смерти в контенте гильдии.
+- Разделен на два этапа:
+  1. создание тикета (`pending`) с обязательным `screenshot_url`;
+  2. выдача (`issue`) после проверки казначеем.
+
+**Бизнес-логика**
+- Создание запроса хранит факт обращения (кто, где, что потеряно, скрин, оценка стоимости).
+- Подтверждение выдачи фиксирует списание фонда регира.
+
+**Бухгалтерская логика**
+- При действии `issue` создается проводка:
+  - `Дт 5210` (Regear Expense)
+  - `Кт 1210` (Regear Chest)
+
+**Новый API-роут**
+- `POST /dashboard/api/economy/regear`
+- Поддерживаемые режимы:
+  - `action=create`: создать заявку
+  - `action=issue`: выдать регир и провести списание
+
+#### Дополнительно по реализации
+- В экономической схеме добавлены таблицы:
+  - `econ_loot_buyback_requests`
+  - `econ_regear_requests`
+- Добавлены счета и дефолтные правила:
+  - счет `1210` (Regear Chest), счет `5210` (Regear Expense)
+  - routing rules: `loot_buyback`, `regear_issue`
+- Новые сущности отдаются в `GET /dashboard/api/economy/data`:
+  - `loot_buybacks`
+  - `regear_requests`
+- Все ключевые действия пишут audit trail.
+
 ### Быстрый старт
 1. Используйте `/register <code>`, чтобы привязать Discord-аккаунт к гильдии.
 2. Откройте `/menu` для быстрого доступа к основным функциям.
@@ -194,6 +256,69 @@ GIFs are served from **`/video/<filename>`** for an allowlisted set (`ban.gif`, 
   - `/event swap_players`
   - `/event add_extra`
 - Improved interaction safety to reduce `Unknown interaction` errors in event controls.
+
+### Guild Economy: new modules (EN)
+
+Two production modules were added to the economy subsystem and integrated into double-entry accounting and the dashboard:
+
+#### 1) Loot Buyback
+
+**What it does**
+- Lets the guild buy loot from players at `market - 20%`.
+- Market price is snapshotted when the request is created (Albion Data API).
+- Request is auto-approved if payout is below the configured threshold; otherwise it stays pending.
+
+**Business flow**
+- Participants: player (seller) and guild treasury.
+- Payout formula: `sell_price_min * quantity * 0.8`.
+- Dashboard shows seller, item, quantity, market price, payout, and request status.
+
+**Accounting flow**
+- On auto-approval, journal entry is posted immediately:
+  - `Dr 1200` (Inventory / Gear)
+  - `Cr 1000` (Guild Cash)
+- Pending requests do not post accounting entries until approval.
+
+**New API route**
+- `POST /dashboard/api/economy/loot-buyback`
+- Request body fields:
+  - `seller_name`, `item_id`, `quantity`, `location`, `quality`, `auto_approve_limit`, `approved_by`, `note`
+
+#### 2) Regear / Insurance
+
+**What it does**
+- Handles equipment reimbursement after death in guild content.
+- Split into two stages:
+  1. create request (`pending`) with mandatory death screenshot URL;
+  2. issue gear (`issue`) after treasurer verification.
+
+**Business flow**
+- Request creation stores evidence and claim metadata.
+- Issue action confirms fulfillment and final accounting write-off.
+
+**Accounting flow**
+- On `issue`, system posts:
+  - `Dr 5210` (Regear Expense)
+  - `Cr 1210` (Regear Chest)
+
+**New API route**
+- `POST /dashboard/api/economy/regear`
+- Supported actions:
+  - `action=create`: create request
+  - `action=issue`: mark issued and post accounting entry
+
+#### Implementation notes
+- New schema objects:
+  - `econ_loot_buyback_requests`
+  - `econ_regear_requests`
+- Added chart-of-accounts defaults:
+  - `1210` (Regear Chest), `5210` (Regear Expense)
+- Added routing defaults:
+  - `loot_buyback`, `regear_issue`
+- `GET /dashboard/api/economy/data` now includes:
+  - `loot_buybacks`
+  - `regear_requests`
+- All key operations are audit-logged.
 
 ### Quick Start
 1. Run `/register <code>` to link your Discord account to the guild.

@@ -529,6 +529,58 @@
   align-items: start;
 }
 
+.ds-econ-subtitle {
+  margin: 0.35rem 0 0;
+}
+
+.ds-econ-filters .ds-toolbar {
+  margin-top: 0.25rem;
+}
+
+.ds-accordion {
+  padding-top: 0.6rem;
+}
+
+.ds-accordion > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.92rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ds-magenta);
+  font-weight: 600;
+  margin: 0;
+  padding: 0.3rem 0.1rem 0.7rem;
+}
+
+.ds-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ds-accordion > summary::before {
+  content: "▸";
+  color: var(--ds-cyan);
+  margin-right: 0.45rem;
+}
+
+.ds-accordion[open] > summary::before {
+  content: "▾";
+}
+
+.ds-sep {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 0.95rem 0;
+}
+
+.ds-mini {
+  font-size: 0.78rem;
+}
+
+.ds-econ-csv {
+  min-height: 10rem;
+}
+
 .ds-muted {
   color: var(--ds-muted);
   font-size: 0.88rem;
