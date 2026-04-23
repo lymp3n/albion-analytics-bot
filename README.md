@@ -418,6 +418,93 @@ This section helps new guild staff operate Economy Ops without prior internal on
 - Built-in info-tooltips are added to key controls.
 - Chart block now includes loading and entrance animations.
 
+#### Data persistence and reload safety (EN)
+
+Economy Ops data is not stored in browser memory. It is persisted in the economy database and reloaded on every dashboard refresh:
+- `econ_journal_entries` + `econ_journal_lines` — all accounting postings and balances.
+- `econ_routing_rules` — category routing settings (Dt/Kt, approval requirements, tags).
+- `econ_guild_bonus_tasks` + `econ_guild_bonus_awards` — guild tasks and reward payouts.
+- `econ_game_log_imports` + `econ_import_discrepancies` — imported CSV logs and reconciliation mismatches.
+- `econ_alerts` + `econ_config` — alert states, thresholds, treasury overrides (`treasury_cash_current`, `treasury_energy_current`).
+- `econ_loot_buyback_requests` + `econ_regear_requests` — buyback and regear workflows.
+- `econ_audit_log` — immutable action history (who did what and when).
+
+On API calls, schema checks use `CREATE TABLE IF NOT EXISTS` and config seeding uses insert-if-missing logic, so restart does not wipe existing values.
+
+#### Полный каталог функций экономической системы (RU)
+
+**Dashboard**
+- KPI-блок: `Balance`, `Weekly Profit`, `Cash Gap`, `Mismatches`.
+- `Quick Actions`: быстрые переходы к созданию операций, импорту, правилам и настройкам.
+- `Cash Flow`: график на реальных проводках из журнала.
+- `Recent Transactions`: последние операции с фильтрацией по статусу/категории/источнику.
+- `Reconciliation Preview`: превью сверки игровых логов с системой.
+- `API Status`: внутренняя проверка доступности dashboard API и внешнего pricing API.
+
+**Filters + Alert Thresholds (скрыты по умолчанию)**
+- Фильтры периода и журнала: `days`, `entry_status`, `category`, `source`.
+- Пороги алертов: low cash, high expense (30d), unmatched.
+- Сохранение порогов в `econ_config` с аудитом в `econ_audit_log`.
+
+**Operation**
+- Ручная операция с автопроводкой по routing-rule + предпросмотр `Dr/Cr`.
+- Управление бонусными задачами и выплатами.
+- Создание/обновление routing rules.
+- Импорт `silver/energy` CSV-логов.
+- Получение рыночной цены item из Albion Data API.
+- Loot Buyback: заявка по цене `market - 20%`, автоапрув по лимиту.
+- Regear: создание заявки по смерти в контенте, выдача в отдельном статусном шаге.
+
+**Journal**
+- Очередь pending-проводок.
+- Подтверждение (`approve`) или отклонение (`reject`) перед финальным posting.
+
+**Reconciliation**
+- Таблицы задач, выплат, правил, импортов.
+- Мониторинг статусов Buyback/Regear.
+- Кнопка `Issue` для финальной выдачи regear с проводкой `Дт 5210 / Кт 1210`.
+
+**Reports**
+- `Balance Snapshot`, `PnL Summary`, `Cashflow Summary`, `Forecast`.
+- Полный `Audit Trail` по экономическим действиям.
+
+#### Full Economy Function Catalog (EN)
+
+**Dashboard**
+- KPI cards: `Balance`, `Weekly Profit`, `Cash Gap`, `Mismatches`.
+- Quick actions to jump into operation, imports, rules, and settings.
+- Cashflow chart rendered from posted journal entries.
+- Recent transactions with API-side filtering.
+- Reconciliation preview for fast mismatch triage.
+- API status panel for internal and external dependencies.
+
+**Filters + Alert Thresholds (hidden by default)**
+- Data filters: `days`, `entry_status`, `category`, `source`.
+- Alert thresholds: low cash, high 30d expense, unmatched discrepancies.
+- Threshold values are stored in `econ_config` and audited.
+
+**Operation**
+- Routed manual operation with Dr/Cr preview.
+- Guild task and payout management.
+- Routing rule maintenance.
+- Silver/energy CSV import flows.
+- Market price lookup via Albion Data API.
+- Loot buyback request workflow with `market - 20%` pricing snapshot and auto-approval cap.
+- Regear request workflow with mandatory evidence URL and separate issue stage.
+
+**Journal**
+- Pending approval queue for governed posting.
+- Approve/reject controls for high-impact entries.
+
+**Reconciliation**
+- Consolidated views for tasks, awards, rules, imports.
+- Buyback and regear status monitoring.
+- Regear issue action posting `Dr 5210 / Cr 1210`.
+
+**Reports**
+- Balance/PnL/Cashflow/Forecast outputs.
+- Full audit trail for compliance and investigation.
+
 ### Quick Start
 1. Run `/register <code>` to link your Discord account to the guild.
 2. Run `/menu` for quick access to core actions.
