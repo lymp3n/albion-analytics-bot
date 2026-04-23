@@ -240,6 +240,18 @@
             line-height: 1.4;
             min-height: 52px;
         }
+        .suggest-hint {
+            margin-top: 6px;
+            font-size: 11px;
+            color: rgba(148, 163, 184, 0.95);
+        }
+        .form-input::placeholder {
+            color: rgba(148, 163, 184, 0.85);
+        }
+        .form-input[list], .form-select {
+            border-color: rgba(0,245,255,.28);
+            box-shadow: inset 0 0 0 1px rgba(0,245,255,.05);
+        }
         .ops-launch .btn {
             flex: 0 0 auto;
             width: 100%;
@@ -437,8 +449,8 @@
                 <div class="ops-launch"><div class="ops-launch-title">💸 Award Payout</div><div class="ops-launch-help">Approve completion and post reward entry for player.</div><button class="btn btn-primary js-open-modal" data-modal="modal-award">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">🧭 Routing Rules</div><div class="ops-launch-help">Configure auto-debit/credit accounts per category.</div><button class="btn btn-primary js-open-modal" data-modal="modal-rule">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">🏷️ Market Price</div><div class="ops-launch-help">Fetch latest market snapshot from Albion Data API.</div><button class="btn btn-primary js-open-modal" data-modal="modal-price">Open</button></div>
-                <div class="ops-launch"><div class="ops-launch-title">📦 Loot Buyback</div><div class="ops-launch-help">Create buyback request at market -20% with approval limit.</div><button class="btn btn-primary js-open-modal" data-modal="modal-buyback">Open</button></div>
-                <div class="ops-launch"><div class="ops-launch-title">🛡️ Regear Request</div><div class="ops-launch-help">Create insurance/regear request with screenshot evidence.</div><button class="btn btn-primary js-open-modal" data-modal="modal-regear">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">📦 Loot Buyback</div><div class="ops-launch-help">Create manual buyback by payout price only (+20% market-equivalent for stats).</div><button class="btn btn-primary js-open-modal" data-modal="modal-buyback">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🛡️ Regear Request</div><div class="ops-launch-help">Create insurance/regear request with attached screenshot evidence.</div><button class="btn btn-primary js-open-modal" data-modal="modal-regear">Open</button></div>
             </div>
         </div>
 
@@ -447,9 +459,9 @@
         <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-award" aria-label="close">✕</button><div class="modal-header">💸 Award Payout</div></div><div class="ops-modal-help">Post reward payout for approved task completion.</div><div class="form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player" list="player-nicknames"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
         <div class="ops-modal-wrap" id="modal-rule"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-rule" aria-label="close">✕</button><div class="modal-header">🧭 Routing Rules</div></div><div class="ops-modal-help">Define debit/credit accounts and approval behavior by operation category.</div><div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div><div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div><div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div><div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div><button class="btn btn-primary" id="btn-rule-save">Save rule</button></div></div>
         <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-import" aria-label="close">✕</button><div class="modal-header">📥 CSV Import</div></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><button class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
-        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-price" aria-label="close">✕</button><div class="modal-header">🏷️ Market Price</div></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="price-item" value="T4_BAG" list="item-id-suggest"></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json"></pre></div></div>
-        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-buyback" aria-label="close">✕</button><div class="modal-header">📦 Loot Buyback</div></div><div class="ops-modal-help">Create buyback request using 24h trimmed mean price across all cities (outlier-safe).</div><div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X" list="player-nicknames"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="lb-item" placeholder="T6_BAG" list="item-id-suggest"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
-        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-regear" aria-label="close">✕</button><div class="modal-header">🛡️ Regear Request</div></div><div class="ops-modal-help">Create regear insurance request. Screenshot URL is mandatory.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y" list="player-nicknames"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="rg-item" placeholder="T8_MAIN_HOLY" list="item-id-suggest"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-price" aria-label="close">✕</button><div class="modal-header">🏷️ Market Price</div></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input js-item-id" id="price-item" value="T4_BAG" list="item-id-suggest"><div class="suggest-hint">Start typing to get ITEM_ID suggestions from Albion API.</div></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json"></pre></div></div>
+        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-buyback" aria-label="close">✕</button><div class="modal-header">📦 Loot Buyback</div></div><div class="ops-modal-help">Create manual buyback request by payout price only; market equivalent is auto-calculated (+20%).</div><div class="form-group"><label class="form-label">Buyback payout price</label><input class="form-input" id="lb-price" type="number" min="1" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-regear" aria-label="close">✕</button><div class="modal-header">🛡️ Regear Request</div></div><div class="ops-modal-help">Create regear insurance request with screenshot file attachment.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y" list="player-nicknames"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot file</label><input class="form-input" id="rg-shot-file" type="file" accept="image/*"></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
 
         <div class="table-container hidden" id="section-journal">
             <div class="section-title">📋 Journal + Pending Approvals</div>
@@ -473,7 +485,7 @@
             </div>
             <div class="reconciliation mt-20">
                 <div class="recon-column"><div class="recon-title">Loot Buyback</div><div class="scroll-wrap"><table id="tbl-buyback"><thead><tr><th>ID</th><th>Seller</th><th>Item</th><th>Payout</th><th>Status</th></tr></thead><tbody></tbody></table></div></div>
-                <div class="recon-column"><div class="recon-title">Regear</div><div class="scroll-wrap"><table id="tbl-regear"><thead><tr><th>ID</th><th>Player</th><th>Item</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table></div></div>
+                <div class="recon-column"><div class="recon-title">Regear</div><div class="scroll-wrap"><table id="tbl-regear"><thead><tr><th>ID</th><th>Player</th><th>Content</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table></div></div>
             </div>
         </div>
 
@@ -816,6 +828,18 @@
           .then((r) => r.json()).catch(() => ({ ok: false, items: [] }));
         if (out.ok) fillDatalist("item-id-suggest", out.items || []);
       }
+      function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const raw = String(reader.result || "");
+            const idx = raw.indexOf("base64,");
+            resolve(idx >= 0 ? raw.slice(idx + 7) : raw);
+          };
+          reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+          reader.readAsDataURL(file);
+        });
+      }
       function animateKpiCards() {
         $$(".kpi-card").forEach((el, i) => {
           el.style.animation = "none";
@@ -1066,7 +1090,7 @@
           const act = String(r.status || "") === "pending"
             ? `<button class="table-btn btn-regear-issue" data-id="${esc(r.id)}">${tr("action_issue")}</button>`
             : "—";
-          return `<tr><td>${esc(r.id)}</td><td>${esc(r.player_name)}</td><td>${esc(r.item_id)} x${esc(r.quantity)}</td><td>${fmt(total)}</td><td>${statusBadge(r.status === "issued" ? "approved" : r.status)}</td><td>${act}</td></tr>`;
+          return `<tr><td>${esc(r.id)}</td><td>${esc(r.player_name)}</td><td>${esc(r.content_type || "regear")}</td><td>${fmt(total)}</td><td>${statusBadge(r.status === "issued" ? "approved" : r.status)}</td><td>${act}</td></tr>`;
         }).join("") || `<tr><td colspan="6">${tr("no_regear")}</td></tr>`;
         $$(".btn-regear-issue").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/regear", {
@@ -1209,10 +1233,7 @@
         const btn = $("#btn-loot-buyback");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/loot-buyback", {
-          seller_name: $("#lb-seller").value || "",
-          item_id: $("#lb-item").value || "",
-          quantity: parseInt($("#lb-qty").value || "0", 10),
-          auto_approve_limit: parseInt($("#lb-limit").value || "0", 10),
+          buyback_price: parseInt($("#lb-price").value || "0", 10),
           approved_by: $("#review-by").value || "dashboard_admin",
           note: $("#review-note").value || "",
         });
@@ -1224,14 +1245,26 @@
       on("#btn-regear-create", "click", async () => {
         const btn = $("#btn-regear-create");
         setBusy(btn, true);
+        const screenshotFile = $("#rg-shot-file")?.files?.[0];
+        let screenshotPayload = null;
+        if (screenshotFile) {
+          try {
+            screenshotPayload = {
+              name: screenshotFile.name || "screenshot",
+              type: screenshotFile.type || "application/octet-stream",
+              data: await fileToBase64(screenshotFile),
+            };
+          } catch (e) {
+            setBusy(btn, false);
+            return showErr("Screenshot file read failed: " + String(e));
+          }
+        }
         const out = await post("/dashboard/api/economy/regear", {
           action: "create",
           player_name: $("#rg-player").value || "",
           content_type: $("#rg-content").value || "",
-          item_id: $("#rg-item").value || "",
-          quantity: parseInt($("#rg-qty").value || "0", 10),
           unit_cost: parseInt($("#rg-cost").value || "0", 10),
-          screenshot_url: $("#rg-shot").value || "",
+          screenshot_file: screenshotPayload,
           note: $("#review-note").value || "",
         });
         setBusy(btn, false);
@@ -1240,7 +1273,7 @@
         await load();
       });
       on("#btn-price", "click", async () => {
-        const qs = new URLSearchParams({ item_id: $("#price-item").value || "", location: $("#price-location").value || "", quality: $("#price-quality").value || "1" });
+        const qs = new URLSearchParams({ item_id: $("#price-item").value || "", location: $("#price-location").value || "Caerleon", quality: $("#price-quality").value || "1" });
         const out = await fetch("/dashboard/api/economy/price?" + qs.toString(), { credentials: "same-origin" })
           .then((r) => r.json()).catch((e) => ({ ok: false, error: String(e) }));
         $("#price-json").textContent = JSON.stringify(out, null, 2);

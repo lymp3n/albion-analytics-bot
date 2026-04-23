@@ -40,7 +40,7 @@ from web_dashboard.db_sync import fetch_all, get_sync_connection
 from web_dashboard.discord_roles_client import fetch_discord_guild_roles
 from web_dashboard.economy_db_sync import get_economy_sync_connection
 from web_dashboard.economy_service import (
-    create_loot_buyback_request,
+    create_manual_loot_buyback_from_price,
     create_regear_request,
     issue_regear_request,
     award_task_completion,
@@ -644,15 +644,11 @@ def register_dashboard(app: Flask) -> None:
         try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
-                out = create_loot_buyback_request(
+                out = create_manual_loot_buyback_from_price(
                     conn,
                     backend,
-                    seller_name=str(body.get("seller_name") or "").strip(),
-                    item_id=str(body.get("item_id") or "").strip(),
-                    quantity=int(body.get("quantity") or 0),
-                    auto_approve_limit=int(body.get("auto_approve_limit") or 0),
-                    approved_by=str(body.get("approved_by") or "dashboard_admin").strip(),
-                    note=str(body.get("note") or "").strip(),
+                    buyback_price=int(body.get("buyback_price") or 0),
+                    actor=str(body.get("approved_by") or "dashboard_admin").strip(),
                 )
         except Exception as e:
             return app.response_class(
@@ -680,15 +676,24 @@ def register_dashboard(app: Flask) -> None:
                         note=str(body.get("note") or "").strip(),
                     )
                 else:
+                    screenshot_url = str(body.get("screenshot_url") or "").strip()
+                    if not screenshot_url:
+                        screenshot_file = body.get("screenshot_file")
+                        if isinstance(screenshot_file, dict):
+                            name = str(screenshot_file.get("name") or "screenshot").strip() or "screenshot"
+                            mime = str(screenshot_file.get("type") or "application/octet-stream").strip() or "application/octet-stream"
+                            data = str(screenshot_file.get("data") or "").strip()
+                            if data:
+                                screenshot_url = f"data:{mime};name={name};base64,{data}"
                     out = create_regear_request(
                         conn,
                         backend,
                         player_name=str(body.get("player_name") or "").strip(),
                         content_type=str(body.get("content_type") or "").strip(),
-                        item_id=str(body.get("item_id") or "").strip(),
-                        quantity=int(body.get("quantity") or 0),
+                        item_id="REGEAR_GENERIC",
+                        quantity=1,
                         unit_cost=int(body.get("unit_cost") or 0),
-                        screenshot_url=str(body.get("screenshot_url") or "").strip(),
+                        screenshot_url=screenshot_url,
                         note=str(body.get("note") or "").strip(),
                     )
         except Exception as e:
@@ -902,7 +907,7 @@ def register_dashboard(app: Flask) -> None:
     @login_required
     def dashboard_economy_price():
         item_id = str(request.args.get("item_id") or "").strip()
-        location = str(request.args.get("location") or "").strip()
+        location = str(request.args.get("location") or "Caerleon").strip() or "Caerleon"
         try:
             quality = int(request.args.get("quality", 1))
         except ValueError:
