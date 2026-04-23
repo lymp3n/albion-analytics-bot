@@ -1,585 +1,263 @@
 # Albion Analytics Bot
 
-RU: Бот для обучения игроков, аналитики, событий и менеджмента тикетов в Albion Online.  
-EN: A Discord bot for Albion Online coaching, analytics, event management, and mentor workflows.
+Discord bot and web dashboard for Albion Online guild operations: events, tickets, analytics, and full economy accounting.
 
 ---
 
-## Русский
-
-### Основные возможности
-- Тикеты на разбор сессий: создание, очередь, захват ментором, оценка, детали.
-- Статистика игроков: инфографика, ранги, динамика, ошибки, лидерборд.
-- Ивенты и ростер: создание события, набор в слоты, ручное управление составом.
-- Выплаты менторам: расчет фонда по активности за выбранный период.
-- Гильдейские роли и доступ: регистрация по коду, approve/promote/demote/info.
-- Веб-дашборд (dark synth UI) на том же Render Web Service — см. раздел [«Веб-дашборд»](#dashboard-ru) ниже.
-
-<a id="dashboard-ru"></a>
-
-### Веб-дашборд
-
-**Зачем он нужен.** Дашборд — это отдельная веб-страница для **офицеров, менторов и руководства гильдии**: в одном месте видно срез активности и базы бота **без** длинных цепочек slash-команд в Discord и без ручной выгрузки в таблицы. Данные читаются из **той же базы**, что использует бот (PostgreSQL или SQLite), поэтому цифры согласованы с тикетами, сессиями и ивентами в каналах.
-
-**Почему это удачное дополнение к боту, а не замена ему.**
-
-- **Один сервис на Render** — HTTP для health-check и дашборда крутится вместе с процессом бота; не нужен отдельный фронтенд-проект или второй билд.
-- **Доступ по секрету** — страница открывается только после ввода `DASHBOARD_SECRET`; это не публичная витрина, а внутренний инструмент гильдии.
-- **Обзор «сверху»** — KPI и таблицы за выбранный период и гильдию обновляются кнопкой **Refresh data**; так быстрее оценить нагрузку на менторов, очередь тикетов и вовлечённость в ивенты, чем собирать то же из чата.
-- **Discord остаётся местом действия** — игроки по-прежнему создают тикеты, записываются на ивенты и общаются в каналах; дашборд для **анализа, планирования и диагностики**, а не для повседневной переписки.
-
-**Как открыть и пользоваться.**
-
-1. Адрес: `https://<ваш-сервис>.onrender.com/dashboard` (тот же хост, что и у бота).
-2. На экране входа вставьте **Access token** = значение переменной **`DASHBOARD_SECRET`** из настроек Render (храните секрет только у доверенных людей).
-3. В шапке задайте **Period (days)** — глубину окна для метрик (сессии, закрытые тикеты, **закрытые** ивенты и т.д.).
-4. При необходимости выберите **Guild** (фильтр по гильдии в БД) или оставьте «все гильдии».
-5. Для вкладки **Mentors** можно задать **Mentor fund (silver)** — тот же смысл, что у `/payroll`, сумма вручную.
-6. Нажмите **Refresh data**, чтобы подтянуть актуальные данные из БД.
-
-**Вкладки и функции.**
-
-| Вкладка | Содержание |
-|--------|------------|
-| **Overview** | Открытые тикеты, закрытые тикеты за период, сессии за период, количество **закрытых** ивентов за период. |
-| **Players** | Игроки с числом сессий и средним баллом за окно, гильдия, **статус в БД** (pending / active / mentor / founder), **активные тикеты** (все не в статусе `closed`). Сортировка по активности в периоде. |
-| **Tickets** | Сводка по статусам тикетов и список недавних тикетов. |
-| **Events** | Аналитика посещаемости **только по ивентам со статусом `closed`** — открытые тестовые посты в статистике не участвуют. Таблицы по контенту, «никогда не был на ивенте», низкая и стабильная посещаемость; длинные списки прокручиваются внутри блока. Внизу — **Event records (cleanup)**: выбор записей и удаление из таблицы `events` (ошибочные/тестовые строки; связанные подписи удаляются каскадом). Не удаляет сообщения в Discord. |
-| **Mentors** | Распределение выбранного фонда между менторами по логике, близкой к `/payroll`, за выбранное число дней. |
-| **Event templates** | Редактирование `events_templates.txt`: шаблоны ростера для `/event create` подхватываются **сразу** после сохранения (тот же процесс, что и бот). |
-| **System** | Краткий **статус связи бота с Discord** (понятная плашка для не-разработчиков), оценка занятого места в БД относительно квоты (см. `DASHBOARD_DB_QUOTA_BYTES`), время ответа БД, аптайм HTTP и развёрнутый JSON для диагностики. |
-| **Role assist** | Переопределение Discord role ID для уровней member / mentor / founder **по гильдии в БД**; пустое поле = как в `config.yaml` + встроенные доп. ID. Подгрузка имён ролей с сервера кнопкой **Load role names** (см. «Недавние обновления дашборда»). Без редеплоя. |
-
-**Недавние обновления дашборда**
-
-- **Экран загрузки** — перед первым ответом `/dashboard/api/data` и при каждом **Refresh data** показывается полноэкранный слой (бренд, спиннер, краткий текст; плавное скрытие после ответа сервера).
-- **Страница входа** — над формой токена отображается GIF **`/video/secret.gif`**; файл лежит в репозитории как `video/secret.gif` (можно заменить своим).
-- **Блокировка / rate limit Discord** — если процесс бота фиксирует глобальный 429 или аналог при подключении, дашборд после загрузки данных может показать полноэкранное предупреждение с **`/video/ban.gif`** (`video/ban.gif` в репо). Кнопка ведёт только на вкладку **System**; остальные вкладки скрыты, пока флаг активен. После **Refresh** экран снова появится, если ограничение ещё действует.
-- **Role assist / имена ролей** — запрос имён к Discord выполняется **отдельно для каждой гильдии** (несколько серверов можно обрабатывать параллельно). При успешной загрузке ячейки имён **обновляются** из ответа API (не только пустые поля).
-
-Статические GIF раздаются маршрутом **`/video/<имя>`** для файлов из белого списка (`ban.gif`, `secret.gif`).
-
-**Логи: `rate limited ... /applications/.../commands`.** Discord ограничивает частоту **регистрации slash-команд**. Сообщение означает, что запрос временно отклонён — клиент подождёт и повторит попытку. Чтобы снизить нагрузку: задайте **`GUILD_IDS`** / **`GUILD_ID`** — синк только для этих серверов; синхронизация **одним** вызовом для всего списка (без цикла по гильдиям, чтобы не множить служебные запросы к API). После **успешного** синка бот сохраняет в БД отпечаток дерева команд и при следующих перезапусках **пропускает** повторный `sync_commands`, пока код команд или список целевых гильдий не изменились (экономия запросов к API). Чтобы принудительно зарегистрировать команды снова: **`DISCORD_FORCE_COMMAND_SYNC=1`** на один запуск. Опционально **`DISCORD_COMMAND_SYNC_DEFER_SEC`**, **`DISCORD_COMMAND_SYNC_JITTER_SEC`** (случайная пауза 0…N с перед синком) и **`DISCORD_SKIP_COMMAND_SYNC=1`** только для отладки.
-
-**Логи: HTML Cloudflare, `Error 1015`, «You are being rate limited» на discord.com.** Это **блокировка исходящего IP** вашего хостинга (часто у датацентров), а не обычный лимит API. Код бота это не обходит: подождите (иногда до суток), смените **регион** или провайдера (другой egress IP), убедитесь, что с токеном работает **один** процесс. Между попытками входа бот делает **длинную** паузу; интервал задаётся **`DISCORD_CF1015_RETRY_AFTER_SEC`** (по умолчанию 3600 с).
-
-**GIF на входе и на экране блокировки.** Тяжёлые GIF могут подлагивать при первом кадре: для входа включён **preload** `secret.gif`, на обеих страницах показывается **плейсхолдер со спиннером** фиксированного размера до загрузки картинки, затем плавное появление GIF.
-
-**Важно про ивенты.** В аналитике учитываются только **завершённые** ивенты. Чтобы убрать мусор из базы, используйте блок cleanup на вкладке Events или SQL-скрипты в репозитории (например, `scripts/delete_first_three_events.sql` для точечной чистки по правилам файла).
-
-### Новые функции (последние обновления)
-- В `Manage` для ивента можно вводить не только ID, но и:
-  - серверный ник,
-  - username/global name,
-  - mention (`@user`),
-  - numeric ID.
-- Если по введенному имени найдено несколько людей, бот показывает ephemeral-список выбора.
-- Для `Remove` кандидаты сортируются так, что участники текущего event идут первыми.
-- Добавлен автокомплит `event_id` в командах управления ивентами:
-  - `/event close`
-  - `/event add_player`
-  - `/event remove_player`
-  - `/event swap_players`
-  - `/event add_extra`
-- Улучшена устойчивость к `Unknown interaction` в кнопках управления событием.
-
-### Экономика гильдии: новые модули (RU)
-
-Ниже добавлены 2 прикладных модуля экономики, встроенных в контур двойной записи и дашборд:
-
-#### 1) Loot Buyback (Скупка лута)
-
-**Что делает**
-- Позволяет гильдии выкупать лут у игроков по формуле `рынок - 20%`.
-- Цена фиксируется в момент создания заявки (через Albion Data API).
-- Заявка автоматически становится `approved`, если сумма выплаты не превышает лимит автоодобрения; иначе `pending`.
-
-**Бизнес-логика**
-- Участники: продавец (игрок) и гильдия/казначей.
-- Расчет выплаты: `sell_price_min * quantity * 0.8`.
-- В UI отражаются: seller, item, quantity, market price, payout, status.
-
-**Бухгалтерская логика**
-- При автоодобрении система сразу создает проводку:
-  - `Дт 1200` (Inventory / Gear)
-  - `Кт 1000` (Guild Cash)
-- При статусе `pending` проводка не создается до ручного решения.
-
-**Новый API-роут**
-- `POST /dashboard/api/economy/loot-buyback`
-- Пример body:
-  - `seller_name`, `item_id`, `quantity`, `location`, `quality`, `auto_approve_limit`, `approved_by`, `note`
-
-#### 2) Regear / Insurance (Регир)
-
-**Что делает**
-- Поддерживает компенсацию экипировки после смерти в контенте гильдии.
-- Разделен на два этапа:
-  1. создание тикета (`pending`) с обязательным `screenshot_url`;
-  2. выдача (`issue`) после проверки казначеем.
-
-**Бизнес-логика**
-- Создание запроса хранит факт обращения (кто, где, что потеряно, скрин, оценка стоимости).
-- Подтверждение выдачи фиксирует списание фонда регира.
-
-**Бухгалтерская логика**
-- При действии `issue` создается проводка:
-  - `Дт 5210` (Regear Expense)
-  - `Кт 1210` (Regear Chest)
-
-**Новый API-роут**
-- `POST /dashboard/api/economy/regear`
-- Поддерживаемые режимы:
-  - `action=create`: создать заявку
-  - `action=issue`: выдать регир и провести списание
-
-#### Дополнительно по реализации
-- В экономической схеме добавлены таблицы:
-  - `econ_loot_buyback_requests`
-  - `econ_regear_requests`
-- Добавлены счета и дефолтные правила:
-  - счет `1210` (Regear Chest), счет `5210` (Regear Expense)
-  - routing rules: `loot_buyback`, `regear_issue`
-- Новые сущности отдаются в `GET /dashboard/api/economy/data`:
-  - `loot_buybacks`
-  - `regear_requests`
-- Все ключевые действия пишут audit trail.
-
-#### Гайд для новых пользователей: категории и функции (RU)
-
-Ниже — практическая карта интерфейса Economy Ops, чтобы новый офицер мог начать работу без обучения в голосе.
-
-**Категория: Dashboard**
-- **KPI Balance** — текущий cash/баланс для оценки ликвидности.
-- **KPI Weekly Profit** — прибыль за выбранный период (фильтр `days`).
-- **KPI Cash Gap** — разница между текущим балансом и прогнозом.
-- **KPI Mismatches** — количество незакрытых расхождений.
-- **Open Alerts / Discrepancies preview** — быстрый triage проблемных записей.
-
-**Категория: Filters + Thresholds**
-- **Days** — окно аналитики для PnL/Cashflow и части KPI.
-- **Entry status / Category / Source** — фильтрация журнала проводок.
-- **Low cash threshold** — порог предупреждения по кассе.
-- **High expense 30d threshold** — порог тревоги по расходам за 30 дней.
-- **Unmatched threshold** — допустимый объем несопоставленных записей.
-- **Apply / Reset / Save thresholds** — применение фильтров и сохранение риск-настроек.
-
-**Категория: Operation**
-- **New Operation** — ручная операция по routing category (`/route-op` API).
-- **Posting preview** — визуальная проверка пары `Dr/Cr` до отправки.
-- **Task + Award** — создание задач и подтверждение выплат с проводкой.
-- **Routing Rule** — создание/изменение автопроводок для категорий.
-- **Import CSV** — загрузка игровых логов и первичная сверка.
-- **Market Price** — запрос рыночной цены (Albion Data API).
-- **Loot Buyback** — создание заявки с фиксированной ценой `market -20%`.
-- **Regear Request** — заявка регира с обязательным скриншотом смерти.
-
-**Категория: Journal**
-- **Pending Approvals** — очередь проводок, требующих подтверждения.
-- **Approve / Reject** — контроль высокого риска до публикации в журнал.
-
-**Категория: Reconciliation**
-- **Tasks / Awards / Rules / Imports** — сопоставление операционных сущностей.
-- **Loot Buyback list** — контроль статусов buyback-заявок.
-- **Regear list + Issue** — выдача регира с финальным списанием 1210.
-
-**Категория: Reports**
-- **Reports JSON** — Balance Snapshot, PnL Summary, Cashflow Summary.
-- **Forecast JSON** — прогноз денежных остатков.
-- **Audit Trail** — неизменяемый журнал действий офицеров/казначеев.
-
-**Микро-UX в интерфейсе**
-- Кнопки имеют loading/disabled-состояния.
-- Для основных действий показываются toast-уведомления успеха/ошибки.
-- У ключевых элементов есть встроенные инфо-тултипы.
-- Графический блок имеет анимацию загрузки и плавный вход.
-
-### Быстрый старт
-1. Используйте `/register <code>`, чтобы привязать Discord-аккаунт к гильдии.
-2. Откройте `/menu` для быстрого доступа к основным функциям.
-3. Создайте тикет `/ticket create` или событие `/event create`.
-
-### Команды
-
-#### Профиль и доступ
-- `/register` — регистрация в гильдии по коду.
-- `/guild action:<approve|promote|demote|info>` — управление ролями/статусом.
-- `/menu` — главное меню бота.
-
-#### Тикеты (разборы)
-- `/ticket create` — создать тикет.
-- `/ticket list` — список активных тикетов.
-- `/ticket claim` — взять тикет в работу (Mentor).
-- `/ticket rate` — оценить тикет (Mentor).
-- `/ticket unclaim` — снять тикет с себя (Mentor).
-- `/ticket info` — подробная информация о тикете.
-
-#### Ивенты
-- `/event create` — создать событие по шаблону.
-- `/event close` — закрыть событие.
-- `/event add_player` — добавить/переместить игрока в слот.
-- `/event remove_player` — удалить игрока из ростера.
-- `/event swap_players` — поменять двух игроков местами.
-- `/event add_extra` — добавить extra-слот и назначить игрока.
-- Кнопки под постом события: `Join`, `Leave`, `Close Event`, `Manage`.
-- Важно: если событие фактически не состоялось, его **нельзя закрывать**. Удалите сообщение события, чтобы фейковая статистика не сохранялась в базе.
-
-#### Статистика и выплаты
-- `/stats` — персональная или целевая статистика игрока.
-- `/stats_top` — топ игроков.
-- `/stats_seed_test` — тестовые данные (Founder).
-- `/payroll` — расчет выплат менторам.
-
----
-
-## English
-
-### Core Features
-- Session review tickets: creation, queueing, claiming, rating, and inspection.
-- Player analytics: dashboard visuals, rankings, trends, and error breakdowns.
-- Event roster management: event posts, slot signup, and manual roster control.
-- Mentor payroll: budget split based on mentoring activity over a selected period.
-- Guild access control: invite-code registration and role management actions.
-- Web dashboard (dark synth UI) on the same Render Web Service — see [Web dashboard](#dashboard-en) below.
-
-<a id="dashboard-en"></a>
-
-### Web dashboard
-
-**Purpose.** The dashboard is a **web control deck for officers, mentors, and guild leadership**: a single place to read bot-backed metrics **without** long chains of Discord slash commands or manual exports. It queries the **same database** as the bot (PostgreSQL or SQLite), so numbers stay aligned with tickets, sessions, and events in your server.
-
-**Why it complements the bot (and does not replace it).**
-
-- **Single Render service** — the HTTP server (health check + dashboard) runs in the **same process** as the bot; no separate frontend deployment.
-- **Secret-gated access** — `/dashboard` is protected by **`DASHBOARD_SECRET`**; it is an internal tool, not a public page.
-- **Top-down view** — KPIs and tables for a chosen **period** and optional **guild** refresh with one click; faster to judge mentor load, ticket backlog, and event participation than piecing it together from chat.
-- **Discord stays the workplace** — players still use channels for tickets, signups, and chat; the dashboard is for **oversight, planning, and troubleshooting**.
-
-**How to use it.**
-
-1. Open `https://<your-service>.onrender.com/dashboard`.
-2. Sign in with **Access token** = your **`DASHBOARD_SECRET`** from Render (share only with trusted staff).
-3. Set **Period (days)** for time-windowed metrics (sessions, closed tickets, **closed** events, etc.).
-4. Optionally pick **Guild** or leave “all guilds”.
-5. On **Mentors**, set **Mentor fund (silver)** if you want a payroll-style split (same idea as `/payroll`).
-6. Click **Refresh data** to reload from the database.
-
-**Tabs at a glance.**
-
-| Tab | What you get |
-|-----|----------------|
-| **Overview** | Open tickets, tickets closed in the period, sessions in the period, **closed** events in the period. |
-| **Players** | Per-player sessions and average score in the window, guild, **DB role** (pending / active / mentor / founder), **active tickets** (any ticket not `closed`). Sorted by activity in the period. |
-| **Tickets** | Counts by ticket status and a recent-ticket list. |
-| **Events** | Attendance analytics for **`closed` events only** — open test posts do not inflate stats. Scrollable player lists. **Event records (cleanup)** at the bottom: select rows and delete from `events` (bad/test data; signups cascade). Does **not** remove Discord messages. |
-| **Mentors** | Split the chosen silver pool across mentors using logic close to `/payroll` for the selected days. |
-| **Event templates** | Edit `events_templates.txt` for `/event create`; changes apply **immediately** after save (same process as the bot). |
-| **Role assist** | Override Discord role IDs for member / mentor / founder tiers **per DB guild**; blank field inherits `config.yaml` + built-in extras. **Load role names** pulls labels from Discord (see **Recent dashboard updates** below). No redeploy. |
-| **System** | Plain-language **Discord bot connectivity** hint, database size vs quota (`DASHBOARD_DB_QUOTA_BYTES`), DB round-trip time, HTTP uptime, and raw JSON for deeper checks. |
-
-**Recent dashboard updates**
-
-- **Boot screen** — a full-viewport loading layer (brand, spinner, short status copy) shows until `/dashboard/api/data` returns, and again on every **Refresh data**; it fades out when the response is handled.
-- **Login page** — optional hero GIF at **`/video/secret.gif`** (`video/secret.gif` in the repo; replace with your asset).
-- **Discord API block / rate limit** — when the bot process records a startup-level global 429 (or similar), the dashboard can show a full-screen notice with **`/video/ban.gif`** (`video/ban.gif`). A button opens **only the System tab**; other tabs stay hidden while the flag is set. **Refresh** shows the screen again if the block is still active.
-- **Role assist / role names** — Discord role-name fetches run **per guild card** (you can load several servers in parallel). Successful loads **overwrite** name cells from the API, not only empty ones.
-
-GIFs are served from **`/video/<filename>`** for an allowlisted set (`ban.gif`, `secret.gif`).
-
-**Login / ban GIF UX.** Large GIFs can stutter on first decode; the login page **preloads** `secret.gif` and both pages show a **spinner placeholder** in a fixed-size slot until the image has loaded, then fade the GIF in.
-
-**Events note.** Analytics count **finished** events only. To clean bad rows, use the Events-tab cleanup or repository SQL helpers (e.g. `scripts/delete_first_three_events.sql` — follow the comments in that file).
-
-### New Features (recent updates)
-- Event `Manage` input now accepts:
-  - server nickname,
-  - username/global name,
-  - mention (`@user`),
-  - numeric ID.
-- If multiple users match the input, the bot shows an ephemeral user picker.
-- In `Remove`, matched candidates are sorted with current event participants first.
-- Added `event_id` autocomplete for event roster slash commands:
-  - `/event close`
-  - `/event add_player`
-  - `/event remove_player`
-  - `/event swap_players`
-  - `/event add_extra`
-- Improved interaction safety to reduce `Unknown interaction` errors in event controls.
-
-### Guild Economy: new modules (EN)
-
-Two production modules were added to the economy subsystem and integrated into double-entry accounting and the dashboard:
-
-#### 1) Loot Buyback
-
-**What it does**
-- Lets the guild buy loot from players at `market - 20%`.
-- Market price is snapshotted when the request is created (Albion Data API).
-- Request is auto-approved if payout is below the configured threshold; otherwise it stays pending.
-
-**Business flow**
-- Participants: player (seller) and guild treasury.
-- Payout formula: `sell_price_min * quantity * 0.8`.
-- Dashboard shows seller, item, quantity, market price, payout, and request status.
-
-**Accounting flow**
-- On auto-approval, journal entry is posted immediately:
-  - `Dr 1200` (Inventory / Gear)
-  - `Cr 1000` (Guild Cash)
-- Pending requests do not post accounting entries until approval.
-
-**New API route**
-- `POST /dashboard/api/economy/loot-buyback`
-- Request body fields:
-  - `seller_name`, `item_id`, `quantity`, `location`, `quality`, `auto_approve_limit`, `approved_by`, `note`
-
-#### 2) Regear / Insurance
-
-**What it does**
-- Handles equipment reimbursement after death in guild content.
-- Split into two stages:
-  1. create request (`pending`) with mandatory death screenshot URL;
-  2. issue gear (`issue`) after treasurer verification.
-
-**Business flow**
-- Request creation stores evidence and claim metadata.
-- Issue action confirms fulfillment and final accounting write-off.
-
-**Accounting flow**
-- On `issue`, system posts:
-  - `Dr 5210` (Regear Expense)
-  - `Cr 1210` (Regear Chest)
-
-**New API route**
-- `POST /dashboard/api/economy/regear`
-- Supported actions:
-  - `action=create`: create request
-  - `action=issue`: mark issued and post accounting entry
-
-#### Implementation notes
-- New schema objects:
-  - `econ_loot_buyback_requests`
-  - `econ_regear_requests`
-- Added chart-of-accounts defaults:
-  - `1210` (Regear Chest), `5210` (Regear Expense)
-- Added routing defaults:
-  - `loot_buyback`, `regear_issue`
-- `GET /dashboard/api/economy/data` now includes:
-  - `loot_buybacks`
-  - `regear_requests`
-- All key operations are audit-logged.
-
-#### New user guide: categories and functions (EN)
-
-This section helps new guild staff operate Economy Ops without prior internal onboarding.
-
-**Category: Dashboard**
-- **KPI Balance** — current cash/liquidity position.
-- **KPI Weekly Profit** — profit for selected analytics window (`days`).
-- **KPI Cash Gap** — delta between current balance and forecast.
-- **KPI Mismatches** — unresolved reconciliation issues count.
-- **Open Alerts / Discrepancies preview** — quick risk triage panel.
-
-**Category: Filters + Thresholds**
-- **Days** — analytics/reporting window for PnL/Cashflow.
-- **Entry status / Category / Source** — journal filtering controls.
-- **Low cash threshold** — warning trigger for treasury balance.
-- **High expense 30d threshold** — expense risk trigger.
-- **Unmatched threshold** — allowed unresolved mismatch amount.
-- **Apply / Reset / Save thresholds** — operational filtering and risk config.
-
-**Category: Operation**
-- **New Operation** — manual routed operation (`/route-op`).
-- **Posting preview** — visual Dr/Cr validation before posting.
-- **Task + Award** — task management and payout posting workflow.
-- **Routing Rule** — category-to-account mapping maintenance.
-- **Import CSV** — ingest game logs for reconciliation.
-- **Market Price** — live price fetch from Albion Data API.
-- **Loot Buyback** — request with fixed `market -20%` pricing snapshot.
-- **Regear Request** — insurance claim with mandatory death screenshot URL.
-
-**Category: Journal**
-- **Pending Approvals** — high-risk entries waiting for review.
-- **Approve / Reject** — governance controls before final posting.
-
-**Category: Reconciliation**
-- **Tasks / Awards / Rules / Imports** — operational consistency views.
-- **Loot Buyback list** — request status and payout tracking.
-- **Regear list + Issue** — fulfill claim and post `Dr 5210 / Cr 1210`.
-
-**Category: Reports**
-- **Reports JSON** — Balance Snapshot, PnL Summary, Cashflow Summary.
-- **Forecast JSON** — projected cash position.
-- **Audit Trail** — immutable operational action log.
-
-**Micro UX improvements**
-- All critical actions use loading/disabled button states.
-- Success/error toast notifications are shown for user feedback.
-- Built-in info-tooltips are added to key controls.
-- Chart block now includes loading and entrance animations.
-
-#### Data persistence and reload safety (EN)
-
-Economy Ops data is not stored in browser memory. It is persisted in the economy database and reloaded on every dashboard refresh:
-- `econ_journal_entries` + `econ_journal_lines` — all accounting postings and balances.
-- `econ_routing_rules` — category routing settings (Dt/Kt, approval requirements, tags).
-- `econ_guild_bonus_tasks` + `econ_guild_bonus_awards` — guild tasks and reward payouts.
-- `econ_game_log_imports` + `econ_import_discrepancies` — imported CSV logs and reconciliation mismatches.
-- `econ_alerts` + `econ_config` — alert states, thresholds, treasury overrides (`treasury_cash_current`, `treasury_energy_current`).
-- `econ_loot_buyback_requests` + `econ_regear_requests` — buyback and regear workflows.
-- `econ_audit_log` — immutable action history (who did what and when).
-
-On API calls, schema checks use `CREATE TABLE IF NOT EXISTS` and config seeding uses insert-if-missing logic, so restart does not wipe existing values.
-
-#### Полный каталог функций экономической системы (RU)
-
-**Dashboard**
-- KPI-блок: `Balance`, `Weekly Profit`, `Cash Gap`, `Mismatches`.
-- `Quick Actions`: быстрые переходы к созданию операций, импорту, правилам и настройкам.
-- `Cash Flow`: график на реальных проводках из журнала.
-- `Recent Transactions`: последние операции с фильтрацией по статусу/категории/источнику.
-- `Reconciliation Preview`: превью сверки игровых логов с системой.
-- `API Status`: внутренняя проверка доступности dashboard API и внешнего pricing API.
-
-**Filters + Alert Thresholds (скрыты по умолчанию)**
-- Фильтры периода и журнала: `days`, `entry_status`, `category`, `source`.
-- Пороги алертов: low cash, high expense (30d), unmatched.
-- Сохранение порогов в `econ_config` с аудитом в `econ_audit_log`.
-
-**Operation**
-- Ручная операция с автопроводкой по routing-rule + предпросмотр `Dr/Cr`.
-- Управление бонусными задачами и выплатами.
-- Создание/обновление routing rules.
-- Импорт `silver/energy` CSV-логов.
-- Получение рыночной цены item из Albion Data API.
-- Loot Buyback: заявка по цене `market - 20%`, автоапрув по лимиту.
-- Regear: создание заявки по смерти в контенте, выдача в отдельном статусном шаге.
-
-**Journal**
-- Очередь pending-проводок.
-- Подтверждение (`approve`) или отклонение (`reject`) перед финальным posting.
-
-**Reconciliation**
+## RU
+
+### Что это
+
+`Albion Analytics Bot` — единая система для гильдии:
+- Discord-бот для ежедневных действий (ивенты, тикеты, роли, статистика).
+- Веб-дашборд для управления, аналитики и экономики.
+- Экономический модуль на двойной записи с аудитом и сверкой.
+
+### Основные подсистемы
+
+#### 1) Discord Bot
+- Тикеты: создание, распределение, оценка, контроль.
+- Ивенты: шаблоны, слоты, join/leave/manage, ручные замены.
+- Роли и доступ: member / mentor / founder / economy.
+- Статистика игроков и payroll-инструменты.
+
+#### 2) Web Dashboard
+- KPI и сводная аналитика по активности.
+- Управление шаблонами, ролями, системным состоянием.
+- Отдельная страница Economy Ops для финансовых операций.
+
+#### 3) Economy Ops (двойная запись)
+- Журнал проводок и линии проводок (`Dr/Cr`).
+- Routing rules для автоматической контировки по категории.
+- Workflow approve/reject для риск-операций.
+- Reconciliation (импорт игровых логов + контроль расхождений).
+- Audit trail всех значимых действий.
+
+### Экономические категории и функции
+
+#### Dashboard
+- KPI: `Balance`, `Weekly Profit`, `Cash Gap`, `Mismatches`.
+- `Recent Transactions` и превью проблем (`alerts/discrepancies`).
+- `API Status` с авто-обновлением и sparkline по latency.
+- Фильтры и пороги алертов (скрыты по умолчанию).
+
+#### Operation
+- Карточки 3x4 с модальными формами:
+  - New Operation
+  - Guild Tasks
+  - Award Payout
+  - Routing Rules
+  - CSV Import
+  - Market Price
+  - Loot Buyback
+  - Regear Request
+  - Alert Thresholds / API Health / Journal / Reconciliation shortcuts
+
+#### Journal
+- Очередь pending проводок.
+- `Approve / Reject` с фиксацией reviewer и note.
+
+#### Reconciliation
 - Таблицы задач, выплат, правил, импортов.
-- Мониторинг статусов Buyback/Regear.
-- Кнопка `Issue` для финальной выдачи regear с проводкой `Дт 5210 / Кт 1210`.
+- Статусы Buyback/Regear.
+- Кнопка `Issue` для финализации regear.
 
-**Reports**
+#### Reports
 - `Balance Snapshot`, `PnL Summary`, `Cashflow Summary`, `Forecast`.
-- Полный `Audit Trail` по экономическим действиям.
+- Полный `Audit Trail`.
 
-#### Full Economy Function Catalog (EN)
+### Спец-модули экономики
 
-**Dashboard**
-- KPI cards: `Balance`, `Weekly Profit`, `Cash Gap`, `Mismatches`.
-- Quick actions to jump into operation, imports, rules, and settings.
-- Cashflow chart rendered from posted journal entries.
-- Recent transactions with API-side filtering.
-- Reconciliation preview for fast mismatch triage.
-- API status panel for internal and external dependencies.
+#### Loot Buyback
+- Выкуп лута у игроков: `market - 20%`.
+- Цена фиксируется в момент запроса через Albion pricing API.
+- Авто-апрув при сумме <= `auto_approve_limit`.
+- Бухгалтерия (при approved): `Дт 1200 / Кт 1000`.
 
-**Filters + Alert Thresholds (hidden by default)**
-- Data filters: `days`, `entry_status`, `category`, `source`.
-- Alert thresholds: low cash, high 30d expense, unmatched discrepancies.
-- Threshold values are stored in `econ_config` and audited.
+#### Regear / Insurance
+- Создание заявки (pending) с обязательным `screenshot_url`.
+- Отдельный шаг выдачи (`issue`) после проверки.
+- Бухгалтерия (при issue): `Дт 5210 / Кт 1210`.
 
-**Operation**
-- Routed manual operation with Dr/Cr preview.
-- Guild task and payout management.
-- Routing rule maintenance.
-- Silver/energy CSV import flows.
-- Market price lookup via Albion Data API.
-- Loot buyback request workflow with `market - 20%` pricing snapshot and auto-approval cap.
-- Regear request workflow with mandatory evidence URL and separate issue stage.
+### Хранение данных и устойчивость
 
-**Journal**
-- Pending approval queue for governed posting.
-- Approve/reject controls for high-impact entries.
+Данные не держатся только в UI и не теряются при перезапуске рендера:
+- Проводки: `econ_journal_entries`, `econ_journal_lines`
+- Правила: `econ_routing_rules`
+- Задачи/выплаты: `econ_guild_bonus_tasks`, `econ_guild_bonus_awards`
+- Импорты/расхождения: `econ_game_log_imports`, `econ_import_discrepancies`
+- Алерты/конфиг: `econ_alerts`, `econ_config`
+- Buyback/Regear: `econ_loot_buyback_requests`, `econ_regear_requests`
+- Аудит: `econ_audit_log`
 
-**Reconciliation**
-- Consolidated views for tasks, awards, rules, imports.
-- Buyback and regear status monitoring.
-- Regear issue action posting `Dr 5210 / Cr 1210`.
+Схема инициализируется безопасно (`CREATE TABLE IF NOT EXISTS`), сиды используют insert-if-missing/upsert и не перетирают рабочие данные.
 
-**Reports**
-- Balance/PnL/Cashflow/Forecast outputs.
-- Full audit trail for compliance and investigation.
+### Основные API-маршруты Economy
 
-### Quick Start
-1. Run `/register <code>` to link your Discord account to the guild.
-2. Run `/menu` for quick access to core actions.
-3. Create a ticket with `/ticket create` or an event with `/event create`.
+- `GET /dashboard/api/economy/data`
+- `GET /dashboard/api/economy/reports`
+- `POST /dashboard/api/economy/route-op`
+- `POST /dashboard/api/economy/task`
+- `POST /dashboard/api/economy/task/delete`
+- `POST /dashboard/api/economy/award`
+- `POST /dashboard/api/economy/routing-rule`
+- `POST /dashboard/api/economy/import-log`
+- `POST /dashboard/api/economy/config`
+- `POST /dashboard/api/economy/review-entry`
+- `POST /dashboard/api/economy/alert/ack`
+- `POST /dashboard/api/economy/discrepancy/resolve`
+- `GET /dashboard/api/economy/price`
+- `POST /dashboard/api/economy/loot-buyback`
+- `POST /dashboard/api/economy/regear`
 
-### Commands
+### Запуск и конфигурация
 
-#### Profile and Access
-- `/register` — register with guild invite code.
-- `/guild action:<approve|promote|demote|info>` — role/status management.
-- `/menu` — open main bot panel.
+#### Обязательные переменные
+- `DISCORD_TOKEN`
+- `DATABASE_URL`
+- `DASHBOARD_SECRET`
 
-#### Tickets (Session Reviews)
-- `/ticket create` — create a review ticket.
-- `/ticket list` — list active tickets.
-- `/ticket claim` — claim ticket (Mentor).
-- `/ticket rate` — rate ticket (Mentor).
-- `/ticket unclaim` — release ticket (Mentor).
-- `/ticket info` — view ticket details.
+#### Рекомендуемые переменные
+- `GUILD_IDS` (или `GUILD_ID`/`GUILD_ID2`)
+- `DISCORD_FORCE_COMMAND_SYNC`
+- `DISCORD_SKIP_COMMAND_SYNC`
+- `DISCORD_COMMAND_SYNC_DEFER_SEC`
+- `DISCORD_COMMAND_SYNC_JITTER_SEC`
+- `DISCORD_CF1015_RETRY_AFTER_SEC`
+- `ECON_DATABASE_URL` (отдельная БД для экономики, опционально)
 
-#### Events
-- `/event create` — create an event from a template.
-- `/event close` — close event.
-- `/event add_player` — add/move a player to a slot.
-- `/event remove_player` — remove player from roster.
-- `/event swap_players` — swap two players.
-- `/event add_extra` — add extra slot and assign a player.
-- Event message buttons: `Join`, `Leave`, `Close Event`, `Manage`.
-- Important: if an event did not actually happen, do **not** close it. Delete the event message so fake stats are not written to the database.
-
-#### Analytics and Payroll
-- `/stats` — personal or target player statistics.
-- `/stats_top` — top players leaderboard.
-- `/stats_seed_test` — seed test data (Founder).
-- `/payroll` — mentor payroll calculation.
+#### Локальный старт
+1. `pip install -r requirements.txt`
+2. Создать `.env` с обязательными переменными
+3. `python bot.py`
+4. Открыть `/dashboard` и авторизоваться через `DASHBOARD_SECRET`
 
 ---
 
-## Setup
+## EN
 
-### Environment Variables
-- `DISCORD_TOKEN` — bot token.
-- `DATABASE_URL` — PostgreSQL connection string.
-- `GUILD_ID` / `GUILD_ID2` — legacy target Discord server ID(s).
-- `GUILD_IDS` — optional comma- or space-separated guild IDs. **Recommended** when the bot is in **multiple** servers: slash commands are registered **only** for these guilds (plus legacy `GUILD_ID`/`GUILD_ID2`), which greatly reduces Discord **application command** rate limits on startup.
-- `DISCORD_COMMAND_SYNC_DEFER_SEC` — optional; seconds to sleep in `on_ready` before syncing slash commands (spread load after deploys).
-- `DISCORD_COMMAND_SYNC_JITTER_SEC` — optional; e.g. `20` adds a random **0…20s** sleep before sync so multiple instances or quick redeploys don’t hit the command API at the same instant.
-- `DISCORD_SKIP_COMMAND_SYNC` — optional; set to `1` / `true` to skip slash command registration for this run (debug only).
-- `DISCORD_FORCE_COMMAND_SYNC` — optional; set to `1` / `true` to always run `sync_commands` and refresh the stored fingerprint (use after changing slash commands, or if Discord’s copy is out of sync).
-- `DISCORD_CF1015_RETRY_AFTER_SEC` — optional; when Discord’s edge returns **Cloudflare error 1015** (temporary **IP ban** for your host’s egress), the bot waits this many seconds between login attempts (default **3600**). Shorter retries do not unblock the IP; change region/provider or wait it out.
-- `DASHBOARD_SECRET` — long random token for the web dashboard login (`https://<your-service>.onrender.com/dashboard`).
-- `FLASK_SECRET_KEY` — optional; cookie signing (defaults to `DASHBOARD_SECRET`).
-- `DASHBOARD_DB_QUOTA_BYTES` — optional; database size quota in bytes for the System tab (default ~512 MiB, e.g. Neon free tier).
-- `EVENT_TEMPLATES_PATH` — optional; absolute path to `events_templates.txt` if not beside `bot.py`.
+### What this project is
 
-### Logs: `rate limited ... /applications/.../commands`
+`Albion Analytics Bot` is a unified guild operations platform:
+- Discord bot for daily workflows (events, tickets, role access, stats).
+- Web dashboard for oversight and administration.
+- Economy subsystem with double-entry accounting, approvals, reconciliation, and audit.
 
-Discord limits how often **slash commands** can be registered. The library will back off (sometimes hundreds of seconds) when that limit is hit.
+### Main components
 
-This bot registers commands **once** after login (`on_ready`). To avoid unnecessary API traffic:
+#### 1) Discord Bot
+- Ticket lifecycle: create, assign, review, rate.
+- Event lifecycle: templates, slot signup, roster management.
+- Role/access tiers: member / mentor / founder / economy.
+- Player analytics and mentor payroll tooling.
 
-- Set **`GUILD_IDS`** (and/or `GUILD_ID`) to the Discord server id(s) you actually use. The bot **does not** sync commands to every server it was invited to when these env vars are set.
-- The bot disables **automatic** sync on every `on_connect` and runs **one** `sync_commands` call in `on_ready` for the whole guild list (splitting into a per-guild loop would repeat Discord’s internal global-command checks and **worsen** rate limits).
-- Optional **`DISCORD_COMMAND_SYNC_DEFER_SEC`** (e.g. `5`–`30`) — fixed wait after `on_ready` before syncing.
-- Optional **`DISCORD_COMMAND_SYNC_JITTER_SEC`** (e.g. `15`–`30`) — extra random **0…N** second delay so staggered deploys don’t synchronize on the same API window.
-- Optional **`DISCORD_SKIP_COMMAND_SYNC=1`** — skip registration for this process (debug only; slash commands may be missing until you unset it and redeploy).
-- After a **successful** sync, the bot stores a **fingerprint** of the slash command tree and guild/global sync mode in the database (`bot_kv`). On later startups it **skips** `sync_commands` when nothing changed, which cuts Discord application-command API traffic. If this process still has **no cached application commands** (typical right after a cold start), the bot **runs sync anyway** so slash handlers work. Set **`DISCORD_FORCE_COMMAND_SYNC=1`** for one run after you edit commands or if the developer portal / Discord state diverged (e.g. you only changed a description).
-- **Cloudflare 1015 / “You are being rate limited” HTML from discord.com** means Discord blocked your **server’s public IP**, not a normal REST 429. Fix: wait (often hours), redeploy to another **region** or host, ensure **one** bot process per token. The bot uses a **long** retry (see `DISCORD_CF1015_RETRY_AFTER_SEC`) so it does not hammer the edge while banned.
-- Avoid rapid restart loops (e.g. crash → restart) while developing.
+#### 2) Web Dashboard
+- KPI and operational analytics.
+- Role assist, template management, system diagnostics.
+- Dedicated Economy Ops page for accounting operations.
 
-### Deployment (Render)
-1. Connect your GitHub repository.
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `python bot.py`
-4. Health check: `GET /` (from `keep_alive.py`). Analytics UI: `GET /dashboard` (log in with `DASHBOARD_SECRET`).
+#### 3) Economy Ops (double-entry)
+- Journal entries and journal lines (`Dr/Cr`).
+- Routing rules for category-based posting.
+- Approval flow (`approve/reject`) for controlled posting.
+- Reconciliation from imported game logs.
+- Full audit trail.
 
-**Port check:** The HTTP server starts **before** the Discord client and heavy cog imports (e.g. matplotlib for `/stats`), so Render’s port probe should see `$PORT` open quickly. Use a **single** Web Service instance unless you know how to avoid duplicate Discord sessions.
+### Economy categories and functions
 
+#### Dashboard
+- KPI cards: `Balance`, `Weekly Profit`, `Cash Gap`, `Mismatches`.
+- Recent transactions and risk preview.
+- API health with auto-refresh and latency sparkline.
+- Collapsed-by-default filters and alert thresholds.
+
+#### Operation
+- Uniform 3x4 card layout with popup modals:
+  - New Operation
+  - Guild Tasks
+  - Award Payout
+  - Routing Rules
+  - CSV Import
+  - Market Price
+  - Loot Buyback
+  - Regear Request
+  - Shortcuts to thresholds, API health, journal, reconciliation
+
+#### Journal
+- Pending approval queue.
+- Approve/reject actions with reviewer metadata.
+
+#### Reconciliation
+- Tasks, awards, rules, imports overview.
+- Buyback/regear status tracking.
+- Regear `Issue` completion action.
+
+#### Reports
+- Balance, PnL, cashflow, forecast.
+- Immutable audit trail.
+
+### Dedicated economy modules
+
+#### Loot Buyback
+- Player loot buyback at `market - 20%`.
+- Market snapshot pricing via Albion pricing API.
+- Auto-approval under `auto_approve_limit`.
+- Accounting (approved): `Dr 1200 / Cr 1000`.
+
+#### Regear / Insurance
+- Claim creation (`pending`) with mandatory screenshot URL.
+- Separate `issue` step after treasury review.
+- Accounting (issue): `Dr 5210 / Cr 1210`.
+
+### Data persistence and reload safety
+
+Economy data is persisted in DB and reloaded on every dashboard refresh:
+- `econ_journal_entries`, `econ_journal_lines`
+- `econ_routing_rules`
+- `econ_guild_bonus_tasks`, `econ_guild_bonus_awards`
+- `econ_game_log_imports`, `econ_import_discrepancies`
+- `econ_alerts`, `econ_config`
+- `econ_loot_buyback_requests`, `econ_regear_requests`
+- `econ_audit_log`
+
+Schema initialization is non-destructive (`CREATE TABLE IF NOT EXISTS`), and seed/config writes use insert-if-missing/upsert semantics.
+
+### Economy API routes
+
+- `GET /dashboard/api/economy/data`
+- `GET /dashboard/api/economy/reports`
+- `POST /dashboard/api/economy/route-op`
+- `POST /dashboard/api/economy/task`
+- `POST /dashboard/api/economy/task/delete`
+- `POST /dashboard/api/economy/award`
+- `POST /dashboard/api/economy/routing-rule`
+- `POST /dashboard/api/economy/import-log`
+- `POST /dashboard/api/economy/config`
+- `POST /dashboard/api/economy/review-entry`
+- `POST /dashboard/api/economy/alert/ack`
+- `POST /dashboard/api/economy/discrepancy/resolve`
+- `GET /dashboard/api/economy/price`
+- `POST /dashboard/api/economy/loot-buyback`
+- `POST /dashboard/api/economy/regear`
+
+### Setup
+
+#### Required environment variables
+- `DISCORD_TOKEN`
+- `DATABASE_URL`
+- `DASHBOARD_SECRET`
+
+#### Recommended environment variables
+- `GUILD_IDS` (or `GUILD_ID`/`GUILD_ID2`)
+- `DISCORD_FORCE_COMMAND_SYNC`
+- `DISCORD_SKIP_COMMAND_SYNC`
+- `DISCORD_COMMAND_SYNC_DEFER_SEC`
+- `DISCORD_COMMAND_SYNC_JITTER_SEC`
+- `DISCORD_CF1015_RETRY_AFTER_SEC`
+- `ECON_DATABASE_URL` (optional dedicated economy DB)
+
+#### Local run
+1. `pip install -r requirements.txt`
+2. Create `.env` with required variables
+3. Start: `python bot.py`
+4. Open `/dashboard` and authenticate with `DASHBOARD_SECRET`

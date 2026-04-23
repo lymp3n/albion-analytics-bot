@@ -203,17 +203,83 @@
         @keyframes toastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .ops-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(320px, 1fr));
-            gap: 16px;
-            align-items: start;
+            grid-template-columns: repeat(3, minmax(250px, 1fr));
+            gap: 14px;
+            align-items: stretch;
         }
-        .ops-card {
+        .ops-launch {
             background: rgba(15,23,42,.45);
-            border: 1px solid rgba(0,245,255,.18);
-            border-radius: 10px;
+            border: 1px solid rgba(0,245,255,.22);
+            border-radius: 12px;
             padding: 14px;
+            min-height: 154px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 10px;
         }
-        @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(2,minmax(180px,1fr)); } .ops-grid{ grid-template-columns:1fr; } }
+        .ops-launch-title {
+            color: var(--neon-cyan);
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: .02em;
+        }
+        .ops-launch-help {
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1.4;
+            min-height: 52px;
+        }
+        .ops-launch .btn {
+            flex: 0 0 auto;
+            width: 100%;
+        }
+        .ops-modal-wrap {
+            position: fixed;
+            inset: 0;
+            z-index: 10001;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2,6,23,.72);
+            padding: 18px;
+        }
+        .ops-modal-wrap.is-open { display: flex; }
+        .ops-modal {
+            width: min(760px, 100%);
+            max-height: calc(100vh - 40px);
+            overflow: auto;
+            background: rgba(15,23,42,.97);
+            border: 1px solid rgba(0,245,255,.35);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 20px 48px rgba(2,6,23,.5);
+        }
+        .ops-modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .ops-modal-help {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-bottom: 14px;
+        }
+        .sparkline {
+            width: 100%;
+            height: 54px;
+            display: block;
+            margin-top: 10px;
+        }
+        .sparkline path {
+            fill: none;
+            stroke: var(--neon-cyan);
+            stroke-width: 2;
+        }
+        @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(2,minmax(180px,1fr)); } .ops-grid{ grid-template-columns:repeat(2,minmax(220px,1fr)); } }
+        @media (max-width:900px){ .ops-grid{ grid-template-columns:1fr; } }
         @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .nav-tabs{ display:none;} .reconciliation{ grid-template-columns:1fr;} }
     </style>
 </head>
@@ -295,23 +361,14 @@
                 <div class="mono mt-20" id="reports-inline"></div>
             </div>
 
-            <div class="modal-preview" id="operation-card">
-                <div class="modal-header">➕ New Operation</div>
-                <div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div>
-                <div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div>
-                <div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div>
-                <div class="form-row">
-                    <div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div>
-                    <div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div>
-                </div>
-                <div class="posting-preview">
-                    <div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div>
-                    <div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" id="btn-op-clear">Cancel</button>
-                    <button class="btn btn-primary" id="btn-op-create">✅ Confirm</button>
-                </div>
+            <div class="table-container">
+                <div class="section-title" data-i18n="api_status">🔌 API Status</div>
+                <div class="api-pill" id="api-internal-pill"><span class="api-dot"></span><span id="api-internal-text">Internal API checking...</span></div>
+                <svg class="sparkline" id="sparkline-internal" viewBox="0 0 240 54" preserveAspectRatio="none"><path d=""></path></svg>
+                <div class="api-pill mt-20" id="api-external-pill"><span class="api-dot"></span><span id="api-external-text">Albion API checking...</span></div>
+                <svg class="sparkline" id="sparkline-external" viewBox="0 0 240 54" preserveAspectRatio="none"><path d=""></path></svg>
+                <div class="mono mt-20" id="api-meta"></div>
+                <button class="btn btn-secondary mt-20" id="btn-api-refresh-now">Refresh now</button>
             </div>
         </div>
 
@@ -348,73 +405,31 @@
         </div>
 
         <div class="table-container hidden" id="section-operation">
-            <div class="section-title">🧩 Tasks, Awards, Routing, Imports, Buyback, Regear</div>
+            <div class="section-title" data-i18n="ops_title">🧩 Operations Catalog</div>
             <div class="ops-grid">
-                <div class="ops-card">
-                    <div class="block-title">🏆 Guild Tasks</div>
-                    <div class="form-group"><label class="form-label">Task title</label><input class="form-input" id="task-title"></div>
-                    <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div>
-                    <div class="form-group"><label class="form-label">Reward</label><input class="form-input" id="task-reward" type="number" value="100000"></div>
-                    <div class="form-group"><label class="form-label"><input id="task-active" type="checkbox" checked> Active</label></div>
-                    <button class="btn btn-primary tooltip" id="btn-task-save" data-tip="Создать или обновить задачу гильд-бонуса.">Save task</button>
-                </div>
-                <div class="ops-card">
-                    <div class="block-title">💸 Award Payout</div>
-                    <div class="mt-20 form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div>
-                    <div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player"></div>
-                    <div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div>
-                    <div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div>
-                    <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div>
-                    <button class="btn btn-primary tooltip" id="btn-award" data-tip="Подтвердить выплату по задаче и провести запись.">Approve payout</button>
-                </div>
-                <div class="ops-card">
-                    <div class="block-title">🧭 Routing Rules</div>
-                    <div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div>
-                    <div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div>
-                    <div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div>
-                    <div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div>
-                    <button class="btn btn-primary tooltip" id="btn-rule-save" data-tip="Сохранить правило автопроводки категории.">Save rule</button>
-                </div>
-                <div class="ops-card">
-                    <div class="block-title">📥 CSV Import</div>
-                    <div class="mt-20 form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div>
-                    <div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:130px;"></textarea></div>
-                    <button class="btn btn-primary tooltip" id="btn-log-import" data-tip="Импортировать CSV лог и сформировать сверочные записи.">Import CSV</button>
-                </div>
-                <div class="ops-card">
-                    <div class="block-title">📥 Loot Buyback</div>
-                    <div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X"></div>
-                    <div class="compact-grid">
-                        <div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="lb-item" placeholder="T6_BAG"></div>
-                        <div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div>
-                    </div>
-                    <div class="compact-grid">
-                        <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="lb-location" value="Caerleon"></div>
-                        <div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="lb-quality" type="number" min="1" max="5" value="1"></div>
-                    </div>
-                    <div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div>
-                    <button class="btn btn-primary tooltip" id="btn-loot-buyback" data-tip="Создать заявку скупки по Market-20%; авто-апрув по лимиту.">Create buyback request</button>
-                </div>
-                <div class="ops-card">
-                    <div class="block-title">🏷️ Market Price</div>
-                    <div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="price-item" value="T4_BAG"></div>
-                    <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div>
-                    <div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div>
-                    <button class="btn btn-primary tooltip" id="btn-price" data-tip="Получить рыночную цену из Albion Data API.">Fetch price</button>
-                    <pre class="mono" id="price-json">{}</pre>
-                    <div class="block-title">🛡️ Regear Request</div>
-                    <div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y"></div>
-                    <div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div>
-                    <div class="compact-grid">
-                        <div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="rg-item" placeholder="T8_MAIN_HOLY"></div>
-                        <div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div>
-                    </div>
-                    <div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div>
-                    <div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div>
-                    <button class="btn btn-primary tooltip" id="btn-regear-create" data-tip="Создать regear запрос с обязательным death screenshot.">Create regear request</button>
-                </div>
+                <div class="ops-launch"><div class="ops-launch-title">➕ New Operation</div><div class="ops-launch-help">Route operation by category and validate Dr/Cr before posting.</div><button class="btn btn-primary js-open-modal" data-modal="modal-op">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🏆 Guild Tasks</div><div class="ops-launch-help">Create or update guild economy task with payout rules.</div><button class="btn btn-primary js-open-modal" data-modal="modal-task">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">💸 Award Payout</div><div class="ops-launch-help">Approve completion and post reward entry for player.</div><button class="btn btn-primary js-open-modal" data-modal="modal-award">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🧭 Routing Rules</div><div class="ops-launch-help">Configure auto-debit/credit accounts per category.</div><button class="btn btn-primary js-open-modal" data-modal="modal-rule">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">📥 CSV Import</div><div class="ops-launch-help">Import silver/energy logs and generate reconciliation links.</div><button class="btn btn-primary js-open-modal" data-modal="modal-import">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🏷️ Market Price</div><div class="ops-launch-help">Fetch latest market snapshot from Albion Data API.</div><button class="btn btn-primary js-open-modal" data-modal="modal-price">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">📦 Loot Buyback</div><div class="ops-launch-help">Create buyback request at market -20% with approval limit.</div><button class="btn btn-primary js-open-modal" data-modal="modal-buyback">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🛡️ Regear Request</div><div class="ops-launch-help">Create insurance/regear request with screenshot evidence.</div><button class="btn btn-primary js-open-modal" data-modal="modal-regear">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">⚙️ Alert Thresholds</div><div class="ops-launch-help">Open filters panel and edit low cash / expense / unmatched thresholds.</div><button class="btn btn-secondary" id="ops-open-thresholds">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🔌 API Health</div><div class="ops-launch-help">Run instant health check and update latency sparkline.</div><button class="btn btn-secondary" id="ops-run-api-check">Run</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">📋 Pending Journal</div><div class="ops-launch-help">Open approvals queue for manual review workflow.</div><button class="btn btn-secondary" id="ops-open-journal">Open</button></div>
+                <div class="ops-launch"><div class="ops-launch-title">🔄 Reconciliation</div><div class="ops-launch-help">Open reconciliation tables for imports, buyback and regear.</div><button class="btn btn-secondary" id="ops-open-recon">Open</button></div>
             </div>
         </div>
+
+        <div class="ops-modal-wrap" id="modal-op"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">➕ New Operation</div><button class="btn btn-secondary js-close-modal" data-modal="modal-op">Close</button></div><div class="ops-modal-help">Create manual routed operation. Preview checks mapped debit/credit.</div><div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div><div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div><div class="form-row"><div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div><div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div></div><div class="posting-preview"><div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div><div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div></div><div class="btn-group"><button class="btn btn-secondary" id="btn-op-clear">Clear</button><button class="btn btn-primary" id="btn-op-create">✅ Confirm</button></div></div></div>
+        <div class="ops-modal-wrap" id="modal-task"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🏆 Guild Tasks</div><button class="btn btn-secondary js-close-modal" data-modal="modal-task">Close</button></div><div class="ops-modal-help">Configure repeating guild tasks used in bonus payout workflow.</div><div class="form-group"><label class="form-label">Task title</label><input class="form-input" id="task-title"></div><div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div><div class="form-group"><label class="form-label">Reward</label><input class="form-input" id="task-reward" type="number" value="100000"></div><div class="form-group"><label class="form-label"><input id="task-active" type="checkbox" checked> Active</label></div><button class="btn btn-primary" id="btn-task-save">Save task</button></div></div>
+        <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">💸 Award Payout</div><button class="btn btn-secondary js-close-modal" data-modal="modal-award">Close</button></div><div class="ops-modal-help">Post reward payout for approved task completion.</div><div class="form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
+        <div class="ops-modal-wrap" id="modal-rule"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🧭 Routing Rules</div><button class="btn btn-secondary js-close-modal" data-modal="modal-rule">Close</button></div><div class="ops-modal-help">Define debit/credit accounts and approval behavior by operation category.</div><div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div><div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div><div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div><div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div><button class="btn btn-primary" id="btn-rule-save">Save rule</button></div></div>
+        <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">📥 CSV Import</div><button class="btn btn-secondary js-close-modal" data-modal="modal-import">Close</button></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><button class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
+        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🏷️ Market Price</div><button class="btn btn-secondary js-close-modal" data-modal="modal-price">Close</button></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="price-item" value="T4_BAG"></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json">{}</pre></div></div>
+        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">📦 Loot Buyback</div><button class="btn btn-secondary js-close-modal" data-modal="modal-buyback">Close</button></div><div class="ops-modal-help">Create buyback request with auto-approval when payout is below limit.</div><div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="lb-item" placeholder="T6_BAG"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div></div><div class="compact-grid"><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="lb-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="lb-quality" type="number" min="1" max="5" value="1"></div></div><div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🛡️ Regear Request</div><button class="btn btn-secondary js-close-modal" data-modal="modal-regear">Close</button></div><div class="ops-modal-help">Create regear insurance request. Screenshot URL is mandatory.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="rg-item" placeholder="T8_MAIN_HOLY"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
 
         <div class="table-container hidden" id="section-journal">
             <div class="section-title">📋 Journal + Pending Approvals</div>
@@ -470,6 +485,8 @@
         recon: "#section-recon",
         reports: "#section-reports",
       };
+      let apiHealthTimer = null;
+      const latencyHistory = { internal: [], external: [] };
       let currentLang = "en";
       const I18N = {
         en: {
@@ -485,6 +502,25 @@
           btn_save_thresholds: "Save thresholds",
           api_status: "🔌 API Status",
           recon_preview: "🔄 Reconciliation Preview",
+          ops_title: "🧩 Operations Catalog",
+          no_entries: "No entries",
+          no_pending: "No pending approvals",
+          no_tasks: "No tasks",
+          no_rules: "No rules",
+          no_imports: "No imports",
+          no_buyback: "No buyback requests",
+          no_regear: "No regear requests",
+          no_payouts: "No payouts",
+          no_audit: "No audit records",
+          no_alerts: "No alerts",
+          no_disc: "No discrepancies",
+          approved: "Approved",
+          pending: "Pending",
+          mismatch: "Mismatch",
+          yes: "yes",
+          no: "no",
+          loading: "Loading...",
+          api_last_check: "Last check",
         },
         ru: {
           tab_dashboard: "📊 Обзор",
@@ -499,8 +535,110 @@
           btn_save_thresholds: "Сохранить пороги",
           api_status: "🔌 Статус API",
           recon_preview: "🔄 Превью сверки",
+          ops_title: "🧩 Каталог операций",
+          no_entries: "Нет операций",
+          no_pending: "Нет ожиданий",
+          no_tasks: "Нет задач",
+          no_rules: "Нет правил",
+          no_imports: "Нет импортов",
+          no_buyback: "Нет заявок buyback",
+          no_regear: "Нет заявок regear",
+          no_payouts: "Нет выплат",
+          no_audit: "Нет записей аудита",
+          no_alerts: "Нет алертов",
+          no_disc: "Нет расхождений",
+          approved: "Подтверждено",
+          pending: "Ожидает",
+          mismatch: "Расхождение",
+          yes: "да",
+          no: "нет",
+          loading: "Загрузка...",
+          api_last_check: "Последняя проверка",
         }
       };
+      const tr = (k) => (I18N[currentLang] && I18N[currentLang][k]) || (I18N.en && I18N.en[k]) || k;
+      const STATIC_TEXT = {
+        en: {
+          ".logo span:last-child": "GUILD ACCOUNTING",
+          "#section-dashboard .filters .section-title": "🎛️ Filters + Alert Thresholds",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(1) .kpi-label": "Balance",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(2) .kpi-label": "Weekly Profit",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(3) .kpi-label": "Cash Gap",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(4) .kpi-label": "Mismatches",
+          ".quick-actions .section-title": "⚡ Quick Actions",
+          "#btn-focus-op span:last-child": "New Operation",
+          "#btn-import-csv span:last-child": "Import CSV",
+          "#btn-open-routing span:last-child": "Routing Rules",
+          "#btn-open-settings span:last-child": "Settings",
+          "#chart-box .section-title": "📊 Cash Flow (real data)",
+          "#btn-api-refresh-now": "Refresh now",
+          "#section-dashboard .table-title": "📋 Recent Transactions",
+          "#btn-journal": "Journal",
+          "#btn-export-reports": "Reports JSON",
+          "#btn-approval": "Pending",
+          "#section-operation .ops-launch:nth-child(1) .ops-launch-title": "➕ New Operation",
+          "#section-operation .ops-launch:nth-child(2) .ops-launch-title": "🏆 Guild Tasks",
+          "#section-operation .ops-launch:nth-child(3) .ops-launch-title": "💸 Award Payout",
+          "#section-operation .ops-launch:nth-child(4) .ops-launch-title": "🧭 Routing Rules",
+          "#section-operation .ops-launch:nth-child(5) .ops-launch-title": "📥 CSV Import",
+          "#section-operation .ops-launch:nth-child(6) .ops-launch-title": "🏷️ Market Price",
+          "#section-operation .ops-launch:nth-child(7) .ops-launch-title": "📦 Loot Buyback",
+          "#section-operation .ops-launch:nth-child(8) .ops-launch-title": "🛡️ Regear Request",
+          "#section-operation .ops-launch:nth-child(9) .ops-launch-title": "⚙️ Alert Thresholds",
+          "#section-operation .ops-launch:nth-child(10) .ops-launch-title": "🔌 API Health",
+          "#section-operation .ops-launch:nth-child(11) .ops-launch-title": "📋 Pending Journal",
+          "#section-operation .ops-launch:nth-child(12) .ops-launch-title": "🔄 Reconciliation",
+          "#ops-open-thresholds": "Open",
+          "#ops-run-api-check": "Run",
+          "#ops-open-journal": "Open",
+          "#ops-open-recon": "Open",
+          ".js-open-modal": "Open",
+          ".js-close-modal": "Close",
+        },
+        ru: {
+          ".logo span:last-child": "УЧЕТ ГИЛЬДИИ",
+          "#section-dashboard .filters .section-title": "🎛️ Фильтры и пороги алертов",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(1) .kpi-label": "Баланс",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(2) .kpi-label": "Недельная прибыль",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(3) .kpi-label": "Кассовый разрыв",
+          "#section-dashboard .kpi-grid .kpi-card:nth-child(4) .kpi-label": "Расхождения",
+          ".quick-actions .section-title": "⚡ Быстрые действия",
+          "#btn-focus-op span:last-child": "Новая операция",
+          "#btn-import-csv span:last-child": "Импорт CSV",
+          "#btn-open-routing span:last-child": "Правила",
+          "#btn-open-settings span:last-child": "Настройки",
+          "#chart-box .section-title": "📊 Денежный поток (реальные данные)",
+          "#btn-api-refresh-now": "Обновить сейчас",
+          "#section-dashboard .table-title": "📋 Последние операции",
+          "#btn-journal": "Журнал",
+          "#btn-export-reports": "JSON отчеты",
+          "#btn-approval": "Ожидания",
+          "#section-operation .ops-launch:nth-child(1) .ops-launch-title": "➕ Новая операция",
+          "#section-operation .ops-launch:nth-child(2) .ops-launch-title": "🏆 Гильд-задачи",
+          "#section-operation .ops-launch:nth-child(3) .ops-launch-title": "💸 Выплата награды",
+          "#section-operation .ops-launch:nth-child(4) .ops-launch-title": "🧭 Правила проводок",
+          "#section-operation .ops-launch:nth-child(5) .ops-launch-title": "📥 Импорт CSV",
+          "#section-operation .ops-launch:nth-child(6) .ops-launch-title": "🏷️ Рыночная цена",
+          "#section-operation .ops-launch:nth-child(7) .ops-launch-title": "📦 Скупка лута",
+          "#section-operation .ops-launch:nth-child(8) .ops-launch-title": "🛡️ Заявка Regear",
+          "#section-operation .ops-launch:nth-child(9) .ops-launch-title": "⚙️ Пороги алертов",
+          "#section-operation .ops-launch:nth-child(10) .ops-launch-title": "🔌 Проверка API",
+          "#section-operation .ops-launch:nth-child(11) .ops-launch-title": "📋 Очередь журнала",
+          "#section-operation .ops-launch:nth-child(12) .ops-launch-title": "🔄 Сверка",
+          "#ops-open-thresholds": "Открыть",
+          "#ops-run-api-check": "Запустить",
+          "#ops-open-journal": "Открыть",
+          "#ops-open-recon": "Открыть",
+          ".js-open-modal": "Открыть",
+          ".js-close-modal": "Закрыть",
+        },
+      };
+      function applyStaticTranslations() {
+        const map = STATIC_TEXT[currentLang] || {};
+        Object.entries(map).forEach(([sel, txt]) => {
+          $$(sel).forEach((el) => { el.textContent = txt; });
+        });
+      }
       const SILVER_CSV = `"Date"\t"Player"\t"Reason"\t"Amount"
 "2026-04-23 14:19:49"\t"marlor2tsd9"\t"Cost for attack on Springsump Basin Meadow"\t"-1400000"
 "2026-04-23 04:02:56"\t"F00ls"\t"Deposit"\t"100000"
@@ -537,8 +675,10 @@
         const t = $("#btn-toggle-filters");
         if (p && t) {
           const opened = !p.classList.contains("is-collapsed");
-          t.textContent = opened ? I18N[currentLang].toggle_filters_hide : I18N[currentLang].toggle_filters_show;
+          t.textContent = opened ? tr("toggle_filters_hide") : tr("toggle_filters_show");
         }
+        applyStaticTranslations();
+        document.documentElement.lang = currentLang;
       }
       function showErr(msg) { const b = $("#err-box"); b.style.display = msg ? "block" : "none"; b.textContent = msg || ""; }
       function toast(msg, kind = "success") {
@@ -555,7 +695,7 @@
         if (!btn) return;
         if (busy) {
           btn.dataset.oldText = btn.textContent;
-          btn.textContent = "Loading...";
+          btn.textContent = tr("loading");
           btn.disabled = true;
         } else {
           btn.disabled = false;
@@ -602,6 +742,34 @@
         path.setAttribute("d", d);
         area.setAttribute("d", ad);
       }
+      function pushLatency(key, value) {
+        const arr = latencyHistory[key];
+        if (!arr) return;
+        arr.push(Math.max(1, Math.round(value)));
+        if (arr.length > 24) arr.shift();
+      }
+      function renderSparkline(svgId, values) {
+        const svg = $("#" + svgId);
+        if (!svg) return;
+        const path = svg.querySelector("path");
+        if (!path) return;
+        if (!values || values.length < 2) {
+          path.setAttribute("d", "");
+          return;
+        }
+        const w = 240;
+        const h = 54;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const span = Math.max(1, max - min);
+        const step = w / (values.length - 1);
+        const d = values.map((v, i) => {
+          const x = i * step;
+          const y = h - ((v - min) / span) * (h - 6) - 3;
+          return `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`;
+        }).join(" ");
+        path.setAttribute("d", d);
+      }
       async function updateApiHealth() {
         const intPill = $("#api-internal-pill");
         const extPill = $("#api-external-pill");
@@ -637,12 +805,16 @@
           extPill.classList.add("bad");
           extText.textContent = `Albion API FAIL (${extMs}ms)`;
         }
-        meta.textContent = `Last check: ${new Date().toLocaleString(currentLang === "ru" ? "ru-RU" : "en-US")} | internal=${intMs}ms | external=${extMs}ms`;
+        pushLatency("internal", intMs);
+        pushLatency("external", extMs);
+        renderSparkline("sparkline-internal", latencyHistory.internal);
+        renderSparkline("sparkline-external", latencyHistory.external);
+        meta.textContent = `${tr("api_last_check")}: ${new Date().toLocaleString(currentLang === "ru" ? "ru-RU" : "en-US")} | internal=${intMs}ms | external=${extMs}ms`;
       }
       function statusBadge(status) {
-        if (status === "posted" || status === "approved") return '<span class="status approved">✅ Approved</span>';
-        if (status === "pending") return '<span class="status pending">🔄 Pending</span>';
-        return '<span class="status mismatch">❌ Mismatch</span>';
+        if (status === "posted" || status === "approved") return `<span class="status approved">✅ ${tr("approved")}</span>`;
+        if (status === "pending") return `<span class="status pending">🔄 ${tr("pending")}</span>`;
+        return `<span class="status mismatch">❌ ${tr("mismatch")}</span>`;
       }
       function readFilters() {
         return {
@@ -715,12 +887,12 @@
         $("#tbl-entries tbody").innerHTML = entries.map((e) => {
           const amount = num(e.amount);
           return `<tr><td>${esc(e.created_at)}</td><td>${esc(e.category)}</td><td>${esc(e.actor || "")}</td><td class="amount ${amount >= 0 ? "positive" : "negative"}">${amount >= 0 ? "+" : ""}${fmt(amount)}</td><td>${statusBadge(e.status)}</td></tr>`;
-        }).join("") || '<tr><td colspan="5">No entries</td></tr>';
+        }).join("") || `<tr><td colspan="5">${tr("no_entries")}</td></tr>`;
 
         const pending = out.pending_approvals || [];
         $("#tbl-pending-approvals tbody").innerHTML = pending.map((p) =>
           `<tr><td>${esc(p.id)}</td><td>${esc(p.category)}</td><td>${fmt(p.amount)}</td><td>${esc(p.actor || "")}</td><td>${esc(p.description || "")}</td><td class="row-actions"><button class="table-btn btn-approve" data-id="${esc(p.id)}">Approve</button><button class="table-btn btn-reject" data-id="${esc(p.id)}">Reject</button></td></tr>`
-        ).join("") || '<tr><td colspan="6">No pending approvals</td></tr>';
+        ).join("") || `<tr><td colspan="6">${tr("no_pending")}</td></tr>`;
         $$(".btn-approve").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/review-entry", { entry_id: parseInt(btn.dataset.id, 10), action: "approve", reviewed_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Approve failed");
@@ -736,8 +908,8 @@
 
         const tasks = out.tasks || [];
         $("#tbl-tasks tbody").innerHTML = tasks.map((t) =>
-          `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${fmt(t.reward_amount)}</td><td>${t.active ? "yes" : "no"}</td><td><button class="table-btn btn-task-del" data-id="${esc(t.id)}">Delete</button></td></tr>`
-        ).join("") || '<tr><td colspan="5">No tasks</td></tr>';
+          `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${fmt(t.reward_amount)}</td><td>${t.active ? tr("yes") : tr("no")}</td><td><button class="table-btn btn-task-del" data-id="${esc(t.id)}">Delete</button></td></tr>`
+        ).join("") || `<tr><td colspan="5">${tr("no_tasks")}</td></tr>`;
         $$(".btn-task-del").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/task/delete", { id: parseInt(btn.dataset.id, 10) });
           if (!out.ok) return showErr(out.error || "Delete failed");
@@ -748,12 +920,12 @@
         const awards = out.awards || [];
         $("#tbl-awards tbody").innerHTML = awards.map((a) =>
           `<tr><td>${esc(a.id)}</td><td>${esc(a.task_title || ("#" + a.task_id))}</td><td>${esc(a.player_nickname)}</td><td>${esc(a.quantity)}</td><td>${fmt(a.reward_total)}</td><td>${esc(a.approved_by || "—")}</td></tr>`
-        ).join("") || '<tr><td colspan="6">No payouts</td></tr>';
+        ).join("") || `<tr><td colspan="6">${tr("no_payouts")}</td></tr>`;
 
         const rules = out.routing_rules || [];
         $("#tbl-rules tbody").innerHTML = rules.map((r) =>
-          `<tr><td>${esc(r.category)}</td><td>${esc(r.debit_account)}</td><td>${esc(r.credit_account)}</td><td>${r.require_approval ? "yes" : "no"}</td><td>${esc(r.tag || "")}</td></tr>`
-        ).join("") || '<tr><td colspan="5">No rules</td></tr>';
+          `<tr><td>${esc(r.category)}</td><td>${esc(r.debit_account)}</td><td>${esc(r.credit_account)}</td><td>${r.require_approval ? tr("yes") : tr("no")}</td><td>${esc(r.tag || "")}</td></tr>`
+        ).join("") || `<tr><td colspan="5">${tr("no_rules")}</td></tr>`;
         const rule = rules.find((r) => String(r.category || "").toLowerCase() === String($("#op-cat").value || "").toLowerCase());
         $("#preview-dr").textContent = "Dr " + (rule ? rule.debit_account : "auto from rule");
         $("#preview-cr").textContent = "Cr " + (rule ? rule.credit_account : "auto from rule");
@@ -763,11 +935,11 @@
         const imports = out.imports || [];
         $("#tbl-imports tbody").innerHTML = imports.map((i) =>
           `<tr><td>${esc(i.id)}</td><td>${esc(i.log_type)}</td><td>${esc(i.rows_count)}</td><td>${esc(JSON.stringify(i.summary || {}))}</td><td>${esc(i.imported_at)}</td></tr>`
-        ).join("") || '<tr><td colspan="5">No imports</td></tr>';
+        ).join("") || `<tr><td colspan="5">${tr("no_imports")}</td></tr>`;
         const buybacks = out.loot_buybacks || [];
         $("#tbl-buyback tbody").innerHTML = buybacks.map((b) =>
           `<tr><td>${esc(b.id)}</td><td>${esc(b.seller_name)}</td><td>${esc(b.item_id)} x${esc(b.quantity)}</td><td>${fmt(b.payout_total)}</td><td>${statusBadge(b.status)}</td></tr>`
-        ).join("") || '<tr><td colspan="5">No buyback requests</td></tr>';
+        ).join("") || `<tr><td colspan="5">${tr("no_buyback")}</td></tr>`;
         const regear = out.regear_requests || [];
         $("#tbl-regear tbody").innerHTML = regear.map((r) => {
           const total = num(r.quantity) * num(r.unit_cost);
@@ -775,7 +947,7 @@
             ? `<button class="table-btn btn-regear-issue" data-id="${esc(r.id)}">Issue</button>`
             : "—";
           return `<tr><td>${esc(r.id)}</td><td>${esc(r.player_name)}</td><td>${esc(r.item_id)} x${esc(r.quantity)}</td><td>${fmt(total)}</td><td>${statusBadge(r.status === "issued" ? "approved" : r.status)}</td><td>${act}</td></tr>`;
-        }).join("") || '<tr><td colspan="6">No regear requests</td></tr>';
+        }).join("") || `<tr><td colspan="6">${tr("no_regear")}</td></tr>`;
         $$(".btn-regear-issue").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/regear", {
             action: "issue",
@@ -794,9 +966,9 @@
         const audit = out.audit_trail || [];
         $("#tbl-audit tbody").innerHTML = audit.map((a) =>
           `<tr><td>${esc(a.id)}</td><td>${esc(a.created_at)}</td><td>${esc(a.mutation_type)}</td><td>${esc((a.entity_type || "") + ":" + (a.entity_id || ""))}</td><td>${esc(a.actor || "")}</td><td>${esc(JSON.stringify(a.payload || {}))}</td></tr>`
-        ).join("") || '<tr><td colspan="6">No audit records</td></tr>';
+        ).join("") || `<tr><td colspan="6">${tr("no_audit")}</td></tr>`;
 
-        $("#alerts-col").innerHTML = alerts.map((a) => `<div class="recon-item ${a.status === "open" ? "warning" : "match"}"><span>${esc(a.alert_type)}: ${esc(a.message)}</span><span>${a.status === "open" ? `<button class="table-btn btn-alert-ack" data-id="${esc(a.id)}">Ack</button>` : "✅"}</span></div>`).join("") || '<div class="recon-item match"><span>No alerts</span><span>✅</span></div>';
+        $("#alerts-col").innerHTML = alerts.map((a) => `<div class="recon-item ${a.status === "open" ? "warning" : "match"}"><span>${esc(a.alert_type)}: ${esc(a.message)}</span><span>${a.status === "open" ? `<button class="table-btn btn-alert-ack" data-id="${esc(a.id)}">Ack</button>` : "✅"}</span></div>`).join("") || `<div class="recon-item match"><span>${tr("no_alerts")}</span><span>✅</span></div>`;
         $$(".btn-alert-ack").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/alert/ack", { id: parseInt(btn.dataset.id, 10), acknowledged_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Alert acknowledge failed");
@@ -804,7 +976,7 @@
           await load();
         }));
         const disc = out.discrepancies || [];
-        $("#disc-col").innerHTML = disc.map((d) => `<div class="recon-item ${d.status === "open" ? "missing" : "match"}"><span>${esc(d.raw_name || "unknown")} (${fmt(d.actual_amount || 0)})</span><span>${d.status === "open" ? `<button class="table-btn btn-disc-resolve" data-id="${esc(d.id)}">Resolve</button>` : "✅"}</span></div>`).join("") || '<div class="recon-item match"><span>No discrepancies</span><span>✅</span></div>';
+        $("#disc-col").innerHTML = disc.map((d) => `<div class="recon-item ${d.status === "open" ? "missing" : "match"}"><span>${esc(d.raw_name || "unknown")} (${fmt(d.actual_amount || 0)})</span><span>${d.status === "open" ? `<button class="table-btn btn-disc-resolve" data-id="${esc(d.id)}">Resolve</button>` : "✅"}</span></div>`).join("") || `<div class="recon-item match"><span>${tr("no_disc")}</span><span>✅</span></div>`;
         $$(".btn-disc-resolve").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/discrepancy/resolve", { id: parseInt(btn.dataset.id, 10), resolved_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Discrepancy resolve failed");
@@ -816,6 +988,7 @@
 
       $$(".nav-tab").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.target)));
       $("#btn-refresh").addEventListener("click", load);
+      $("#btn-api-refresh-now").addEventListener("click", () => updateApiHealth().catch(() => {}));
       $("#btn-apply-filters").addEventListener("click", load);
       $("#btn-reset-filters").addEventListener("click", async () => { $("#flt-days").value = "30"; $("#flt-status").value = ""; $("#flt-category").value = ""; $("#flt-source").value = ""; await load(); });
       $("#btn-save-thresholds").addEventListener("click", async () => {
@@ -950,22 +1123,51 @@
           .then((r) => r.json()).catch((e) => ({ ok: false, error: String(e) }));
         $("#price-json").textContent = JSON.stringify(out, null, 2);
       });
-      $("#btn-focus-op").addEventListener("click", () => { switchTab("dashboard"); $("#operation-card").scrollIntoView({ behavior: "smooth", block: "start" }); });
+      $$(".js-open-modal").forEach((b) => b.addEventListener("click", () => {
+        const id = b.dataset.modal;
+        const m = id ? $("#" + id) : null;
+        if (m) m.classList.add("is-open");
+      }));
+      $$(".js-close-modal").forEach((b) => b.addEventListener("click", () => {
+        const id = b.dataset.modal;
+        const m = id ? $("#" + id) : null;
+        if (m) m.classList.remove("is-open");
+      }));
+      $$(".ops-modal-wrap").forEach((m) => m.addEventListener("click", (e) => {
+        if (e.target === m) m.classList.remove("is-open");
+      }));
+      $("#btn-focus-op").addEventListener("click", () => { switchTab("operation"); $("#modal-op")?.classList.add("is-open"); });
       $("#btn-import-csv").addEventListener("click", () => switchTab("operation"));
       $("#btn-open-routing").addEventListener("click", () => switchTab("recon"));
+      $("#ops-open-thresholds").addEventListener("click", () => {
+        switchTab("dashboard");
+        const p = $("#filters-panel");
+        const b = $("#btn-toggle-filters");
+        if (p.classList.contains("is-collapsed")) {
+          p.classList.remove("is-collapsed");
+          b.textContent = tr("toggle_filters_hide");
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      $("#ops-run-api-check").addEventListener("click", async () => {
+        switchTab("dashboard");
+        await updateApiHealth().catch(() => {});
+      });
+      $("#ops-open-journal").addEventListener("click", () => switchTab("journal"));
+      $("#ops-open-recon").addEventListener("click", () => switchTab("recon"));
       $("#btn-toggle-filters").addEventListener("click", () => {
         const p = $("#filters-panel");
         const b = $("#btn-toggle-filters");
         p.classList.toggle("is-collapsed");
         const opened = !p.classList.contains("is-collapsed");
-        b.textContent = opened ? I18N[currentLang].toggle_filters_hide : I18N[currentLang].toggle_filters_show;
+        b.textContent = opened ? tr("toggle_filters_hide") : tr("toggle_filters_show");
       });
       $("#btn-open-settings").addEventListener("click", () => {
         const p = $("#filters-panel");
         const b = $("#btn-toggle-filters");
         if (p.classList.contains("is-collapsed")) {
           p.classList.remove("is-collapsed");
-          b.textContent = I18N[currentLang].toggle_filters_hide;
+          b.textContent = tr("toggle_filters_hide");
         }
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
@@ -981,6 +1183,8 @@
       applyLanguage("en");
       switchTab("dashboard");
       setTimeout(() => $("#chart-loader")?.classList.add("is-hidden"), 1200);
+      if (apiHealthTimer) clearInterval(apiHealthTimer);
+      apiHealthTimer = setInterval(() => updateApiHealth().catch(() => {}), 30000);
       load().catch((e) => showErr(String(e)));
     })();
     </script>
