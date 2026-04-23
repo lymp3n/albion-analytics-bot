@@ -37,8 +37,8 @@ def get_role_assist_catalog() -> Dict[str, Any]:
         },
         {
             "tier": "Economy",
-            "commands": "Economy dashboard page (`/dashboard/economy`) + journal / guild bonus operations",
-            "details": "Optional dedicated role tier for financial operations; founders/admin still have access.",
+            "commands": "Economy dashboard (`/dashboard/economy`) + `/economy kpi` + `/economy route-op` + `/economy regear-ticket`",
+            "details": "Dedicated finance tier (`require_economy`) for KPI/operations; regear ticket creation supports multi-server category routing by env config.",
         },
     ]
     return {"table": table, "shotcaller_role_ids": sorted(SHOTCALLER_ROLE_IDS)}

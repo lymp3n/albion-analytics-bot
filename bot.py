@@ -163,6 +163,8 @@ class AlbionBot(commands.Bot):
         self.guild_id = int(os.getenv('GUILD_ID', '0'))
         self.guild_id2 = int(os.getenv('GUILD_ID2', '0'))
         self.tickets_category_id = int(os.getenv('TICKETS_CATEGORY_ID', '0'))
+        self.regear_tickets_category_id = int(os.getenv('REGEAR_TICKETS_CATEGORY_ID', '0'))
+        self.regear_ticket_categories = self._parse_regear_ticket_categories()
         
         # Collect all configured guild IDs (for instant command sync)
         # Supports legacy GUILD_ID/GUILD_ID2 and a new comma/space separated GUILD_IDS.
@@ -207,6 +209,7 @@ class AlbionBot(commands.Bot):
             self.load_extension("commands.payroll")
             self.load_extension("commands.menu")
             self.load_extension("commands.events")  # Event management
+            self.load_extension("commands.economy")
             logger.info(f"✓ Command cogs loaded: {', '.join(self.cogs.keys())}")
             logger.info("✓ Slash commands will appear after Discord sync in on_ready")
         except Exception as e:
@@ -249,6 +252,27 @@ class AlbionBot(commands.Bot):
         if self.db.is_sqlite:
             return self.db.conn is not None
         return self.db.pool is not None
+
+    def _parse_regear_ticket_categories(self) -> dict[int, int]:
+        """
+        Parse REGEAR_TICKETS_CATEGORY_IDS as: "guild_id:category_id,guild_id2:category_id2".
+        """
+        mapping: dict[int, int] = {}
+        raw = (os.getenv("REGEAR_TICKETS_CATEGORY_IDS") or "").strip()
+        if not raw:
+            return mapping
+        for chunk in raw.replace(";", ",").split(","):
+            part = chunk.strip()
+            if not part or ":" not in part:
+                continue
+            gid_s, cid_s = part.split(":", 1)
+            gid_s = gid_s.strip()
+            cid_s = cid_s.strip()
+            if not gid_s.isdigit() or not cid_s.isdigit():
+                logger.warning("⚠️ Invalid REGEAR_TICKETS_CATEGORY_IDS item: %r", part)
+                continue
+            mapping[int(gid_s)] = int(cid_s)
+        return mapping
 
     async def _dashboard_discord_heartbeat(self):
         """Lets the dashboard see recent Discord activity even if on_ready does not repeat after reconnects."""

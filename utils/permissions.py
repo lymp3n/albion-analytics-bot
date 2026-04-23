@@ -1,3 +1,4 @@
+import os
 from typing import Optional, Set, Tuple
 
 import discord
@@ -18,6 +19,15 @@ EXTRA_MENTOR_ROLE_IDS = {
 EXTRA_FOUNDER_ROLE_IDS = {
     1467545128897089699,
 }
+EXTRA_ECONOMY_ROLE_IDS: Set[int] = set()
+for _k in ("ACCOUNTANT_ROLE_ID", "RECONCILER_ROLE_ID"):
+    _v = (os.getenv(_k) or "").strip()
+    if _v.isdigit():
+        EXTRA_ECONOMY_ROLE_IDS.add(int(_v))
+for _raw in ((os.getenv("ECONOMY_ROLE_IDS") or "").replace(";", ",").replace(" ", ",").split(",")):
+    _s = _raw.strip()
+    if _s.isdigit():
+        EXTRA_ECONOMY_ROLE_IDS.add(int(_s))
 
 
 class Permissions:
@@ -119,7 +129,7 @@ class Permissions:
         if not g:
             return False
         assigns = await self.bot.db.fetch_guild_role_assignments(int(g["id"]))
-        econ_ids = set()
+        econ_ids = set(EXTRA_ECONOMY_ROLE_IDS)
         for r in assigns:
             if str(r.get("tier") or "").strip().lower() != "economy":
                 continue
@@ -130,9 +140,24 @@ class Permissions:
                 econ_ids.add(int(rid_str))
             except ValueError:
                 continue
-        if not econ_ids:
-            return False
         return self.has_any_role_id(member, econ_ids)
+
+    async def economy_role_ids_for_guild(self, member: discord.Member) -> Set[int]:
+        """All economy role IDs for member.guild (dashboard tier + env extras)."""
+        out: Set[int] = set(EXTRA_ECONOMY_ROLE_IDS)
+        if not member.guild:
+            return out
+        g = await self.bot.db.get_guild_by_discord_id(member.guild.id)
+        if not g:
+            return out
+        assigns = await self.bot.db.fetch_guild_role_assignments(int(g["id"]))
+        for r in assigns:
+            if str(r.get("tier") or "").strip().lower() != "economy":
+                continue
+            rid_str = parse_discord_snowflake_string(r.get("discord_role_id"))
+            if rid_str and rid_str.isdigit():
+                out.add(int(rid_str))
+        return out
 
     async def _ordered_effective_sets(self, member: discord.Member) -> Tuple[Set[int], Set[int], Set[int]]:
         mset, ment_set, fset = await self.effective_role_sets(member)
