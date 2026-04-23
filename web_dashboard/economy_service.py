@@ -447,6 +447,8 @@ def _seed_defaults(conn, backend: str) -> None:
         "alert_low_cash_threshold": "2000000",
         "alert_high_expense_30d_threshold": "25000000",
         "alert_unmatched_records_threshold": "0",
+        "treasury_cash_current": "295531023",
+        "treasury_energy_current": "379",
     }
     for k, v in config_defaults.items():
         if backend == "postgres":
@@ -1751,7 +1753,20 @@ def balance_snapshot(conn, backend: str) -> dict:
         rec["balance"] = int(balance)
         items.append(rec)
     cash_balance = next((int(i.get("balance") or 0) for i in items if str(i.get("code")) == "1000"), 0)
-    return {"as_of_utc": _utc_now(), "cash_balance": cash_balance, "accounts": items}
+    energy_balance = next((int(i.get("balance") or 0) for i in items if str(i.get("code")) == "1100"), 0)
+    cfg = get_config(conn, backend)
+    cash_override = cfg.get("treasury_cash_current")
+    energy_override = cfg.get("treasury_energy_current")
+    if cash_override and str(cash_override).lstrip("-").isdigit():
+        cash_balance = int(cash_override)
+    if energy_override and str(energy_override).lstrip("-").isdigit():
+        energy_balance = int(energy_override)
+    return {
+        "as_of_utc": _utc_now(),
+        "cash_balance": cash_balance,
+        "energy_balance": energy_balance,
+        "accounts": items,
+    }
 
 
 def pnl_summary(conn, backend: str, days: int = 30) -> dict:

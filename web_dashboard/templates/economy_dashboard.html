@@ -26,6 +26,7 @@
         .nav-tab { padding:10px 20px; background:transparent; border:1px solid rgba(0,245,255,0.3); border-radius:8px; color:var(--text-secondary); cursor:pointer; transition:all .3s ease; font-family:'Inter',sans-serif; font-weight:500; }
         .nav-tab:hover,.nav-tab.active{ background:rgba(0,245,255,0.1); border-color:var(--neon-cyan); color:var(--neon-cyan); box-shadow:0 0 15px rgba(0,245,255,0.3);}
         .header-right { display:flex; align-items:center; gap:16px; }
+        .lang-select { width:auto; min-width:96px; }
         .icon-btn { width:40px; height:40px; border:1px solid rgba(0,245,255,0.3); background:transparent; border-radius:8px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .3s ease; position:relative; }
         .icon-btn:hover { border-color:var(--neon-cyan); color:var(--neon-cyan); box-shadow:0 0 15px rgba(0,245,255,0.3); }
         .badge { position:absolute; top:-4px; right:-4px; background:var(--neon-magenta); color:#fff; font-size:10px; font-weight:700; padding:2px 5px; border-radius:10px; box-shadow:0 0 10px var(--neon-magenta); }
@@ -192,13 +193,17 @@
         <header class="header">
             <div class="logo"><span>🏰</span><span>GUILD ACCOUNTING</span></div>
             <nav class="nav-tabs">
-                <button class="nav-tab tooltip active" data-target="dashboard" data-tip="Главный обзор: KPI, ключевые таблицы и статус сверки.">📊 Dashboard</button>
-                <button class="nav-tab tooltip" data-target="operation" data-tip="Создание операций, buyback/regear заявок, импортов и правил.">➕ Operation</button>
-                <button class="nav-tab tooltip" data-target="journal" data-tip="Очередь подтверждений и ручная модерация проводок.">📋 Journal</button>
-                <button class="nav-tab tooltip" data-target="recon" data-tip="Сверка сущностей: задачи, импорты, buyback и regear.">🔄 Reconciliation</button>
-                <button class="nav-tab tooltip" data-target="reports" data-tip="Финансовые отчеты, прогнозы и аудит-трейл.">📈 Reports</button>
+                <button class="nav-tab tooltip active" data-target="dashboard" data-i18n="tab_dashboard" data-tip="Main overview, KPI, API health and reconciliation preview.">📊 Dashboard</button>
+                <button class="nav-tab tooltip" data-target="operation" data-i18n="tab_operation" data-tip="Operations, buyback/regear requests, imports and routing rules.">➕ Operation</button>
+                <button class="nav-tab tooltip" data-target="journal" data-i18n="tab_journal" data-tip="Pending approval queue and manual moderation.">📋 Journal</button>
+                <button class="nav-tab tooltip" data-target="recon" data-i18n="tab_recon" data-tip="Reconciliation entities: tasks/imports/buyback/regear.">🔄 Reconciliation</button>
+                <button class="nav-tab tooltip" data-target="reports" data-i18n="tab_reports" data-tip="Financial reports, forecast and audit trail.">📈 Reports</button>
             </nav>
             <div class="header-right">
+                <select class="form-select lang-select" id="lang-select">
+                    <option value="en">English</option>
+                    <option value="ru">Русский</option>
+                </select>
                 <button class="icon-btn tooltip" id="btn-refresh" data-tip="Обновить все данные и пересчитать виджеты.">↻<span class="badge" id="alerts-badge">0</span></button>
                 <a class="avatar" href="/dashboard" title="Back">⬅</a>
             </div>
@@ -206,9 +211,10 @@
 
         <div class="error" id="err-box"></div>
 
+        <div id="section-dashboard">
         <div class="dashboard-layout">
             <div>
-                <button class="btn btn-secondary filters-toggle" id="btn-toggle-filters">Show filters & alerts</button>
+                <button class="btn btn-secondary filters-toggle" id="btn-toggle-filters" data-i18n="toggle_filters_show">Show filters & alerts</button>
                 <section class="filters is-collapsed" id="filters-panel">
                     <div class="section-title">🎛️ Filters + Alert Thresholds</div>
                     <div class="filters-grid">
@@ -223,9 +229,9 @@
                         <div class="form-group"><label class="form-label">Review note</label><input id="review-note" class="form-input" placeholder="optional reason"></div>
                     </div>
                     <div class="filters-actions">
-                        <button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Применить период/фильтры к данным и отчетам.">Apply</button>
-                        <button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Сбросить фильтры к значениям по умолчанию.">Reset</button>
-                        <button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Сохранить пороги алертов (cash/expense/unmatched).">Save thresholds</button>
+                        <button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Apply period/filters to data and reports." data-i18n="btn_apply">Apply</button>
+                        <button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Reset filters back to default values." data-i18n="btn_reset">Reset</button>
+                        <button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Save alert thresholds (cash/expense/unmatched)." data-i18n="btn_save_thresholds">Save thresholds</button>
                     </div>
                     <p class="mono" id="alert-state"></p>
                 </section>
@@ -265,7 +271,7 @@
                     </div>
 
                     <div class="table-container">
-                        <div class="section-title">🔌 API Status</div>
+                        <div class="section-title" data-i18n="api_status">🔌 API Status</div>
                         <div class="api-pill" id="api-internal-pill"><span class="api-dot"></span><span id="api-internal-text">Internal API checking...</span></div>
                         <div class="api-pill mt-20" id="api-external-pill"><span class="api-dot"></span><span id="api-external-text">Albion API checking...</span></div>
                         <div class="mono mt-20" id="api-meta"></div>
@@ -273,25 +279,6 @@
                 </div>
             </div>
         </div>
-
-        <div class="modal-preview" id="operation-card">
-                <div class="modal-header">➕ New Operation</div>
-                <div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div>
-                <div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div>
-                <div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div>
-                <div class="form-row">
-                    <div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div>
-                    <div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div>
-                </div>
-                <div class="posting-preview">
-                    <div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div>
-                    <div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div>
-                </div>
-                <div class="btn-group">
-                    <button class="btn btn-secondary" id="btn-op-clear">Clear</button>
-                    <button class="btn btn-primary" id="btn-op-create">✅ Confirm</button>
-                </div>
-            </div>
 
         <div class="table-container">
             <div class="table-header">
@@ -311,7 +298,7 @@
         </div>
 
         <div class="table-container">
-            <div class="section-title" style="margin-bottom: 16px;">🔄 Reconciliation Preview</div>
+            <div class="section-title" style="margin-bottom: 16px;" data-i18n="recon_preview">🔄 Reconciliation Preview</div>
             <div class="reconciliation">
                 <div class="recon-column">
                     <div class="recon-title">Open Alerts</div>
@@ -323,10 +310,29 @@
                 </div>
             </div>
         </div>
+        </div>
 
         <div class="table-container hidden" id="section-operation">
             <div class="section-title">🧩 Tasks, Awards, Routing, Imports, Buyback, Regear</div>
-            <div class="main-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="modal-preview" id="operation-card">
+                <div class="modal-header">➕ New Operation</div>
+                <div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div>
+                <div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div>
+                <div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div>
+                    <div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div>
+                </div>
+                <div class="posting-preview">
+                    <div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div>
+                    <div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="btn-op-clear">Clear</button>
+                    <button class="btn btn-primary" id="btn-op-create">✅ Confirm</button>
+                </div>
+            </div>
+            <div class="main-grid" style="grid-template-columns:1fr 1fr;">
                 <div>
                     <div class="form-group"><label class="form-label">Task title</label><input class="form-input" id="task-title"></div>
                     <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div>
@@ -430,14 +436,82 @@
       const $ = (s, r = document) => r.querySelector(s);
       const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
       const sections = {
+        dashboard: "#section-dashboard",
         operation: "#section-operation",
         journal: "#section-journal",
         recon: "#section-recon",
         reports: "#section-reports",
       };
+      let currentLang = "en";
+      const I18N = {
+        en: {
+          tab_dashboard: "📊 Dashboard",
+          tab_operation: "➕ Operation",
+          tab_journal: "📋 Journal",
+          tab_recon: "🔄 Reconciliation",
+          tab_reports: "📈 Reports",
+          toggle_filters_show: "Show filters & alerts",
+          toggle_filters_hide: "Hide filters & alerts",
+          btn_apply: "Apply",
+          btn_reset: "Reset",
+          btn_save_thresholds: "Save thresholds",
+          api_status: "🔌 API Status",
+          recon_preview: "🔄 Reconciliation Preview",
+        },
+        ru: {
+          tab_dashboard: "📊 Обзор",
+          tab_operation: "➕ Операции",
+          tab_journal: "📋 Журнал",
+          tab_recon: "🔄 Сверка",
+          tab_reports: "📈 Отчёты",
+          toggle_filters_show: "Показать фильтры и алерты",
+          toggle_filters_hide: "Скрыть фильтры и алерты",
+          btn_apply: "Применить",
+          btn_reset: "Сброс",
+          btn_save_thresholds: "Сохранить пороги",
+          api_status: "🔌 Статус API",
+          recon_preview: "🔄 Превью сверки",
+        }
+      };
+      const SILVER_CSV = `"Date"\t"Player"\t"Reason"\t"Amount"
+"2026-04-23 14:19:49"\t"marlor2tsd9"\t"Cost for attack on Springsump Basin Meadow"\t"-1400000"
+"2026-04-23 04:02:56"\t"F00ls"\t"Deposit"\t"100000"
+"2026-04-22 21:05:16"\t"Nyoms"\t"Withdrawal"\t"-4000000"
+"2026-04-19 15:43:47"\t"Pillman"\t"Deposit"\t"6500000"
+"2026-04-12 20:28:37"\t"Mynxia"\t"Withdrawal"\t"-10000000"
+"2026-04-10 22:00:47"\t"Mynxia"\t"Withdrawal"\t"-10000000"
+"2026-04-07 22:54:40"\t"Mynxia"\t"Deposit"\t"30000000"
+"2026-03-31 17:46:19"\t"Strixiie"\t"Withdrawal"\t"-5500000"
+"2026-03-28 23:08:08"\t"Mynxia"\t"Withdrawal"\t"-15000000"
+"2026-03-27 00:31:17"\t"TurbulentFart"\t"Deposit"\t"60000000"`;
+      const ENERGY_CSV = `"Date"\t"Player"\t"Reason"\t"Amount"
+"2026-04-23 15:51:57"\t"DerDunkleBote"\t"Withdrawal"\t"-10"
+"2026-04-23 11:09:42"\t"ShrimpTail"\t"Deposit"\t"4"
+"2026-04-22 21:43:16"\t"Strixiie"\t"Withdrawal"\t"-10"
+"2026-04-21 21:19:15"\t"ShrimpTail"\t"Deposit"\t"7"
+"2026-04-19 20:41:32"\t"OVERGRINDMACHINE"\t"Withdrawal"\t"-10"
+"2026-04-16 16:41:15"\t"marlor2tsd9"\t"Deposit"\t"19"
+"2026-04-13 21:29:06"\t"Pillman"\t"Deposit"\t"6"
+"2026-04-11 21:51:24"\t"Pillman"\t"Deposit"\t"7"
+"2026-04-08 21:30:36"\t"Pillman"\t"Deposit"\t"9"
+"2026-03-30 18:09:49"\t"chrEEz"\t"Deposit"\t"55"`;
       function esc(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
       function num(v, fallback = 0) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
-      function fmt(n) { return num(n).toLocaleString("ru-RU"); }
+      function fmt(n) { return num(n).toLocaleString(currentLang === "ru" ? "ru-RU" : "en-US"); }
+      function applyLanguage(lang) {
+        currentLang = lang === "ru" ? "ru" : "en";
+        $$("[data-i18n]").forEach((el) => {
+          const key = el.getAttribute("data-i18n");
+          const txt = (I18N[currentLang] || {})[key];
+          if (txt) el.textContent = txt;
+        });
+        const p = $("#filters-panel");
+        const t = $("#btn-toggle-filters");
+        if (p && t) {
+          const opened = !p.classList.contains("is-collapsed");
+          t.textContent = opened ? I18N[currentLang].toggle_filters_hide : I18N[currentLang].toggle_filters_show;
+        }
+      }
       function showErr(msg) { const b = $("#err-box"); b.style.display = msg ? "block" : "none"; b.textContent = msg || ""; }
       function toast(msg, kind = "success") {
         const wrap = $("#toast-wrap");
@@ -535,7 +609,7 @@
           extPill.classList.add("bad");
           extText.textContent = `Albion API FAIL (${extMs}ms)`;
         }
-        meta.textContent = `Last check: ${new Date().toLocaleString("ru-RU")} | internal=${intMs}ms | external=${extMs}ms`;
+        meta.textContent = `Last check: ${new Date().toLocaleString(currentLang === "ru" ? "ru-RU" : "en-US")} | internal=${intMs}ms | external=${extMs}ms`;
       }
       function statusBadge(status) {
         if (status === "posted" || status === "approved") return '<span class="status approved">✅ Approved</span>';
@@ -561,8 +635,14 @@
       }
       function switchTab(target) {
         $$(".nav-tab").forEach((b) => b.classList.toggle("active", b.dataset.target === target));
-        Object.values(sections).forEach((sel) => $(sel).classList.add("hidden"));
-        if (sections[target]) $(sections[target]).classList.remove("hidden");
+        Object.values(sections).forEach((sel) => {
+          const el = $(sel);
+          if (el) el.classList.add("hidden");
+        });
+        if (sections[target]) {
+          const panel = $(sections[target]);
+          if (panel) panel.classList.remove("hidden");
+        }
       }
       async function load() {
         showErr("");
@@ -578,7 +658,7 @@
         const rep = out.reports || {};
         const forecast = out.forecast || {};
         const cash = num((rep.balance_snapshot || {}).cash_balance);
-        const profit = num((rep.pnl_summary || {}).profit);
+        const profit = num((rep.pnl_summary || {}).net_profit);
         const f30 = num(forecast.forecast_30d);
         const gap = f30 - cash;
         const mismatches = num(k.unresolved_discrepancies || 0);
@@ -586,7 +666,8 @@
         $("#kpi-profit").textContent = (profit >= 0 ? "+" : "") + fmt(profit);
         $("#kpi-gap").textContent = (gap >= 0 ? "+" : "") + fmt(gap);
         $("#kpi-mismatch").textContent = String(mismatches) + " ⚠️";
-        $("#kpi-balance-note").textContent = "entries: " + fmt(k.entries_count || 0);
+        const energy = num((rep.balance_snapshot || {}).energy_balance || 0);
+        $("#kpi-balance-note").textContent = `energy: ${fmt(energy)} | entries: ${fmt(k.entries_count || 0)}`;
         $("#kpi-profit-note").textContent = "period " + String(f.days) + "d";
         $("#kpi-gap-note").textContent = "forecast_30d - cash";
         $("#kpi-mismatch-note").textContent = "open discrepancies";
@@ -796,6 +877,9 @@
         toast("CSV imported");
         await load();
       });
+      $("#log-type").addEventListener("change", () => {
+        $("#log-content").value = $("#log-type").value === "energy" ? ENERGY_CSV : SILVER_CSV;
+      });
       $("#btn-loot-buyback").addEventListener("click", async () => {
         const btn = $("#btn-loot-buyback");
         setBusy(btn, true);
@@ -846,21 +930,28 @@
         const b = $("#btn-toggle-filters");
         p.classList.toggle("is-collapsed");
         const opened = !p.classList.contains("is-collapsed");
-        b.textContent = opened ? "Hide filters & alerts" : "Show filters & alerts";
+        b.textContent = opened ? I18N[currentLang].toggle_filters_hide : I18N[currentLang].toggle_filters_show;
       });
       $("#btn-open-settings").addEventListener("click", () => {
         const p = $("#filters-panel");
         const b = $("#btn-toggle-filters");
         if (p.classList.contains("is-collapsed")) {
           p.classList.remove("is-collapsed");
-          b.textContent = "Hide filters & alerts";
+          b.textContent = I18N[currentLang].toggle_filters_hide;
         }
         window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      $("#lang-select").addEventListener("change", (e) => {
+        applyLanguage(e.target.value || "en");
+        load().catch(() => {});
       });
       $("#btn-journal").addEventListener("click", () => switchTab("journal"));
       $("#btn-approval").addEventListener("click", () => switchTab("journal"));
       $("#btn-export-reports").addEventListener("click", () => switchTab("reports"));
 
+      $("#log-content").value = SILVER_CSV;
+      applyLanguage("en");
+      switchTab("dashboard");
       setTimeout(() => $("#chart-loader")?.classList.add("is-hidden"), 1200);
       load().catch((e) => showErr(String(e)));
     })();
