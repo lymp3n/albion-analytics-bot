@@ -32,14 +32,9 @@ ROUTE_CATEGORY_FALLBACK = [
 
 async def get_route_category_choices(ctx: discord.AutocompleteContext):
     raw_value = str(ctx.value or "").strip().casefold()
-    try:
-        with get_economy_sync_connection() as (conn, backend):
-            ensure_economy_schema(conn, backend)
-            rows = list_routing_rules(conn, backend)
-        db_categories = [str(r.get("category") or "").strip() for r in rows if str(r.get("category") or "").strip()]
-        categories = list(dict.fromkeys(db_categories + ROUTE_CATEGORY_FALLBACK))
-    except Exception:
-        categories = list(ROUTE_CATEGORY_FALLBACK)
+    bot = getattr(ctx, "bot", None)
+    cached = getattr(bot, "_econ_route_categories_cache", None)
+    categories = list(cached) if isinstance(cached, list) and cached else list(ROUTE_CATEGORY_FALLBACK)
     out: list[str] = []
     for cat in categories:
         if raw_value and raw_value not in cat.casefold():
@@ -91,6 +86,20 @@ class EconomyCommands(commands.Cog):
         if target <= 0:
             return True
         return int(ctx.guild.id) == target
+
+    async def _refresh_route_category_cache(self) -> None:
+        def _load_categories() -> list[str]:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                rows = list_routing_rules(conn, backend)
+            db_categories = [str(r.get("category") or "").strip() for r in rows if str(r.get("category") or "").strip()]
+            return list(dict.fromkeys(db_categories + ROUTE_CATEGORY_FALLBACK))
+
+        try:
+            cats = await asyncio.to_thread(_load_categories)
+        except Exception:
+            cats = list(ROUTE_CATEGORY_FALLBACK)
+        self.bot._econ_route_categories_cache = cats
 
     def _is_image_attachment(self, att: discord.Attachment) -> bool:
         ctype = str(getattr(att, "content_type", "") or "").lower()
@@ -170,6 +179,7 @@ class EconomyCommands(commands.Cog):
             return
         self.bot._economy_regear_view_registered = True
         self.bot.add_view(RegearTicketView(self))
+        await self._refresh_route_category_cache()
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -204,6 +214,10 @@ class EconomyCommands(commands.Cog):
                 int(row["id"]),
             )
         await self._refresh_ticket_message(message.guild, row, "Screenshot received ✅ (in progress)")
+        try:
+            await message.add_reaction("✅")
+        except Exception:
+            pass
 
     @economy_group.command(name="kpi", description="Show current economy KPIs")
     async def economy_kpi(self, ctx: discord.ApplicationContext):
@@ -281,6 +295,7 @@ class EconomyCommands(commands.Cog):
         except Exception as e:
             await ctx.followup.send(f"❌ Operation failed: {e}", ephemeral=True)
             return
+        await self._refresh_route_category_cache()
 
         entry = out.get("entry") or {}
         await ctx.followup.send(
