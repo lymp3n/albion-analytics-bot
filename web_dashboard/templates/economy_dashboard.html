@@ -75,6 +75,16 @@
         .action-btn { width:100%; padding:12px 16px; background:transparent; border:1px solid rgba(0,245,255,.3); border-radius:8px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; gap:12px; margin-bottom:12px; transition:all .3s ease; font-family:'Inter',sans-serif; }
         .action-btn:hover { background:rgba(0,245,255,.1); border-color:var(--neon-cyan); color:var(--neon-cyan); box-shadow:0 0 15px rgba(0,245,255,.2); transform:translateX(4px); }
         .action-btn.primary { background:linear-gradient(135deg,rgba(0,245,255,.2),rgba(123,44,191,.2)); border-color:var(--neon-cyan); color:var(--neon-cyan); }
+        #btn-reset-filters {
+            background: linear-gradient(135deg, rgba(239,68,68,.85), rgba(190,24,93,.85));
+            border-color: rgba(248,113,113,.9);
+            color: #fff;
+            box-shadow: 0 0 14px rgba(239,68,68,.28);
+        }
+        #btn-reset-filters:hover {
+            border-color: rgba(252,165,165,.95);
+            box-shadow: 0 0 18px rgba(239,68,68,.4);
+        }
         .chart-placeholder { height:250px; background:linear-gradient(180deg,rgba(0,245,255,.05),transparent); border:1px solid rgba(0,245,255,.1); border-radius:8px; position:relative; overflow:hidden; }
         .real-chart { width:100%; height:100%; display:block; }
         .chart-axis { stroke: rgba(148,163,184,.45); stroke-width: 1; }
@@ -234,6 +244,7 @@
             flex: 0 0 auto;
             width: 100%;
         }
+        .ops-launch-wide { grid-column: 1 / -1; min-height: 120px; }
         .ops-modal-wrap {
             position: fixed;
             inset: 0;
@@ -258,10 +269,23 @@
         .ops-modal-head {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
             gap: 12px;
             margin-bottom: 10px;
         }
+        .ops-close-x {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,245,255,.35);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            flex: 0 0 auto;
+        }
+        .ops-close-x:hover { color: var(--neon-cyan); border-color: var(--neon-cyan); }
         .ops-modal-help {
             color: var(--text-secondary);
             font-size: 12px;
@@ -279,7 +303,7 @@
             stroke-width: 2;
         }
         @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(2,minmax(180px,1fr)); } .ops-grid{ grid-template-columns:repeat(2,minmax(220px,1fr)); } }
-        @media (max-width:900px){ .ops-grid{ grid-template-columns:1fr; } }
+        @media (max-width:900px){ .ops-grid{ grid-template-columns:1fr; } .ops-launch-wide { grid-column:auto; } }
         @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .nav-tabs{ display:none;} .reconciliation{ grid-template-columns:1fr;} }
     </style>
 </head>
@@ -341,7 +365,7 @@
         <div class="main-grid">
             <div class="quick-actions">
                 <div class="section-title">⚡ Quick Actions</div>
-                <button class="action-btn primary tooltip" id="btn-focus-op" data-tip="Open operation form and focus action tab."><span>➕</span><span>New Operation</span></button>
+                <button class="action-btn tooltip" id="btn-focus-op" data-tip="Open operation form and focus action tab."><span>➕</span><span>New Operation</span></button>
                 <button class="action-btn tooltip" id="btn-import-csv" data-tip="Open operation tab and jump to CSV imports."><span>📥</span><span>Import CSV</span></button>
                 <button class="action-btn tooltip" id="btn-open-routing" data-tip="Open reconciliation tab with routing rules table."><span>📋</span><span>Routing Rules</span></button>
                 <button class="action-btn tooltip" id="btn-open-settings" data-tip="Open hidden filters and scroll to alert thresholds."><span>⚙️</span><span>Settings</span></button>
@@ -407,7 +431,7 @@
         <div class="table-container hidden" id="section-operation">
             <div class="section-title" data-i18n="ops_title">🧩 Operations Catalog</div>
             <div class="ops-grid">
-                <div class="ops-launch"><div class="ops-launch-title">➕ New Operation</div><div class="ops-launch-help">Route operation by category and validate Dr/Cr before posting.</div><button class="btn btn-primary js-open-modal" data-modal="modal-op">Open</button></div>
+                <div class="ops-launch ops-launch-wide"><div class="ops-launch-title">➕ New Operation</div><div class="ops-launch-help">Route operation by category and validate Dr/Cr before posting.</div><button class="btn btn-primary js-open-modal" data-modal="modal-op">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">🏆 Guild Tasks</div><div class="ops-launch-help">Create or update guild economy task with payout rules.</div><button class="btn btn-primary js-open-modal" data-modal="modal-task">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">💸 Award Payout</div><div class="ops-launch-help">Approve completion and post reward entry for player.</div><button class="btn btn-primary js-open-modal" data-modal="modal-award">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">🧭 Routing Rules</div><div class="ops-launch-help">Configure auto-debit/credit accounts per category.</div><button class="btn btn-primary js-open-modal" data-modal="modal-rule">Open</button></div>
@@ -415,21 +439,17 @@
                 <div class="ops-launch"><div class="ops-launch-title">🏷️ Market Price</div><div class="ops-launch-help">Fetch latest market snapshot from Albion Data API.</div><button class="btn btn-primary js-open-modal" data-modal="modal-price">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">📦 Loot Buyback</div><div class="ops-launch-help">Create buyback request at market -20% with approval limit.</div><button class="btn btn-primary js-open-modal" data-modal="modal-buyback">Open</button></div>
                 <div class="ops-launch"><div class="ops-launch-title">🛡️ Regear Request</div><div class="ops-launch-help">Create insurance/regear request with screenshot evidence.</div><button class="btn btn-primary js-open-modal" data-modal="modal-regear">Open</button></div>
-                <div class="ops-launch"><div class="ops-launch-title">⚙️ Alert Thresholds</div><div class="ops-launch-help">Open filters panel and edit low cash / expense / unmatched thresholds.</div><button class="btn btn-secondary" id="ops-open-thresholds">Open</button></div>
-                <div class="ops-launch"><div class="ops-launch-title">🔌 API Health</div><div class="ops-launch-help">Run instant health check and update latency sparkline.</div><button class="btn btn-secondary" id="ops-run-api-check">Run</button></div>
-                <div class="ops-launch"><div class="ops-launch-title">📋 Pending Journal</div><div class="ops-launch-help">Open approvals queue for manual review workflow.</div><button class="btn btn-secondary" id="ops-open-journal">Open</button></div>
-                <div class="ops-launch"><div class="ops-launch-title">🔄 Reconciliation</div><div class="ops-launch-help">Open reconciliation tables for imports, buyback and regear.</div><button class="btn btn-secondary" id="ops-open-recon">Open</button></div>
             </div>
         </div>
 
-        <div class="ops-modal-wrap" id="modal-op"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">➕ New Operation</div><button class="btn btn-secondary js-close-modal" data-modal="modal-op">Close</button></div><div class="ops-modal-help">Create manual routed operation. Preview checks mapped debit/credit.</div><div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div><div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div><div class="form-row"><div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div><div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div></div><div class="posting-preview"><div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div><div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div></div><div class="btn-group"><button class="btn btn-secondary" id="btn-op-clear">Clear</button><button class="btn btn-primary" id="btn-op-create">✅ Confirm</button></div></div></div>
-        <div class="ops-modal-wrap" id="modal-task"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🏆 Guild Tasks</div><button class="btn btn-secondary js-close-modal" data-modal="modal-task">Close</button></div><div class="ops-modal-help">Configure repeating guild tasks used in bonus payout workflow.</div><div class="form-group"><label class="form-label">Task title</label><input class="form-input" id="task-title"></div><div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div><div class="form-group"><label class="form-label">Reward</label><input class="form-input" id="task-reward" type="number" value="100000"></div><div class="form-group"><label class="form-label"><input id="task-active" type="checkbox" checked> Active</label></div><button class="btn btn-primary" id="btn-task-save">Save task</button></div></div>
-        <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">💸 Award Payout</div><button class="btn btn-secondary js-close-modal" data-modal="modal-award">Close</button></div><div class="ops-modal-help">Post reward payout for approved task completion.</div><div class="form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
-        <div class="ops-modal-wrap" id="modal-rule"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🧭 Routing Rules</div><button class="btn btn-secondary js-close-modal" data-modal="modal-rule">Close</button></div><div class="ops-modal-help">Define debit/credit accounts and approval behavior by operation category.</div><div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div><div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div><div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div><div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div><button class="btn btn-primary" id="btn-rule-save">Save rule</button></div></div>
-        <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">📥 CSV Import</div><button class="btn btn-secondary js-close-modal" data-modal="modal-import">Close</button></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><button class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
-        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🏷️ Market Price</div><button class="btn btn-secondary js-close-modal" data-modal="modal-price">Close</button></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="price-item" value="T4_BAG"></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json">{}</pre></div></div>
-        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">📦 Loot Buyback</div><button class="btn btn-secondary js-close-modal" data-modal="modal-buyback">Close</button></div><div class="ops-modal-help">Create buyback request with auto-approval when payout is below limit.</div><div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="lb-item" placeholder="T6_BAG"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div></div><div class="compact-grid"><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="lb-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="lb-quality" type="number" min="1" max="5" value="1"></div></div><div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
-        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><div class="modal-header">🛡️ Regear Request</div><button class="btn btn-secondary js-close-modal" data-modal="modal-regear">Close</button></div><div class="ops-modal-help">Create regear insurance request. Screenshot URL is mandatory.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="rg-item" placeholder="T8_MAIN_HOLY"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-op"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-op" aria-label="close">✕</button><div class="modal-header">➕ New Operation</div></div><div class="ops-modal-help">Create manual routed operation. Preview checks mapped debit/credit.</div><div class="form-group"><label class="form-label">Category</label><input id="op-cat" class="form-input" value="deposit" placeholder="deposit / reward_payout"></div><div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div><div class="form-row"><div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div><div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div></div><div class="posting-preview"><div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div><div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div></div><div class="btn-group"><button class="btn btn-secondary" id="btn-op-clear">Clear</button><button class="btn btn-primary" id="btn-op-create">✅ Confirm</button></div></div></div>
+        <div class="ops-modal-wrap" id="modal-task"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-task" aria-label="close">✕</button><div class="modal-header">🏆 Guild Tasks</div></div><div class="ops-modal-help">Configure repeating guild tasks used in bonus payout workflow.</div><div class="form-group"><label class="form-label">Task title</label><input class="form-input" id="task-title"></div><div class="form-group"><label class="form-label">Description</label><input class="form-input" id="task-desc"></div><div class="form-group"><label class="form-label">Reward</label><input class="form-input" id="task-reward" type="number" value="100000"></div><div class="form-group"><label class="form-label"><input id="task-active" type="checkbox" checked> Active</label></div><button class="btn btn-primary" id="btn-task-save">Save task</button></div></div>
+        <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-award" aria-label="close">✕</button><div class="modal-header">💸 Award Payout</div></div><div class="ops-modal-help">Post reward payout for approved task completion.</div><div class="form-group"><label class="form-label">Task ID</label><input class="form-input" id="award-task-id" type="number"></div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="award-qty" type="number" value="1"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
+        <div class="ops-modal-wrap" id="modal-rule"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-rule" aria-label="close">✕</button><div class="modal-header">🧭 Routing Rules</div></div><div class="ops-modal-help">Define debit/credit accounts and approval behavior by operation category.</div><div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div><div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div><div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div><div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div><button class="btn btn-primary" id="btn-rule-save">Save rule</button></div></div>
+        <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-import" aria-label="close">✕</button><div class="modal-header">📥 CSV Import</div></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><button class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
+        <div class="ops-modal-wrap" id="modal-price"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-price" aria-label="close">✕</button><div class="modal-header">🏷️ Market Price</div></div><div class="ops-modal-help">Request external market quote for selected item/location/quality.</div><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="price-item" value="T4_BAG"></div><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="price-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="price-quality" type="number" min="1" max="5" value="1"></div><button class="btn btn-primary" id="btn-price">Fetch price</button><pre class="mono" id="price-json"></pre></div></div>
+        <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-buyback" aria-label="close">✕</button><div class="modal-header">📦 Loot Buyback</div></div><div class="ops-modal-help">Create buyback request with auto-approval when payout is below limit.</div><div class="form-group"><label class="form-label">Seller</label><input class="form-input" id="lb-seller" placeholder="Player_X"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="lb-item" placeholder="T6_BAG"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="lb-qty" type="number" min="1" value="1"></div></div><div class="compact-grid"><div class="form-group"><label class="form-label">Location</label><input class="form-input" id="lb-location" value="Caerleon"></div><div class="form-group"><label class="form-label">Quality</label><input class="form-input" id="lb-quality" type="number" min="1" max="5" value="1"></div></div><div class="form-group"><label class="form-label">Auto-approve limit</label><input class="form-input" id="lb-limit" type="number" min="0" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
+        <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-regear" aria-label="close">✕</button><div class="modal-header">🛡️ Regear Request</div></div><div class="ops-modal-help">Create regear insurance request. Screenshot URL is mandatory.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="compact-grid"><div class="form-group"><label class="form-label">Item ID</label><input class="form-input" id="rg-item" placeholder="T8_MAIN_HOLY"></div><div class="form-group"><label class="form-label">Qty</label><input class="form-input" id="rg-qty" type="number" min="1" value="1"></div></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot URL</label><input class="form-input" id="rg-shot" placeholder="https://..."></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
 
         <div class="table-container hidden" id="section-journal">
             <div class="section-title">📋 Journal + Pending Approvals</div>
@@ -521,6 +541,17 @@
           no: "no",
           loading: "Loading...",
           api_last_check: "Last check",
+          action_approve: "Approve",
+          action_reject: "Reject",
+          action_delete: "Delete",
+          action_issue: "Issue",
+          action_ack: "Ack",
+          action_resolve: "Resolve",
+          toast_approved: "Entry approved",
+          toast_rejected: "Entry rejected",
+          toast_task_deleted: "Task deleted",
+          toast_alert_acked: "Alert acknowledged",
+          toast_disc_resolved: "Discrepancy resolved",
         },
         ru: {
           tab_dashboard: "📊 Обзор",
@@ -554,6 +585,17 @@
           no: "нет",
           loading: "Загрузка...",
           api_last_check: "Последняя проверка",
+          action_approve: "Подтвердить",
+          action_reject: "Отклонить",
+          action_delete: "Удалить",
+          action_issue: "Выдать",
+          action_ack: "Закрыть",
+          action_resolve: "Решить",
+          toast_approved: "Запись подтверждена",
+          toast_rejected: "Запись отклонена",
+          toast_task_deleted: "Задача удалена",
+          toast_alert_acked: "Алерт закрыт",
+          toast_disc_resolved: "Расхождение решено",
         }
       };
       const tr = (k) => (I18N[currentLang] && I18N[currentLang][k]) || (I18N.en && I18N.en[k]) || k;
@@ -561,6 +603,15 @@
         en: {
           ".logo span:last-child": "GUILD ACCOUNTING",
           "#section-dashboard .filters .section-title": "🎛️ Filters + Alert Thresholds",
+          "#section-dashboard .filters .form-group:nth-child(1) .form-label": "Days",
+          "#section-dashboard .filters .form-group:nth-child(2) .form-label": "Entry status",
+          "#section-dashboard .filters .form-group:nth-child(3) .form-label": "Category contains",
+          "#section-dashboard .filters .form-group:nth-child(4) .form-label": "Source contains",
+          "#section-dashboard .filters .form-group:nth-child(5) .form-label": "Low cash threshold",
+          "#section-dashboard .filters .form-group:nth-child(6) .form-label": "High expense 30d",
+          "#section-dashboard .filters .form-group:nth-child(7) .form-label": "Unmatched threshold",
+          "#section-dashboard .filters .form-group:nth-child(8) .form-label": "Reviewed by",
+          "#section-dashboard .filters .form-group:nth-child(9) .form-label": "Review note",
           "#section-dashboard .kpi-grid .kpi-card:nth-child(1) .kpi-label": "Balance",
           "#section-dashboard .kpi-grid .kpi-card:nth-child(2) .kpi-label": "Weekly Profit",
           "#section-dashboard .kpi-grid .kpi-card:nth-child(3) .kpi-label": "Cash Gap",
@@ -573,6 +624,8 @@
           "#chart-box .section-title": "📊 Cash Flow (real data)",
           "#btn-api-refresh-now": "Refresh now",
           "#section-dashboard .table-title": "📋 Recent Transactions",
+          "#section-dashboard .recon-column:nth-child(1) .recon-title": "Open Alerts",
+          "#section-dashboard .recon-column:nth-child(2) .recon-title": "Discrepancies",
           "#btn-journal": "Journal",
           "#btn-export-reports": "Reports JSON",
           "#btn-approval": "Pending",
@@ -584,20 +637,40 @@
           "#section-operation .ops-launch:nth-child(6) .ops-launch-title": "🏷️ Market Price",
           "#section-operation .ops-launch:nth-child(7) .ops-launch-title": "📦 Loot Buyback",
           "#section-operation .ops-launch:nth-child(8) .ops-launch-title": "🛡️ Regear Request",
-          "#section-operation .ops-launch:nth-child(9) .ops-launch-title": "⚙️ Alert Thresholds",
-          "#section-operation .ops-launch:nth-child(10) .ops-launch-title": "🔌 API Health",
-          "#section-operation .ops-launch:nth-child(11) .ops-launch-title": "📋 Pending Journal",
-          "#section-operation .ops-launch:nth-child(12) .ops-launch-title": "🔄 Reconciliation",
-          "#ops-open-thresholds": "Open",
-          "#ops-run-api-check": "Run",
-          "#ops-open-journal": "Open",
-          "#ops-open-recon": "Open",
           ".js-open-modal": "Open",
-          ".js-close-modal": "Close",
+          "#modal-op .modal-header": "➕ New Operation",
+          "#modal-task .modal-header": "🏆 Guild Tasks",
+          "#modal-award .modal-header": "💸 Award Payout",
+          "#modal-rule .modal-header": "🧭 Routing Rules",
+          "#modal-import .modal-header": "📥 CSV Import",
+          "#modal-price .modal-header": "🏷️ Market Price",
+          "#modal-buyback .modal-header": "📦 Loot Buyback",
+          "#modal-regear .modal-header": "🛡️ Regear Request",
+          "#btn-op-clear": "Clear",
+          "#btn-op-create": "✅ Confirm",
+          "#btn-task-save": "Save task",
+          "#btn-award": "Approve payout",
+          "#btn-rule-save": "Save rule",
+          "#btn-log-import": "Import CSV",
+          "#btn-price": "Fetch price",
+          "#btn-loot-buyback": "Create buyback request",
+          "#btn-regear-create": "Create regear request",
+          "#section-journal .section-title": "📋 Journal + Pending Approvals",
+          "#section-recon .section-title": "🧮 Tasks, Imports, Rules, Buyback, Regear",
+          "#section-reports .section-title": "📈 Reports + Forecast + Audit",
         },
         ru: {
           ".logo span:last-child": "УЧЕТ ГИЛЬДИИ",
           "#section-dashboard .filters .section-title": "🎛️ Фильтры и пороги алертов",
+          "#section-dashboard .filters .form-group:nth-child(1) .form-label": "Дни",
+          "#section-dashboard .filters .form-group:nth-child(2) .form-label": "Статус проводки",
+          "#section-dashboard .filters .form-group:nth-child(3) .form-label": "Категория содержит",
+          "#section-dashboard .filters .form-group:nth-child(4) .form-label": "Источник содержит",
+          "#section-dashboard .filters .form-group:nth-child(5) .form-label": "Порог низкой кассы",
+          "#section-dashboard .filters .form-group:nth-child(6) .form-label": "Порог расходов 30д",
+          "#section-dashboard .filters .form-group:nth-child(7) .form-label": "Порог расхождений",
+          "#section-dashboard .filters .form-group:nth-child(8) .form-label": "Проверил",
+          "#section-dashboard .filters .form-group:nth-child(9) .form-label": "Комментарий",
           "#section-dashboard .kpi-grid .kpi-card:nth-child(1) .kpi-label": "Баланс",
           "#section-dashboard .kpi-grid .kpi-card:nth-child(2) .kpi-label": "Недельная прибыль",
           "#section-dashboard .kpi-grid .kpi-card:nth-child(3) .kpi-label": "Кассовый разрыв",
@@ -610,6 +683,8 @@
           "#chart-box .section-title": "📊 Денежный поток (реальные данные)",
           "#btn-api-refresh-now": "Обновить сейчас",
           "#section-dashboard .table-title": "📋 Последние операции",
+          "#section-dashboard .recon-column:nth-child(1) .recon-title": "Открытые алерты",
+          "#section-dashboard .recon-column:nth-child(2) .recon-title": "Расхождения",
           "#btn-journal": "Журнал",
           "#btn-export-reports": "JSON отчеты",
           "#btn-approval": "Ожидания",
@@ -621,16 +696,27 @@
           "#section-operation .ops-launch:nth-child(6) .ops-launch-title": "🏷️ Рыночная цена",
           "#section-operation .ops-launch:nth-child(7) .ops-launch-title": "📦 Скупка лута",
           "#section-operation .ops-launch:nth-child(8) .ops-launch-title": "🛡️ Заявка Regear",
-          "#section-operation .ops-launch:nth-child(9) .ops-launch-title": "⚙️ Пороги алертов",
-          "#section-operation .ops-launch:nth-child(10) .ops-launch-title": "🔌 Проверка API",
-          "#section-operation .ops-launch:nth-child(11) .ops-launch-title": "📋 Очередь журнала",
-          "#section-operation .ops-launch:nth-child(12) .ops-launch-title": "🔄 Сверка",
-          "#ops-open-thresholds": "Открыть",
-          "#ops-run-api-check": "Запустить",
-          "#ops-open-journal": "Открыть",
-          "#ops-open-recon": "Открыть",
           ".js-open-modal": "Открыть",
-          ".js-close-modal": "Закрыть",
+          "#modal-op .modal-header": "➕ Новая операция",
+          "#modal-task .modal-header": "🏆 Гильд-задачи",
+          "#modal-award .modal-header": "💸 Выплата награды",
+          "#modal-rule .modal-header": "🧭 Правила проводок",
+          "#modal-import .modal-header": "📥 Импорт CSV",
+          "#modal-price .modal-header": "🏷️ Рыночная цена",
+          "#modal-buyback .modal-header": "📦 Скупка лута",
+          "#modal-regear .modal-header": "🛡️ Заявка Regear",
+          "#btn-op-clear": "Очистить",
+          "#btn-op-create": "✅ Подтвердить",
+          "#btn-task-save": "Сохранить задачу",
+          "#btn-award": "Подтвердить выплату",
+          "#btn-rule-save": "Сохранить правило",
+          "#btn-log-import": "Импортировать CSV",
+          "#btn-price": "Получить цену",
+          "#btn-loot-buyback": "Создать заявку buyback",
+          "#btn-regear-create": "Создать заявку regear",
+          "#section-journal .section-title": "📋 Журнал и ожидания",
+          "#section-recon .section-title": "🧮 Задачи, импорты, правила, buyback, regear",
+          "#section-reports .section-title": "📈 Отчеты, прогноз и аудит",
         },
       };
       function applyStaticTranslations() {
@@ -844,6 +930,10 @@
           if (panel) panel.classList.remove("hidden");
         }
       }
+      function on(id, event, cb) {
+        const el = $(id);
+        if (el) el.addEventListener(event, cb);
+      }
       async function load() {
         showErr("");
         const f = readFilters();
@@ -891,29 +981,29 @@
 
         const pending = out.pending_approvals || [];
         $("#tbl-pending-approvals tbody").innerHTML = pending.map((p) =>
-          `<tr><td>${esc(p.id)}</td><td>${esc(p.category)}</td><td>${fmt(p.amount)}</td><td>${esc(p.actor || "")}</td><td>${esc(p.description || "")}</td><td class="row-actions"><button class="table-btn btn-approve" data-id="${esc(p.id)}">Approve</button><button class="table-btn btn-reject" data-id="${esc(p.id)}">Reject</button></td></tr>`
+          `<tr><td>${esc(p.id)}</td><td>${esc(p.category)}</td><td>${fmt(p.amount)}</td><td>${esc(p.actor || "")}</td><td>${esc(p.description || "")}</td><td class="row-actions"><button class="table-btn btn-approve" data-id="${esc(p.id)}">${tr("action_approve")}</button><button class="table-btn btn-reject" data-id="${esc(p.id)}">${tr("action_reject")}</button></td></tr>`
         ).join("") || `<tr><td colspan="6">${tr("no_pending")}</td></tr>`;
         $$(".btn-approve").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/review-entry", { entry_id: parseInt(btn.dataset.id, 10), action: "approve", reviewed_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Approve failed");
-          toast("Entry approved");
+          toast(tr("toast_approved"));
           await load();
         }));
         $$(".btn-reject").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/review-entry", { entry_id: parseInt(btn.dataset.id, 10), action: "reject", reviewed_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
           if (!out.ok) return showErr(out.error || "Reject failed");
-          toast("Entry rejected", "error");
+          toast(tr("toast_rejected"), "error");
           await load();
         }));
 
         const tasks = out.tasks || [];
         $("#tbl-tasks tbody").innerHTML = tasks.map((t) =>
-          `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${fmt(t.reward_amount)}</td><td>${t.active ? tr("yes") : tr("no")}</td><td><button class="table-btn btn-task-del" data-id="${esc(t.id)}">Delete</button></td></tr>`
+          `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${fmt(t.reward_amount)}</td><td>${t.active ? tr("yes") : tr("no")}</td><td><button class="table-btn btn-task-del" data-id="${esc(t.id)}">${tr("action_delete")}</button></td></tr>`
         ).join("") || `<tr><td colspan="5">${tr("no_tasks")}</td></tr>`;
         $$(".btn-task-del").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/task/delete", { id: parseInt(btn.dataset.id, 10) });
           if (!out.ok) return showErr(out.error || "Delete failed");
-          toast("Task deleted");
+          toast(tr("toast_task_deleted"));
           await load();
         }));
 
@@ -944,7 +1034,7 @@
         $("#tbl-regear tbody").innerHTML = regear.map((r) => {
           const total = num(r.quantity) * num(r.unit_cost);
           const act = String(r.status || "") === "pending"
-            ? `<button class="table-btn btn-regear-issue" data-id="${esc(r.id)}">Issue</button>`
+            ? `<button class="table-btn btn-regear-issue" data-id="${esc(r.id)}">${tr("action_issue")}</button>`
             : "—";
           return `<tr><td>${esc(r.id)}</td><td>${esc(r.player_name)}</td><td>${esc(r.item_id)} x${esc(r.quantity)}</td><td>${fmt(total)}</td><td>${statusBadge(r.status === "issued" ? "approved" : r.status)}</td><td>${act}</td></tr>`;
         }).join("") || `<tr><td colspan="6">${tr("no_regear")}</td></tr>`;
@@ -968,30 +1058,34 @@
           `<tr><td>${esc(a.id)}</td><td>${esc(a.created_at)}</td><td>${esc(a.mutation_type)}</td><td>${esc((a.entity_type || "") + ":" + (a.entity_id || ""))}</td><td>${esc(a.actor || "")}</td><td>${esc(JSON.stringify(a.payload || {}))}</td></tr>`
         ).join("") || `<tr><td colspan="6">${tr("no_audit")}</td></tr>`;
 
-        $("#alerts-col").innerHTML = alerts.map((a) => `<div class="recon-item ${a.status === "open" ? "warning" : "match"}"><span>${esc(a.alert_type)}: ${esc(a.message)}</span><span>${a.status === "open" ? `<button class="table-btn btn-alert-ack" data-id="${esc(a.id)}">Ack</button>` : "✅"}</span></div>`).join("") || `<div class="recon-item match"><span>${tr("no_alerts")}</span><span>✅</span></div>`;
+        $("#alerts-col").innerHTML = alerts.map((a) => `<div class="recon-item ${a.status === "open" ? "warning" : "match"}"><span>${esc(a.alert_type)}: ${esc(a.message)}</span><span>${a.status === "open" ? `<button class="table-btn btn-alert-ack" data-id="${esc(a.id)}">${tr("action_ack")}</button>` : "✅"}</span></div>`).join("") || `<div class="recon-item match"><span>${tr("no_alerts")}</span><span>✅</span></div>`;
         $$(".btn-alert-ack").forEach((btn) => btn.addEventListener("click", async () => {
+          setBusy(btn, true);
           const out = await post("/dashboard/api/economy/alert/ack", { id: parseInt(btn.dataset.id, 10), acknowledged_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
+          setBusy(btn, false);
           if (!out.ok) return showErr(out.error || "Alert acknowledge failed");
-          toast("Alert acknowledged");
+          toast(tr("toast_alert_acked"));
           await load();
         }));
         const disc = out.discrepancies || [];
-        $("#disc-col").innerHTML = disc.map((d) => `<div class="recon-item ${d.status === "open" ? "missing" : "match"}"><span>${esc(d.raw_name || "unknown")} (${fmt(d.actual_amount || 0)})</span><span>${d.status === "open" ? `<button class="table-btn btn-disc-resolve" data-id="${esc(d.id)}">Resolve</button>` : "✅"}</span></div>`).join("") || `<div class="recon-item match"><span>${tr("no_disc")}</span><span>✅</span></div>`;
+        $("#disc-col").innerHTML = disc.map((d) => `<div class="recon-item ${d.status === "open" ? "missing" : "match"}"><span>${esc(d.raw_name || "unknown")} (${fmt(d.actual_amount || 0)})</span><span>${d.status === "open" ? `<button class="table-btn btn-disc-resolve" data-id="${esc(d.id)}">${tr("action_resolve")}</button>` : "✅"}</span></div>`).join("") || `<div class="recon-item match"><span>${tr("no_disc")}</span><span>✅</span></div>`;
         $$(".btn-disc-resolve").forEach((btn) => btn.addEventListener("click", async () => {
+          setBusy(btn, true);
           const out = await post("/dashboard/api/economy/discrepancy/resolve", { id: parseInt(btn.dataset.id, 10), resolved_by: $("#review-by").value || "dashboard_admin", note: $("#review-note").value || "" });
+          setBusy(btn, false);
           if (!out.ok) return showErr(out.error || "Discrepancy resolve failed");
-          toast("Discrepancy resolved");
+          toast(tr("toast_disc_resolved"));
           await load();
         }));
         updateApiHealth().catch(() => {});
       }
 
       $$(".nav-tab").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.target)));
-      $("#btn-refresh").addEventListener("click", load);
-      $("#btn-api-refresh-now").addEventListener("click", () => updateApiHealth().catch(() => {}));
-      $("#btn-apply-filters").addEventListener("click", load);
-      $("#btn-reset-filters").addEventListener("click", async () => { $("#flt-days").value = "30"; $("#flt-status").value = ""; $("#flt-category").value = ""; $("#flt-source").value = ""; await load(); });
-      $("#btn-save-thresholds").addEventListener("click", async () => {
+      on("#btn-refresh", "click", load);
+      on("#btn-api-refresh-now", "click", () => updateApiHealth().catch(() => {}));
+      on("#btn-apply-filters", "click", load);
+      on("#btn-reset-filters", "click", async () => { $("#flt-days").value = "30"; $("#flt-status").value = ""; $("#flt-category").value = ""; $("#flt-source").value = ""; await load(); });
+      on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/config", {
@@ -1007,7 +1101,7 @@
         toast("Thresholds saved");
         await load();
       });
-      $("#btn-op-create").addEventListener("click", async () => {
+      on("#btn-op-create", "click", async () => {
         const btn = $("#btn-op-create");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/route-op", {
@@ -1022,10 +1116,10 @@
         toast("Operation posted");
         await load();
       });
-      $("#btn-op-clear").addEventListener("click", () => { $("#op-amount").value = "0"; $("#op-desc").value = ""; });
-      $("#op-cat").addEventListener("input", load);
-      $("#op-amount").addEventListener("input", () => { $("#preview-dr-sum").textContent = "+" + fmt($("#op-amount").value || 0); $("#preview-cr-sum").textContent = "-" + fmt($("#op-amount").value || 0); });
-      $("#btn-task-save").addEventListener("click", async () => {
+      on("#btn-op-clear", "click", () => { $("#op-amount").value = "0"; $("#op-desc").value = ""; });
+      on("#op-cat", "input", load);
+      on("#op-amount", "input", () => { $("#preview-dr-sum").textContent = "+" + fmt($("#op-amount").value || 0); $("#preview-cr-sum").textContent = "-" + fmt($("#op-amount").value || 0); });
+      on("#btn-task-save", "click", async () => {
         const btn = $("#btn-task-save");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/task", {
@@ -1039,7 +1133,7 @@
         toast("Task saved");
         await load();
       });
-      $("#btn-award").addEventListener("click", async () => {
+      on("#btn-award", "click", async () => {
         const btn = $("#btn-award");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/award", {
@@ -1054,7 +1148,7 @@
         toast("Payout approved");
         await load();
       });
-      $("#btn-rule-save").addEventListener("click", async () => {
+      on("#btn-rule-save", "click", async () => {
         const btn = $("#btn-rule-save");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/routing-rule", {
@@ -1069,7 +1163,7 @@
         toast("Routing rule saved");
         await load();
       });
-      $("#btn-log-import").addEventListener("click", async () => {
+      on("#btn-log-import", "click", async () => {
         const btn = $("#btn-log-import");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/import-log", { log_type: $("#log-type").value || "silver", content: $("#log-content").value || "" });
@@ -1078,10 +1172,10 @@
         toast("CSV imported");
         await load();
       });
-      $("#log-type").addEventListener("change", () => {
+      on("#log-type", "change", () => {
         $("#log-content").value = $("#log-type").value === "energy" ? ENERGY_CSV : SILVER_CSV;
       });
-      $("#btn-loot-buyback").addEventListener("click", async () => {
+      on("#btn-loot-buyback", "click", async () => {
         const btn = $("#btn-loot-buyback");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/loot-buyback", {
@@ -1099,7 +1193,7 @@
         toast("Buyback request created");
         await load();
       });
-      $("#btn-regear-create").addEventListener("click", async () => {
+      on("#btn-regear-create", "click", async () => {
         const btn = $("#btn-regear-create");
         setBusy(btn, true);
         const out = await post("/dashboard/api/economy/regear", {
@@ -1117,7 +1211,7 @@
         toast("Regear request created");
         await load();
       });
-      $("#btn-price").addEventListener("click", async () => {
+      on("#btn-price", "click", async () => {
         const qs = new URLSearchParams({ item_id: $("#price-item").value || "", location: $("#price-location").value || "", quality: $("#price-quality").value || "1" });
         const out = await fetch("/dashboard/api/economy/price?" + qs.toString(), { credentials: "same-origin" })
           .then((r) => r.json()).catch((e) => ({ ok: false, error: String(e) }));
@@ -1136,33 +1230,17 @@
       $$(".ops-modal-wrap").forEach((m) => m.addEventListener("click", (e) => {
         if (e.target === m) m.classList.remove("is-open");
       }));
-      $("#btn-focus-op").addEventListener("click", () => { switchTab("operation"); $("#modal-op")?.classList.add("is-open"); });
-      $("#btn-import-csv").addEventListener("click", () => switchTab("operation"));
-      $("#btn-open-routing").addEventListener("click", () => switchTab("recon"));
-      $("#ops-open-thresholds").addEventListener("click", () => {
-        switchTab("dashboard");
-        const p = $("#filters-panel");
-        const b = $("#btn-toggle-filters");
-        if (p.classList.contains("is-collapsed")) {
-          p.classList.remove("is-collapsed");
-          b.textContent = tr("toggle_filters_hide");
-        }
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      });
-      $("#ops-run-api-check").addEventListener("click", async () => {
-        switchTab("dashboard");
-        await updateApiHealth().catch(() => {});
-      });
-      $("#ops-open-journal").addEventListener("click", () => switchTab("journal"));
-      $("#ops-open-recon").addEventListener("click", () => switchTab("recon"));
-      $("#btn-toggle-filters").addEventListener("click", () => {
+      on("#btn-focus-op", "click", () => { switchTab("operation"); $("#modal-op")?.classList.add("is-open"); });
+      on("#btn-import-csv", "click", () => switchTab("operation"));
+      on("#btn-open-routing", "click", () => switchTab("recon"));
+      on("#btn-toggle-filters", "click", () => {
         const p = $("#filters-panel");
         const b = $("#btn-toggle-filters");
         p.classList.toggle("is-collapsed");
         const opened = !p.classList.contains("is-collapsed");
         b.textContent = opened ? tr("toggle_filters_hide") : tr("toggle_filters_show");
       });
-      $("#btn-open-settings").addEventListener("click", () => {
+      on("#btn-open-settings", "click", () => {
         const p = $("#filters-panel");
         const b = $("#btn-toggle-filters");
         if (p.classList.contains("is-collapsed")) {
@@ -1171,13 +1249,13 @@
         }
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
-      $("#lang-select").addEventListener("change", (e) => {
+      on("#lang-select", "change", (e) => {
         applyLanguage(e.target.value || "en");
         load().catch(() => {});
       });
-      $("#btn-journal").addEventListener("click", () => switchTab("journal"));
-      $("#btn-approval").addEventListener("click", () => switchTab("journal"));
-      $("#btn-export-reports").addEventListener("click", () => switchTab("reports"));
+      on("#btn-journal", "click", () => switchTab("journal"));
+      on("#btn-approval", "click", () => switchTab("journal"));
+      on("#btn-export-reports", "click", () => switchTab("reports"));
 
       $("#log-content").value = SILVER_CSV;
       applyLanguage("en");

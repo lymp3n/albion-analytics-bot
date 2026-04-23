@@ -42,7 +42,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - Фильтры и пороги алертов (скрыты по умолчанию).
 
 #### Operation
-- Карточки 3x4 с модальными формами:
+- Карточки с модальными формами (первая строка — широкая `New Operation`, далее две строки по 3 карточки):
   - New Operation
   - Guild Tasks
   - Award Payout
@@ -51,7 +51,6 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
   - Market Price
   - Loot Buyback
   - Regear Request
-  - Alert Thresholds / API Health / Journal / Reconciliation shortcuts
 
 #### Journal
 - Очередь pending проводок.
@@ -172,7 +171,7 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 - Collapsed-by-default filters and alert thresholds.
 
 #### Operation
-- Uniform 3x4 card layout with popup modals:
+- Card-based modal layout (first row has a wide `New Operation`, next rows use 3 cards each):
   - New Operation
   - Guild Tasks
   - Award Payout
@@ -181,7 +180,6 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
   - Market Price
   - Loot Buyback
   - Regear Request
-  - Shortcuts to thresholds, API health, journal, reconciliation
 
 #### Journal
 - Pending approval queue.
