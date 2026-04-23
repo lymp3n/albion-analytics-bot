@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 import discord
 from discord import option
@@ -9,9 +10,11 @@ from discord.ext import commands
 
 from web_dashboard.economy_db_sync import get_economy_sync_connection
 from web_dashboard.economy_service import (
+    create_loot_buyback_request,
     create_routed_operation,
     economy_kpis,
     ensure_economy_schema,
+    issue_regear_request,
     list_routing_rules,
 )
 
@@ -37,11 +40,11 @@ async def get_route_category_choices(ctx: discord.AutocompleteContext):
         categories = list(dict.fromkeys(db_categories + ROUTE_CATEGORY_FALLBACK))
     except Exception:
         categories = list(ROUTE_CATEGORY_FALLBACK)
-    out = []
+    out: list[str] = []
     for cat in categories:
         if raw_value and raw_value not in cat.casefold():
             continue
-        out.append(discord.OptionChoice(name=cat[:100], value=cat))
+        out.append(cat[:100])
         if len(out) >= 25:
             break
     return out
@@ -49,10 +52,15 @@ async def get_route_category_choices(ctx: discord.AutocompleteContext):
 
 class RegearTicketView(discord.ui.View):
     def __init__(self, cog: "EconomyCommands"):
-        super().__init__(timeout=60 * 60 * 24 * 14)  # 14 days
+        super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🗂️")
+    @discord.ui.button(
+        label="Close Ticket",
+        style=discord.ButtonStyle.danger,
+        emoji="🗂️",
+        custom_id="economy_close_regear_ticket",
+    )
     async def close_ticket_btn(self, button: discord.ui.Button, interaction: discord.Interaction):
         if not interaction.guild or not interaction.channel:
             await interaction.response.send_message("❌ This button can be used only in ticket channel.", ephemeral=True)
@@ -84,6 +92,48 @@ class EconomyCommands(commands.Cog):
             return True
         return int(ctx.guild.id) == target
 
+    def _is_image_attachment(self, att: discord.Attachment) -> bool:
+        ctype = str(getattr(att, "content_type", "") or "").lower()
+        if ctype.startswith("image/"):
+            return True
+        return Path(str(att.filename or "")).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+
+    async def _refresh_ticket_message(self, guild: discord.Guild, ticket_row: dict, status_text: str) -> None:
+        mid = int(ticket_row.get("discord_message_id") or 0)
+        if mid <= 0:
+            return
+        channel = guild.get_channel(int(ticket_row["discord_channel_id"]))
+        if not channel:
+            return
+        try:
+            msg = await channel.fetch_message(mid)
+        except Exception:
+            return
+        emb = msg.embeds[0] if msg.embeds else discord.Embed(
+            title="🛡️ Regear Ticket",
+            description="Regear ticket channel.",
+            color=discord.Color.orange(),
+            timestamp=datetime.utcnow(),
+        )
+        replaced = False
+        close_hint_updated = False
+        for i, f in enumerate(emb.fields):
+            nm = str(f.name).strip().lower()
+            if nm == "status":
+                emb.set_field_at(i, name="Status", value=status_text, inline=True)
+                replaced = True
+            if nm == "how to close":
+                emb.set_field_at(i, name="How to close", value="Use button below or `/economy close-ticket`.", inline=False)
+                close_hint_updated = True
+        if not replaced:
+            emb.add_field(name="Status", value=status_text, inline=True)
+        if not close_hint_updated:
+            emb.add_field(name="How to close", value="Use button below or `/economy close-ticket`.", inline=False)
+        try:
+            await msg.edit(embed=emb, view=RegearTicketView(self))
+        except Exception:
+            pass
+
     async def _can_close_ticket(self, interaction: discord.Interaction) -> tuple[bool, str, int]:
         if not self._guild_allowed(interaction, use_guild2=True):
             return False, "❌ Regear tickets are managed only on the ticket server (GUILD_ID2).", 0
@@ -105,7 +155,7 @@ class EconomyCommands(commands.Cog):
         if not (is_owner or is_economy or is_mentor or is_founder):
             return False, "❌ Only ticket owner or staff can close this ticket.", int(row["id"])
         await self.bot.db.execute(
-            "UPDATE tickets SET status = $1, closed_at = $2 WHERE id = $3",
+            "UPDATE tickets SET status = $1, closed_at = $2, updated_at = $2 WHERE id = $3",
             "closed",
             datetime.utcnow(),
             int(row["id"]),
@@ -113,6 +163,47 @@ class EconomyCommands(commands.Cog):
         return True, "", int(row["id"])
 
     economy_group = discord.SlashCommandGroup("economy", "Economy operations")
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if getattr(self.bot, "_economy_regear_view_registered", False):
+            return
+        self.bot._economy_regear_view_registered = True
+        self.bot.add_view(RegearTicketView(self))
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if not message.guild or message.author.bot:
+            return
+        if not self._guild_allowed(message, use_guild2=True):
+            return
+        if not message.attachments:
+            return
+        if not any(self._is_image_attachment(a) for a in message.attachments):
+            return
+        row = await self.bot.db.fetchrow(
+            """
+            SELECT id, status, role, discord_channel_id, discord_message_id
+            FROM tickets
+            WHERE discord_channel_id = $1
+            """,
+            message.channel.id,
+        )
+        if not row:
+            return
+        if str(row.get("role") or "").strip().lower() != "regear":
+            return
+        status = str(row.get("status") or "").strip().lower()
+        if status == "closed":
+            return
+        if status == "available":
+            await self.bot.db.execute(
+                "UPDATE tickets SET status = $1, updated_at = $2 WHERE id = $3",
+                "in_progress",
+                datetime.utcnow(),
+                int(row["id"]),
+            )
+        await self._refresh_ticket_message(message.guild, row, "Screenshot received ✅ (in progress)")
 
     @economy_group.command(name="kpi", description="Show current economy KPIs")
     async def economy_kpi(self, ctx: discord.ApplicationContext):
@@ -195,6 +286,79 @@ class EconomyCommands(commands.Cog):
         await ctx.followup.send(
             f"✅ Posted operation #{entry.get('id', '?')} | "
             f"category=`{entry.get('category', category)}` amount=`{int(entry.get('amount') or amount):,}`",
+            ephemeral=True,
+        )
+
+    @economy_group.command(name="loot-buyback", description="Create loot buyback request")
+    @option("seller_name", description="Seller nickname", required=True)
+    @option("item_id", description="Albion item ID", required=True)
+    @option("quantity", description="Quantity", required=True)
+    @option("auto_approve_limit", description="Auto approve limit", required=False, default=1000000)
+    @option("note", description="Optional note", required=False, default="")
+    async def economy_loot_buyback(
+        self,
+        ctx: discord.ApplicationContext,
+        seller_name: str,
+        item_id: str,
+        quantity: int,
+        auto_approve_limit: int = 1000000,
+        note: str = "",
+    ):
+        if not self._guild_allowed(ctx, use_guild2=False):
+            await ctx.respond("❌ This command is available only on the main command server (GUILD_ID).", ephemeral=True)
+            return
+        if not await self.bot.permissions.require_economy(ctx.author):
+            await ctx.respond("❌ Economy access required.", ephemeral=True)
+            return
+        await ctx.defer(ephemeral=True)
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = create_loot_buyback_request(
+                    conn,
+                    backend,
+                    seller_name=seller_name,
+                    item_id=item_id,
+                    quantity=int(quantity),
+                    auto_approve_limit=int(auto_approve_limit),
+                    approved_by=str(ctx.author.display_name),
+                    note=note,
+                )
+        except Exception as e:
+            await ctx.followup.send(f"❌ Loot buyback failed: {e}", ephemeral=True)
+            return
+        await ctx.followup.send(
+            f"✅ Buyback #{out.get('request_id')} created | status=`{out.get('status')}` | payout=`{int(out.get('payout_total') or 0):,}`",
+            ephemeral=True,
+        )
+
+    @economy_group.command(name="regear-issue", description="Issue pending regear request")
+    @option("request_id", description="Regear request ID", required=True)
+    @option("note", description="Optional note", required=False, default="")
+    async def economy_regear_issue(self, ctx: discord.ApplicationContext, request_id: int, note: str = ""):
+        if not self._guild_allowed(ctx, use_guild2=False):
+            await ctx.respond("❌ This command is available only on the main command server (GUILD_ID).", ephemeral=True)
+            return
+        if not await self.bot.permissions.require_economy(ctx.author):
+            await ctx.respond("❌ Economy access required.", ephemeral=True)
+            return
+        await ctx.defer(ephemeral=True)
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = issue_regear_request(
+                    conn,
+                    backend,
+                    request_id=int(request_id),
+                    checked_by=str(ctx.author.display_name),
+                    issued_by=str(ctx.author.display_name),
+                    note=note,
+                )
+        except Exception as e:
+            await ctx.followup.send(f"❌ Regear issue failed: {e}", ephemeral=True)
+            return
+        await ctx.followup.send(
+            f"✅ Regear request #{out.get('request_id')} issued | entry #{out.get('entry_id')} | total `{int(out.get('total_cost') or 0):,}`",
             ephemeral=True,
         )
 
