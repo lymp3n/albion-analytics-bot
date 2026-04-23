@@ -511,6 +511,7 @@
       const latencyHistory = { internal: [], external: [] };
       let currentLang = "en";
       let _itemSuggestTimer = null;
+      const ROUTE_CATEGORY_FALLBACK = ["deposit", "withdrawal", "content_income", "buy_gear", "reward_payout", "loot_buyback", "regear_issue"];
       const I18N = {
         en: {
           tab_dashboard: "📊 Dashboard",
@@ -801,7 +802,8 @@
         const sel = $("#op-cat");
         if (!sel) return;
         const old = String(sel.value || "").trim();
-        const cats = Array.from(new Set((rules || []).map((r) => String(r.category || "").trim()).filter(Boolean)));
+        const dbCats = (rules || []).map((r) => String(r.category || "").trim()).filter(Boolean);
+        const cats = Array.from(new Set([...dbCats, ...ROUTE_CATEGORY_FALLBACK]));
         sel.innerHTML = cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
         if (old && cats.includes(old)) sel.value = old;
         if (!sel.value && cats.length) sel.value = cats[0];

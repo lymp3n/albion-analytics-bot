@@ -16,25 +16,60 @@ from web_dashboard.economy_service import (
 )
 
 
+ROUTE_CATEGORY_FALLBACK = [
+    "deposit",
+    "withdrawal",
+    "content_income",
+    "buy_gear",
+    "reward_payout",
+    "loot_buyback",
+    "regear_issue",
+]
+
+
 async def get_route_category_choices(ctx: discord.AutocompleteContext):
     raw_value = str(ctx.value or "").strip().casefold()
     try:
         with get_economy_sync_connection() as (conn, backend):
             ensure_economy_schema(conn, backend)
             rows = list_routing_rules(conn, backend)
-        out = []
-        for r in rows:
-            cat = str(r.get("category") or "").strip()
-            if not cat:
-                continue
-            if raw_value and raw_value not in cat.casefold():
-                continue
-            out.append(discord.OptionChoice(name=cat[:100], value=cat))
-            if len(out) >= 25:
-                break
-        return out
+        db_categories = [str(r.get("category") or "").strip() for r in rows if str(r.get("category") or "").strip()]
+        categories = list(dict.fromkeys(db_categories + ROUTE_CATEGORY_FALLBACK))
     except Exception:
-        return []
+        categories = list(ROUTE_CATEGORY_FALLBACK)
+    out = []
+    for cat in categories:
+        if raw_value and raw_value not in cat.casefold():
+            continue
+        out.append(discord.OptionChoice(name=cat[:100], value=cat))
+        if len(out) >= 25:
+            break
+    return out
+
+
+class RegearTicketView(discord.ui.View):
+    def __init__(self, cog: "EconomyCommands"):
+        super().__init__(timeout=60 * 60 * 24 * 14)  # 14 days
+        self.cog = cog
+
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🗂️")
+    async def close_ticket_btn(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not interaction.guild or not interaction.channel:
+            await interaction.response.send_message("❌ This button can be used only in ticket channel.", ephemeral=True)
+            return
+        allowed, msg, ticket_id = await self.cog._can_close_ticket(interaction)
+        if not allowed:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"✅ Ticket #{ticket_id} marked as closed. Channel will be deleted in 5 seconds.",
+            ephemeral=True,
+        )
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete(reason=f"Regear ticket #{ticket_id} closed via button")
+        except Exception:
+            pass
 
 
 class EconomyCommands(commands.Cog):
@@ -48,6 +83,34 @@ class EconomyCommands(commands.Cog):
         if target <= 0:
             return True
         return int(ctx.guild.id) == target
+
+    async def _can_close_ticket(self, interaction: discord.Interaction) -> tuple[bool, str, int]:
+        if not self._guild_allowed(interaction, use_guild2=True):
+            return False, "❌ Regear tickets are managed only on the ticket server (GUILD_ID2).", 0
+        row = await self.bot.db.fetchrow(
+            """
+            SELECT t.id, p.discord_id AS owner_discord_id
+            FROM tickets t
+            LEFT JOIN players p ON p.id = t.player_id
+            WHERE t.discord_channel_id = $1
+            """,
+            interaction.channel.id,
+        )
+        if not row:
+            return False, "❌ This channel is not linked to a ticket.", 0
+        is_owner = int(row.get("owner_discord_id") or 0) == int(interaction.user.id)
+        is_economy = await self.bot.permissions.require_economy(interaction.user)
+        is_mentor = await self.bot.permissions.require_mentor(interaction.user)
+        is_founder = await self.bot.permissions.require_founder(interaction.user)
+        if not (is_owner or is_economy or is_mentor or is_founder):
+            return False, "❌ Only ticket owner or staff can close this ticket.", int(row["id"])
+        await self.bot.db.execute(
+            "UPDATE tickets SET status = $1, closed_at = $2 WHERE id = $3",
+            "closed",
+            datetime.utcnow(),
+            int(row["id"]),
+        )
+        return True, "", int(row["id"])
 
     economy_group = discord.SlashCommandGroup("economy", "Economy operations")
 
@@ -215,7 +278,7 @@ class EconomyCommands(commands.Cog):
         embed.add_field(name="How to close", value="Use `/economy close-ticket` in this channel.", inline=False)
         embed.set_footer(text=f"Ticket ID: {ticket_id}")
 
-        msg = await channel.send(content=ctx.author.mention, embed=embed)
+        msg = await channel.send(content=ctx.author.mention, embed=embed, view=RegearTicketView(self))
         await self.bot.db.execute("UPDATE tickets SET discord_message_id = $1 WHERE id = $2", msg.id, ticket_id)
         await ctx.followup.send(f"✅ Regear ticket created: {channel.mention}", ephemeral=True)
 
@@ -227,29 +290,14 @@ class EconomyCommands(commands.Cog):
         if not ctx.guild or not ctx.channel:
             await ctx.respond("❌ This command can only be used inside ticket channel.", ephemeral=True)
             return
-        is_economy = await self.bot.permissions.require_economy(ctx.author)
-        is_mentor = await self.bot.permissions.require_mentor(ctx.author)
-        is_founder = await self.bot.permissions.require_founder(ctx.author)
-        if not (is_economy or is_mentor or is_founder):
-            await ctx.respond("❌ Staff/economy access required to close ticket.", ephemeral=True)
+        allowed, msg, ticket_id = await self._can_close_ticket(ctx)
+        if not allowed:
+            await ctx.respond(msg, ephemeral=True)
             return
-        row = await self.bot.db.fetchrow(
-            "SELECT id, status FROM tickets WHERE discord_channel_id = $1",
-            ctx.channel.id,
-        )
-        if not row:
-            await ctx.respond("❌ This channel is not linked to a ticket.", ephemeral=True)
-            return
-        await self.bot.db.execute(
-            "UPDATE tickets SET status = $1, closed_at = $2 WHERE id = $3",
-            "closed",
-            datetime.utcnow(),
-            int(row["id"]),
-        )
-        await ctx.respond("✅ Ticket marked as closed. Channel will be deleted in 5 seconds.", ephemeral=True)
+        await ctx.respond(f"✅ Ticket #{ticket_id} marked as closed. Channel will be deleted in 5 seconds.", ephemeral=True)
         await asyncio.sleep(5)
         try:
-            await ctx.channel.delete(reason=f"Regear ticket #{int(row['id'])} closed")
+            await ctx.channel.delete(reason=f"Regear ticket #{ticket_id} closed")
         except Exception:
             pass
 
