@@ -994,6 +994,119 @@ def create_loot_buyback_request(
     }
 
 
+def create_manual_loot_buyback_from_price(
+    conn,
+    backend: str,
+    *,
+    buyback_price: int,
+    actor: str = "",
+) -> dict:
+    """
+    Manual loot buyback input flow:
+    - user provides buyback paid amount
+    - market equivalent for stats is computed as +20%
+    """
+    payout_total = int(buyback_price)
+    if payout_total <= 0:
+        raise ValueError("buyback_price must be positive")
+    market_total = int(round(payout_total * 1.2))
+    market_unit = market_total  # quantity=1 synthetic record
+
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            INSERT INTO econ_loot_buyback_requests (
+                seller_name, item_id, quantity, location, quality,
+                market_unit_price, discount_percent, payout_total,
+                auto_approve_limit, status, approved_by, note
+            ) VALUES (%s, %s, %s, %s, %s, %s, 20, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                actor.strip() or "manual",
+                "MANUAL_LOOT_BUYBACK",
+                1,
+                "MANUAL",
+                1,
+                market_unit,
+                payout_total,
+                payout_total,
+                "approved",
+                actor.strip() or "manual",
+                "manual_buyback_price_input",
+            ),
+        )
+        req_id = int(cur.fetchone()[0])
+    else:
+        cur.execute(
+            """
+            INSERT INTO econ_loot_buyback_requests (
+                seller_name, item_id, quantity, location, quality,
+                market_unit_price, discount_percent, payout_total,
+                auto_approve_limit, status, approved_by, note
+            ) VALUES (?, ?, ?, ?, ?, ?, 20, ?, ?, ?, ?, ?)
+            """,
+            (
+                actor.strip() or "manual",
+                "MANUAL_LOOT_BUYBACK",
+                1,
+                "MANUAL",
+                1,
+                market_unit,
+                payout_total,
+                payout_total,
+                "approved",
+                actor.strip() or "manual",
+                "manual_buyback_price_input",
+            ),
+        )
+        req_id = int(cur.lastrowid)
+
+    entry_id = _insert_entry(
+        conn,
+        backend,
+        "loot_buyback",
+        payout_total,
+        f"Manual loot buyback by price: payout={payout_total}, market_eq={market_total}",
+        actor.strip() or "manual",
+        "loot_buyback_manual",
+        "posted",
+    )
+    lines = [("1200", "debit", payout_total), ("1000", "credit", payout_total)]
+    _validate_double_entry(lines)
+    for acc, side, amt in lines:
+        _insert_line(conn, backend, entry_id, acc, side, amt)
+    if backend == "postgres":
+        cur.execute("UPDATE econ_loot_buyback_requests SET journal_entry_id=%s WHERE id=%s", (entry_id, req_id))
+    else:
+        cur.execute("UPDATE econ_loot_buyback_requests SET journal_entry_id=? WHERE id=?", (entry_id, req_id))
+
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="create_manual_loot_buyback_from_price",
+        entity_type="loot_buyback_request",
+        entity_id=str(req_id),
+        actor=actor.strip() or "manual",
+        payload={
+            "payout_total": payout_total,
+            "market_total_plus_20_pct": market_total,
+            "discount_percent": 20,
+            "journal_entry_id": entry_id,
+        },
+    )
+    conn.commit()
+    return {
+        "request_id": req_id,
+        "status": "approved",
+        "journal_entry_id": entry_id,
+        "payout_total": payout_total,
+        "market_total_plus_20_pct": market_total,
+        "discount_percent": 20,
+    }
+
+
 def create_regear_request(
     conn,
     backend: str,

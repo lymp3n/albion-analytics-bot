@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from web_dashboard.economy_db_sync import get_economy_sync_connection
 from web_dashboard.economy_service import (
-    create_loot_buyback_request,
+    create_manual_loot_buyback_from_price,
     create_routed_operation,
     economy_kpis,
     ensure_economy_schema,
@@ -305,19 +305,11 @@ class EconomyCommands(commands.Cog):
         )
 
     @economy_group.command(name="loot-buyback", description="Create loot buyback request")
-    @option("seller_name", description="Seller nickname", required=True)
-    @option("item_id", description="Albion item ID", required=True)
-    @option("quantity", description="Quantity", required=True)
-    @option("auto_approve_limit", description="Auto approve limit", required=False, default=1000000)
-    @option("note", description="Optional note", required=False, default="")
+    @option("buyback_price", description="Buyback payout price", required=True)
     async def economy_loot_buyback(
         self,
         ctx: discord.ApplicationContext,
-        seller_name: str,
-        item_id: str,
-        quantity: int,
-        auto_approve_limit: int = 1000000,
-        note: str = "",
+        buyback_price: int,
     ):
         if not self._guild_allowed(ctx, use_guild2=False):
             await ctx.respond("❌ This command is available only on the main command server (GUILD_ID).", ephemeral=True)
@@ -329,21 +321,18 @@ class EconomyCommands(commands.Cog):
         try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
-                out = create_loot_buyback_request(
+                out = create_manual_loot_buyback_from_price(
                     conn,
                     backend,
-                    seller_name=seller_name,
-                    item_id=item_id,
-                    quantity=int(quantity),
-                    auto_approve_limit=int(auto_approve_limit),
-                    approved_by=str(ctx.author.display_name),
-                    note=note,
+                    buyback_price=int(buyback_price),
+                    actor=str(ctx.author.display_name),
                 )
         except Exception as e:
             await ctx.followup.send(f"❌ Loot buyback failed: {e}", ephemeral=True)
             return
         await ctx.followup.send(
-            f"✅ Buyback #{out.get('request_id')} created | status=`{out.get('status')}` | payout=`{int(out.get('payout_total') or 0):,}`",
+            f"✅ Buyback #{out.get('request_id')} created | payout=`{int(out.get('payout_total') or 0):,}` | "
+            f"market(+20%)=`{int(out.get('market_total_plus_20_pct') or 0):,}`",
             ephemeral=True,
         )
 
