@@ -61,6 +61,7 @@
           <input id="f-fund" type="number" min="0" value="1000000" />
         </div>
         <div class="ds-actions">
+          <a href="/dashboard/economy" class="ds-btn ds-btn-ghost">Economy Ops</a>
           <button type="button" class="ds-btn ds-btn-primary" id="btn-refresh">Refresh data</button>
           <form method="post" action="{{ url_for('dashboard_logout') }}" style="margin:0;">
             <button type="submit" class="ds-btn ds-btn-ghost">Logout</button>
@@ -245,7 +246,7 @@
       <section class="ds-panel ds-tab-panel" data-panel="roles" hidden>
         <h2>Role assist</h2>
         <p class="ds-muted">
-          Map each Discord <strong>role ID</strong> to <strong>Basic</strong> / <strong>Staff</strong> / <strong>Admin</strong>.
+          Map each Discord <strong>role ID</strong> to <strong>Basic</strong> / <strong>Staff</strong> / <strong>Admin</strong> / <strong>Economy</strong>.
           Optional <strong>role name</strong> (manual or <strong>Load names from Discord</strong>). Empty table = <code>config.yaml</code> defaults.
           Set <strong>Discord server ID</strong> and save before loading names.
           Large role IDs are stored as text (not 64-bit integers) — if old rows looked wrong, re-type IDs and click <strong>Save role access</strong>.
@@ -430,6 +431,7 @@
       `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="member" ${t === "member" ? "checked" : ""} /></td>` +
       `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="mentor" ${t === "mentor" ? "checked" : ""} /></td>` +
       `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="founder" ${t === "founder" ? "checked" : ""} /></td>` +
+      `<td class="ds-role-access-cell"><input type="radio" class="ds-role-tier" name="${nm}" value="economy" ${t === "economy" ? "checked" : ""} /></td>` +
       `<td><button type="button" class="ds-btn ds-btn-ghost ds-btn-tiny btn-role-row-remove">Remove</button></td>` +
       `</tr>`
     );
@@ -622,7 +624,7 @@
             legacyHint +
             `<div class="ds-table-wrap ds-role-access-wrap">` +
             `<table class="ds-table ds-role-access-table">` +
-            `<thead><tr><th>Role ID</th><th>Role name</th><th>Basic</th><th>Staff</th><th>Admin</th><th></th></tr></thead>` +
+            `<thead><tr><th>Role ID</th><th>Role name</th><th>Basic</th><th>Staff</th><th>Admin</th><th>Economy</th><th></th></tr></thead>` +
             `<tbody class="ds-role-access-tbody">${assign.join("")}</tbody>` +
             `</table></div>` +
             `<div class="ds-templates-toolbar">` +

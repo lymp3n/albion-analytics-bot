@@ -38,6 +38,23 @@ from web_dashboard.data_service import (
 )
 from web_dashboard.db_sync import get_sync_connection
 from web_dashboard.discord_roles_client import fetch_discord_guild_roles
+from web_dashboard.economy_db_sync import get_economy_sync_connection
+from web_dashboard.economy_service import (
+    award_task_completion,
+    create_routed_operation,
+    economy_kpis,
+    ensure_economy_schema,
+    fetch_market_price,
+    import_game_log_csv,
+    list_bonus_awards,
+    list_game_log_imports,
+    list_recent_entries,
+    list_routing_rules,
+    list_tasks,
+    upsert_routing_rule,
+    upsert_task,
+    delete_task,
+)
 
 from event_templates_store import read_raw_text, save_raw_text, templates_file_path
 
@@ -100,6 +117,11 @@ def register_dashboard(app: Flask) -> None:
     @login_required
     def dashboard_app():
         return render_template("dashboard.html")
+
+    @app.route("/dashboard/economy")
+    @login_required
+    def dashboard_economy_app():
+        return render_template("economy_dashboard.html")
 
     @app.route("/dashboard/api/data")
     @login_required
@@ -259,7 +281,7 @@ def register_dashboard(app: Flask) -> None:
             mimetype="application/json",
         )
 
-    _VALID_TIERS = frozenset({"member", "mentor", "founder"})
+    _VALID_TIERS = frozenset({"member", "mentor", "founder", "economy"})
 
     @app.route("/dashboard/api/role-assist-catalog", methods=["GET"])
     @login_required
@@ -489,5 +511,178 @@ def register_dashboard(app: Flask) -> None:
             )
         return app.response_class(
             response=json.dumps({"ok": True, "message": "Guild info updated."}),
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/economy/data", methods=["GET"])
+    @login_required
+    def dashboard_economy_data():
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                payload = {
+                    "ok": True,
+                    "kpis": economy_kpis(conn, backend),
+                    "tasks": list_tasks(conn, backend),
+                    "awards": list_bonus_awards(conn, backend, 120),
+                    "entries": list_recent_entries(conn, backend, 160),
+                    "routing_rules": list_routing_rules(conn, backend),
+                    "imports": list_game_log_imports(conn, backend, 40),
+                }
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps(payload, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/task", methods=["POST"])
+    @login_required
+    def dashboard_economy_task_upsert():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = upsert_task(
+                    conn,
+                    backend,
+                    task_id=body.get("id"),
+                    title=str(body.get("title") or ""),
+                    description=str(body.get("description") or ""),
+                    reward_amount=int(body.get("reward_amount") or 0),
+                    active=bool(body.get("active", True)),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/task/delete", methods=["POST"])
+    @login_required
+    def dashboard_economy_task_delete():
+        body = request.get_json(silent=True) or {}
+        try:
+            task_id = int(body.get("id") or 0)
+            if task_id < 1:
+                raise ValueError("Invalid task id")
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                deleted = delete_task(conn, backend, task_id)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "deleted": deleted}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/award", methods=["POST"])
+    @login_required
+    def dashboard_economy_award():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = award_task_completion(
+                    conn,
+                    backend,
+                    task_id=int(body.get("task_id") or 0),
+                    player_nickname=str(body.get("player_nickname") or "").strip(),
+                    quantity=int(body.get("quantity") or 0),
+                    approved_by=str(body.get("approved_by") or "dashboard_admin").strip(),
+                    note=str(body.get("note") or "").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/route-op", methods=["POST"])
+    @login_required
+    def dashboard_economy_route_op():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = create_routed_operation(
+                    conn,
+                    backend,
+                    category=str(body.get("category") or "").strip(),
+                    amount=int(body.get("amount") or 0),
+                    description=str(body.get("description") or "").strip(),
+                    actor=str(body.get("actor") or "dashboard").strip(),
+                    source=str(body.get("source") or "dashboard").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/routing-rule", methods=["POST"])
+    @login_required
+    def dashboard_economy_routing_rule():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                upsert_routing_rule(
+                    conn,
+                    backend,
+                    category=str(body.get("category") or "").strip(),
+                    debit_account=str(body.get("debit_account") or "").strip(),
+                    credit_account=str(body.get("credit_account") or "").strip(),
+                    require_approval=bool(body.get("require_approval", False)),
+                    tag=str(body.get("tag") or "").strip(),
+                )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True}), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/import-log", methods=["POST"])
+    @login_required
+    def dashboard_economy_import_log():
+        body = request.get_json(silent=True) or {}
+        try:
+            log_type = str(body.get("log_type") or "").strip().lower()
+            content = str(body.get("content") or "")
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = import_game_log_csv(conn, backend, log_type=log_type, content=content)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "summary": out}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/price", methods=["GET"])
+    @login_required
+    def dashboard_economy_price():
+        item_id = str(request.args.get("item_id") or "").strip()
+        location = str(request.args.get("location") or "").strip()
+        try:
+            quality = int(request.args.get("quality", 1))
+        except ValueError:
+            quality = 1
+        out = fetch_market_price(item_id=item_id, location=location, quality=quality)
+        status = 200 if out.get("ok") else 502
+        return app.response_class(
+            response=json.dumps(out, default=str),
+            status=status,
             mimetype="application/json",
         )

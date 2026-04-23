@@ -102,6 +102,27 @@ class Permissions:
         founders, _, _ = await self._ordered_effective_sets(member)
         return self.has_any_role_id(member, founders)
 
+    async def require_economy(self, member: discord.Member) -> bool:
+        """
+        Dedicated economy access tier from guild_role_assignments (tier='economy').
+        Founders and server admins are always allowed.
+        """
+        if self.is_server_admin(member):
+            return True
+        founders, _, _ = await self._ordered_effective_sets(member)
+        if self.has_any_role_id(member, founders):
+            return True
+        if not member.guild:
+            return False
+        g = await self.bot.db.get_guild_by_discord_id(member.guild.id)
+        if not g:
+            return False
+        assigns = await self.bot.db.fetch_guild_role_assignments(int(g["id"]))
+        econ_ids = {int(str(r["discord_role_id"]).strip()) for r in assigns if str(r.get("tier") or "").strip().lower() == "economy"}
+        if not econ_ids:
+            return False
+        return self.has_any_role_id(member, econ_ids)
+
     async def _ordered_effective_sets(self, member: discord.Member) -> Tuple[Set[int], Set[int], Set[int]]:
         mset, ment_set, fset = await self.effective_role_sets(member)
         return fset, ment_set, mset

@@ -35,5 +35,10 @@ def get_role_assist_catalog() -> Dict[str, Any]:
             "commands": "`/guild` · `/payroll` · `/stats_seed_test`",
             "details": "Founder-only (`require_founder`): roster management, mentor payout split, test data seed.",
         },
+        {
+            "tier": "Economy",
+            "commands": "Economy dashboard page (`/dashboard/economy`) + journal / guild bonus operations",
+            "details": "Optional dedicated role tier for financial operations; founders/admin still have access.",
+        },
     ]
     return {"table": table, "shotcaller_role_ids": sorted(SHOTCALLER_ROLE_IDS)}

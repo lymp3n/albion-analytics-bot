@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Albion Analytics — Economy Ops</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+</head>
+<body class="ds-body">
+  <div class="ds-app">
+    <header class="ds-topbar">
+      <div>
+        <h1 class="ds-brand">ALBION <span class="ds-accent">ECONOMY OPS</span></h1>
+        <p class="ds-muted" style="margin:0.35rem 0 0;">Double-entry journal · guild bonus tasks · imports · market pricing</p>
+      </div>
+      <div class="ds-actions">
+        <a href="/dashboard" class="ds-btn ds-btn-ghost">Back to dashboard</a>
+        <button type="button" class="ds-btn ds-btn-primary" id="btn-refresh">Refresh</button>
+      </div>
+    </header>
+
+    <div id="err-box" class="ds-error-banner" style="display:none;"></div>
+    <div class="ds-grid-kpi" id="kpi-econ"></div>
+
+    <section class="ds-panel">
+      <h2>Guild Bonus Tasks</h2>
+      <div class="ds-two-col">
+        <div>
+          <div class="ds-field"><label>Title</label><input id="task-title" /></div>
+          <div class="ds-field"><label>Description</label><input id="task-desc" /></div>
+          <div class="ds-field"><label>Reward amount</label><input id="task-reward" type="number" min="1" value="100000" /></div>
+          <div class="ds-field"><label><input id="task-active" type="checkbox" checked /> Active</label></div>
+          <button class="ds-btn ds-btn-primary" id="btn-task-save">Save Task</button>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-tasks">
+            <thead><tr><th>ID</th><th>Title</th><th>Reward</th><th>Active</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Approve Guild Bonus Payout</h2>
+      <div class="ds-two-col">
+        <div>
+          <div class="ds-field"><label>Task ID</label><input id="award-task-id" type="number" min="1" /></div>
+          <div class="ds-field"><label>Player nickname</label><input id="award-player" /></div>
+          <div class="ds-field"><label>Quantity completed</label><input id="award-qty" type="number" min="1" value="1" /></div>
+          <div class="ds-field"><label>Approved by</label><input id="award-by" value="dashboard_admin" /></div>
+          <div class="ds-field"><label>Note</label><input id="award-note" /></div>
+          <button class="ds-btn ds-btn-primary" id="btn-award">Approve & Post</button>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-awards">
+            <thead><tr><th>ID</th><th>Task</th><th>Player</th><th>Qty</th><th>Total</th><th>By</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Auto Routing Rules + Manual Routed Operation</h2>
+      <div class="ds-two-col">
+        <div>
+          <h3 class="ds-muted">Save routing rule</h3>
+          <div class="ds-field"><label>Category</label><input id="rule-cat" placeholder="deposit / reward_payout" /></div>
+          <div class="ds-field"><label>Debit account</label><input id="rule-dt" placeholder="1000" /></div>
+          <div class="ds-field"><label>Credit account</label><input id="rule-kt" placeholder="3000" /></div>
+          <div class="ds-field"><label>Tag</label><input id="rule-tag" /></div>
+          <div class="ds-field"><label><input id="rule-approval" type="checkbox" /> Require approval</label></div>
+          <button class="ds-btn ds-btn-primary" id="btn-rule-save">Save Rule</button>
+          <hr />
+          <h3 class="ds-muted">Create routed operation</h3>
+          <div class="ds-field"><label>Category</label><input id="op-cat" placeholder="deposit" /></div>
+          <div class="ds-field"><label>Amount</label><input id="op-amount" type="number" min="1" value="100000" /></div>
+          <div class="ds-field"><label>Description</label><input id="op-desc" /></div>
+          <div class="ds-field"><label>Actor</label><input id="op-actor" value="dashboard" /></div>
+          <button class="ds-btn ds-btn-primary" id="btn-op-create">Post Operation</button>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-rules">
+            <thead><tr><th>Category</th><th>Dt</th><th>Kt</th><th>Approval</th><th>Tag</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Game Logs Import (Silver / Energy)</h2>
+      <div class="ds-two-col">
+        <div>
+          <div class="ds-field">
+            <label>Log type</label>
+            <select id="log-type"><option value="silver">silver</option><option value="energy">energy</option></select>
+          </div>
+          <div class="ds-field"><label>CSV content</label><textarea id="log-content" class="ds-templates-editor" style="min-height:180px;"></textarea></div>
+          <button class="ds-btn ds-btn-primary" id="btn-log-import">Import CSV</button>
+        </div>
+        <div class="ds-table-wrap ds-scroll-y">
+          <table class="ds-table" id="tbl-imports">
+            <thead><tr><th>ID</th><th>Type</th><th>Rows</th><th>Summary</th><th>Imported</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Market Price (Albion Data API)</h2>
+      <div class="ds-two-col">
+        <div>
+          <div class="ds-field"><label>Item ID</label><input id="price-item" value="T4_BAG" /></div>
+          <div class="ds-field"><label>Location</label><input id="price-location" value="Caerleon" /></div>
+          <div class="ds-field"><label>Quality</label><input id="price-quality" type="number" min="1" max="5" value="1" /></div>
+          <button class="ds-btn ds-btn-primary" id="btn-price">Fetch price</button>
+        </div>
+        <pre class="ds-json" id="price-json">{}</pre>
+      </div>
+    </section>
+
+    <section class="ds-panel">
+      <h2>Recent Journal Entries</h2>
+      <div class="ds-table-wrap ds-scroll-y">
+        <table class="ds-table" id="tbl-entries">
+          <thead><tr><th>ID</th><th>Time</th><th>Category</th><th>Amount</th><th>Status</th><th>Actor</th><th>Description</th><th>Dt</th><th>Kt</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  (function () {
+    const $ = (s, r = document) => r.querySelector(s);
+    function showErr(msg) {
+      const b = $("#err-box");
+      b.style.display = msg ? "block" : "none";
+      b.textContent = msg || "";
+    }
+    function esc(s) {
+      return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    async function post(url, body) {
+      const r = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+      });
+      return r.json().catch(() => ({}));
+    }
+
+    async function load() {
+      showErr("");
+      const out = await fetch("/dashboard/api/economy/data", { credentials: "same-origin" }).then(r => r.json()).catch(e => ({ ok:false, error:String(e) }));
+      if (!out.ok) {
+        showErr(out.error || "Failed to load economy data");
+        return;
+      }
+      const k = out.kpis || {};
+      $("#kpi-econ").innerHTML =
+        `<div class="ds-kpi"><div class="v">${esc(k.accounts_count)}</div><div class="l">Accounts</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc(k.entries_count)}</div><div class="l">Entries</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc(k.pending_entries)}</div><div class="l">Pending</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc(k.tasks_count)}</div><div class="l">Tasks</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc(k.awards_count)}</div><div class="l">Task payouts</div></div>` +
+        `<div class="ds-kpi"><div class="v">${esc((k.awards_total || 0).toLocaleString())}</div><div class="l">Task payout total</div></div>`;
+
+      const tasks = out.tasks || [];
+      $("#tbl-tasks tbody").innerHTML = tasks.map(t =>
+        `<tr><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td>${esc((t.reward_amount || 0).toLocaleString())}</td><td>${t.active ? "yes" : "no"}</td>` +
+        `<td><button class="ds-btn ds-btn-ghost btn-task-del" data-id="${esc(t.id)}">Delete</button></td></tr>`
+      ).join("") || '<tr><td colspan="5">No tasks</td></tr>';
+      document.querySelectorAll(".btn-task-del").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const out = await post("/dashboard/api/economy/task/delete", { id: parseInt(btn.getAttribute("data-id"), 10) });
+          if (!out.ok) return showErr(out.error || "Delete failed");
+          await load();
+        });
+      });
+
+      const awards = out.awards || [];
+      $("#tbl-awards tbody").innerHTML = awards.map(a =>
+        `<tr><td>${esc(a.id)}</td><td>${esc(a.task_title || ("#" + a.task_id))}</td><td>${esc(a.player_nickname)}</td>` +
+        `<td>${esc(a.quantity)}</td><td>${esc((a.reward_total || 0).toLocaleString())}</td><td>${esc(a.approved_by || "—")}</td></tr>`
+      ).join("") || '<tr><td colspan="6">No payouts</td></tr>';
+
+      const rules = out.routing_rules || [];
+      $("#tbl-rules tbody").innerHTML = rules.map(r =>
+        `<tr><td>${esc(r.category)}</td><td>${esc(r.debit_account)}</td><td>${esc(r.credit_account)}</td><td>${r.require_approval ? "yes" : "no"}</td><td>${esc(r.tag || "")}</td></tr>`
+      ).join("") || '<tr><td colspan="5">No rules</td></tr>';
+
+      const imps = out.imports || [];
+      $("#tbl-imports tbody").innerHTML = imps.map(i =>
+        `<tr><td>${esc(i.id)}</td><td>${esc(i.log_type)}</td><td>${esc(i.rows_count)}</td><td>${esc(JSON.stringify(i.summary || {}))}</td><td>${esc(i.imported_at)}</td></tr>`
+      ).join("") || '<tr><td colspan="5">No imports</td></tr>';
+
+      const entries = out.entries || [];
+      $("#tbl-entries tbody").innerHTML = entries.map(e =>
+        `<tr><td>${esc(e.id)}</td><td>${esc(e.created_at)}</td><td>${esc(e.category)}</td><td>${esc((e.amount || 0).toLocaleString())}</td>` +
+        `<td>${esc(e.status)}</td><td>${esc(e.actor || "")}</td><td>${esc(e.description || "")}</td><td>${esc(e.debit_sum || 0)}</td><td>${esc(e.credit_sum || 0)}</td></tr>`
+      ).join("") || '<tr><td colspan="9">No journal entries</td></tr>';
+    }
+
+    $("#btn-refresh").addEventListener("click", load);
+    $("#btn-task-save").addEventListener("click", async () => {
+      const out = await post("/dashboard/api/economy/task", {
+        title: $("#task-title").value || "",
+        description: $("#task-desc").value || "",
+        reward_amount: parseInt($("#task-reward").value || "0", 10),
+        active: $("#task-active").checked,
+      });
+      if (!out.ok) return showErr(out.error || "Task save failed");
+      $("#task-title").value = "";
+      $("#task-desc").value = "";
+      await load();
+    });
+    $("#btn-award").addEventListener("click", async () => {
+      const out = await post("/dashboard/api/economy/award", {
+        task_id: parseInt($("#award-task-id").value || "0", 10),
+        player_nickname: $("#award-player").value || "",
+        quantity: parseInt($("#award-qty").value || "0", 10),
+        approved_by: $("#award-by").value || "dashboard_admin",
+        note: $("#award-note").value || "",
+      });
+      if (!out.ok) return showErr(out.error || "Award failed");
+      await load();
+    });
+    $("#btn-rule-save").addEventListener("click", async () => {
+      const out = await post("/dashboard/api/economy/routing-rule", {
+        category: $("#rule-cat").value || "",
+        debit_account: $("#rule-dt").value || "",
+        credit_account: $("#rule-kt").value || "",
+        require_approval: $("#rule-approval").checked,
+        tag: $("#rule-tag").value || "",
+      });
+      if (!out.ok) return showErr(out.error || "Rule save failed");
+      await load();
+    });
+    $("#btn-op-create").addEventListener("click", async () => {
+      const out = await post("/dashboard/api/economy/route-op", {
+        category: $("#op-cat").value || "",
+        amount: parseInt($("#op-amount").value || "0", 10),
+        description: $("#op-desc").value || "",
+        actor: $("#op-actor").value || "dashboard",
+        source: "economy_dashboard",
+      });
+      if (!out.ok) return showErr(out.error || "Operation failed");
+      await load();
+    });
+    $("#btn-log-import").addEventListener("click", async () => {
+      const out = await post("/dashboard/api/economy/import-log", {
+        log_type: $("#log-type").value || "silver",
+        content: $("#log-content").value || "",
+      });
+      if (!out.ok) return showErr(out.error || "Import failed");
+      await load();
+    });
+    $("#btn-price").addEventListener("click", async () => {
+      const qs = new URLSearchParams({
+        item_id: $("#price-item").value || "",
+        location: $("#price-location").value || "",
+        quality: $("#price-quality").value || "1",
+      });
+      const out = await fetch("/dashboard/api/economy/price?" + qs.toString(), { credentials: "same-origin" })
+        .then(r => r.json()).catch(e => ({ ok:false, error:String(e) }));
+      $("#price-json").textContent = JSON.stringify(out, null, 2);
+    });
+
+    load().catch((e) => showErr(String(e)));
+  })();
+  </script>
+</body>
+</html>
