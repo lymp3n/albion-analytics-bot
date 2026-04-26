@@ -68,7 +68,6 @@ def get_economy_sync_connection() -> Generator[Tuple[Any, str], None, None]:
 
     dsn = _normalize_postgres_url(url)
     conn = psycopg2.connect(dsn, connect_timeout=10)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
     try:
         yield conn, "postgres"
     finally:
@@ -76,7 +75,12 @@ def get_economy_sync_connection() -> Generator[Tuple[Any, str], None, None]:
 
 
 def fetch_all(conn, backend: str, sql: str, params: Optional[tuple] = None) -> List[dict]:
-    cur = conn.cursor()
+    if backend == "postgres":
+        import psycopg2.extras
+
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    else:
+        cur = conn.cursor()
     p = params or ()
     if backend == "sqlite":
         q = re.sub(r"\$\d+", "?", sql)
@@ -89,7 +93,12 @@ def fetch_all(conn, backend: str, sql: str, params: Optional[tuple] = None) -> L
 
 
 def fetch_one(conn, backend: str, sql: str, params: Optional[tuple] = None) -> Optional[dict]:
-    cur = conn.cursor()
+    if backend == "postgres":
+        import psycopg2.extras
+
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    else:
+        cur = conn.cursor()
     p = params or ()
     if backend == "sqlite":
         q = re.sub(r"\$\d+", "?", sql)
