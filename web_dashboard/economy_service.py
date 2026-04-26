@@ -388,6 +388,7 @@ def _seed_defaults(conn, backend: str) -> None:
         ("1300", "Receivables", "asset"),
         ("2000", "Payables", "liability"),
         ("3000", "Guild Capital", "equity"),
+        ("3100", "Energy Capital", "equity"),
         ("4000", "Content Revenue", "income"),
         ("4100", "Gear Sale Revenue", "income"),
         ("4200", "Rent Revenue", "income"),
@@ -464,6 +465,61 @@ def _seed_defaults(conn, backend: str) -> None:
                 "INSERT OR IGNORE INTO econ_config (key, value) VALUES (?, ?)",
                 (k, v),
             )
+    conn.commit()
+
+    _seed_opening_balances_from_config(conn, backend)
+
+
+def _seed_opening_balances_from_config(conn, backend: str) -> None:
+    """
+    Variant A:
+    - treat treasury_* config values as initial balances only
+    - write them into the journal as opening posted entries (idempotent)
+    - KPI balance is then derived from posted journal lines
+    """
+    cfg = get_config(conn, backend)
+    cash_s = str(cfg.get("treasury_cash_current") or "").strip()
+    energy_s = str(cfg.get("treasury_energy_current") or "").strip()
+
+    def _to_pos_int(s: str) -> int:
+        return int(s) if s and s.lstrip("-").isdigit() and int(s) > 0 else 0
+
+    cash_amt = _to_pos_int(cash_s)
+    energy_amt = _to_pos_int(energy_s)
+
+    if cash_amt > 0:
+        _seed_opening_entry(conn, backend, category="opening_cash", amount=cash_amt, asset_code="1000", equity_code="3000")
+    if energy_amt > 0:
+        _seed_opening_entry(conn, backend, category="opening_energy", amount=energy_amt, asset_code="1100", equity_code="3100")
+
+
+def _seed_opening_entry(conn, backend: str, *, category: str, amount: int, asset_code: str, equity_code: str) -> None:
+    exists = fetch_one(conn, backend, "SELECT id FROM econ_journal_entries WHERE category=$1 LIMIT 1", (category,))
+    if exists:
+        return
+    entry_id = _insert_entry(
+        conn,
+        backend,
+        category,
+        int(amount),
+        f"Opening balance seed for account {asset_code}.",
+        "system_seed",
+        "economy_seed",
+        "posted",
+    )
+    lines = [(asset_code, "debit", int(amount)), (equity_code, "credit", int(amount))]
+    _validate_double_entry(lines)
+    for acc, side, a in lines:
+        _insert_line(conn, backend, entry_id, acc, side, a)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="seed_opening_balance",
+        entity_type="journal_entry",
+        entity_id=str(entry_id),
+        actor="system_seed",
+        payload={"category": category, "amount": int(amount), "asset_code": asset_code, "equity_code": equity_code},
+    )
     conn.commit()
 
 
@@ -1853,13 +1909,6 @@ def balance_snapshot(conn, backend: str) -> dict:
         items.append(rec)
     cash_balance = next((int(i.get("balance") or 0) for i in items if str(i.get("code")) == "1000"), 0)
     energy_balance = next((int(i.get("balance") or 0) for i in items if str(i.get("code")) == "1100"), 0)
-    cfg = get_config(conn, backend)
-    cash_override = cfg.get("treasury_cash_current")
-    energy_override = cfg.get("treasury_energy_current")
-    if cash_override and str(cash_override).lstrip("-").isdigit():
-        cash_balance = int(cash_override)
-    if energy_override and str(energy_override).lstrip("-").isdigit():
-        energy_balance = int(energy_override)
     return {
         "as_of_utc": _utc_now(),
         "cash_balance": cash_balance,
