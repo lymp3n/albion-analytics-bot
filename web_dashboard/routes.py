@@ -43,7 +43,6 @@ from web_dashboard.economy_service import (
     create_manual_loot_buyback_from_price,
     create_regear_request,
     issue_regear_request,
-    award_task_completion,
     balance_snapshot,
     cashflow_summary,
     create_routed_operation,
@@ -730,14 +729,14 @@ def register_dashboard(app: Flask) -> None:
         try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
-                out = award_task_completion(
+                out = create_routed_operation(
                     conn,
                     backend,
-                    task_id=int(body.get("task_id") or 0),
-                    player_nickname=str(body.get("player_nickname") or "").strip(),
-                    quantity=int(body.get("quantity") or 0),
-                    approved_by=str(body.get("approved_by") or "dashboard_admin").strip(),
-                    note=str(body.get("note") or "").strip(),
+                    category="reward_payout",
+                    amount=int(body.get("amount") or 0),
+                    description=str(body.get("player_nickname") or "").strip(),
+                    actor=str(body.get("approved_by") or "dashboard_admin").strip(),
+                    source="economy_dashboard",
                 )
         except Exception as e:
             return app.response_class(
