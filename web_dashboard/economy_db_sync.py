@@ -24,7 +24,9 @@ def _normalize_postgres_url(url: str) -> str:
 
 
 def _economy_db_url() -> str:
-    url = (os.environ.get("ECON_DATABASE_URL") or os.environ.get("DATABASE_URL") or "").strip()
+    # Economy DB is intended to be separate. Do NOT fall back to DATABASE_URL
+    # (it can be read-only / missing CREATE TABLE privileges in managed deployments).
+    url = (os.environ.get("ECON_DATABASE_URL") or "").strip()
     if url:
         return url
     # Safe default for deployments (e.g. Render) where env var might be missing.

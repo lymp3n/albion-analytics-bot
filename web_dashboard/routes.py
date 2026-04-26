@@ -629,6 +629,8 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         except Exception as e:
+            app.logger.exception("Economy loot-buyback failed")
+            print("Economy loot-buyback failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
@@ -681,6 +683,8 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         except Exception as e:
+            app.logger.exception("Economy regear failed")
+            print("Economy regear failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
@@ -711,6 +715,8 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         except Exception as e:
+            app.logger.exception("Economy award failed")
+            print("Economy award failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
@@ -741,6 +747,8 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         except Exception as e:
+            app.logger.exception("Economy route-op failed")
+            print("Economy route-op failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
@@ -879,6 +887,8 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         except Exception as e:
+            app.logger.exception("Economy import-log failed")
+            print("Economy import-log failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
