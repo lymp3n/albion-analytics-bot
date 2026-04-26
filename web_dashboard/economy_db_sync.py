@@ -24,17 +24,34 @@ def _normalize_postgres_url(url: str) -> str:
 
 
 def _economy_db_url() -> str:
-    return (os.environ.get("ECON_DATABASE_URL") or os.environ.get("DATABASE_URL") or "").strip()
+    url = (os.environ.get("ECON_DATABASE_URL") or os.environ.get("DATABASE_URL") or "").strip()
+    if url:
+        return url
+    # Safe default for deployments (e.g. Render) where env var might be missing.
+    # Prefer a local writable sqlite file under ./data; fall back to /tmp.
+    data_dir = os.path.abspath(os.path.join(os.getcwd(), "data"))
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        test_path = os.path.join(data_dir, "economy.db")
+        with open(test_path, "a", encoding="utf-8"):
+            pass
+        return f"sqlite:///{test_path}"
+    except Exception:
+        tmp_path = os.path.join(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp", "economy.db")
+        return f"sqlite:///{tmp_path}"
 
 
 @contextmanager
 def get_economy_sync_connection() -> Generator[Tuple[Any, str], None, None]:
     url = _economy_db_url()
-    if not url:
-        raise RuntimeError("ECON_DATABASE_URL (or DATABASE_URL fallback) is not set")
 
     if url.startswith("sqlite"):
         path = url.replace("sqlite:///", "").replace("sqlite://", "")
+        # Normalize relative paths to absolute, and ensure parent dir exists.
+        path = os.path.abspath(path)
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
