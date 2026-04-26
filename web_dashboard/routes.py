@@ -56,13 +56,11 @@ from web_dashboard.economy_service import (
     set_config_values,
     list_alerts,
     list_audit_trail,
-    list_bonus_awards,
     list_discrepancy_queue,
     list_pending_approvals,
     list_game_log_imports,
     list_recent_entries,
     list_routing_rules,
-    list_tasks,
     list_loot_buyback_requests,
     list_regear_requests,
     resolve_discrepancy,
@@ -71,8 +69,6 @@ from web_dashboard.economy_service import (
     review_pending_entry,
     run_alert_threshold_checks,
     upsert_routing_rule,
-    upsert_task,
-    delete_task,
 )
 
 from event_templates_store import read_raw_text, save_raw_text, templates_file_path
@@ -80,6 +76,9 @@ from event_templates_store import read_raw_text, save_raw_text, templates_file_p
 
 def register_dashboard(app: Flask) -> None:
     app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("DASHBOARD_SECRET") or "change-me-in-production"
+
+    def _econ_err(e: Exception) -> str:
+        return f"{type(e).__name__}: {e}"
 
     def dashboard_secret() -> str:
         return (os.environ.get("DASHBOARD_SECRET") or "").strip()
@@ -557,8 +556,6 @@ def register_dashboard(app: Flask) -> None:
                         "source": source_q,
                     },
                     "kpis": economy_kpis(conn, backend),
-                    "tasks": list_tasks(conn, backend),
-                    "awards": list_bonus_awards(conn, backend, 120),
                     "entries": list_recent_entries(
                         conn,
                         backend,
@@ -606,35 +603,11 @@ def register_dashboard(app: Flask) -> None:
                 payload["player_suggestions"] = []
         except Exception as e:
             return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps(payload, default=str), mimetype="application/json")
-
-    @app.route("/dashboard/api/economy/task", methods=["POST"])
-    @login_required
-    def dashboard_economy_task_upsert():
-        body = request.get_json(silent=True) or {}
-        try:
-            with get_economy_sync_connection() as (conn, backend):
-                ensure_economy_schema(conn, backend)
-                out = upsert_task(
-                    conn,
-                    backend,
-                    task_id=body.get("id"),
-                    title=str(body.get("title") or ""),
-                    description=str(body.get("description") or ""),
-                    reward_amount=int(body.get("reward_amount") or 0),
-                    active=bool(body.get("active", True)),
-                )
-        except Exception as e:
-            return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
-                mimetype="application/json",
-            )
-        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
 
     @app.route("/dashboard/api/economy/loot-buyback", methods=["POST"])
     @login_required
@@ -649,10 +622,16 @@ def register_dashboard(app: Flask) -> None:
                     buyback_price=int(body.get("buyback_price") or 0),
                     actor=str(body.get("approved_by") or "dashboard_admin").strip(),
                 )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
         except Exception as e:
             return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
@@ -695,32 +674,19 @@ def register_dashboard(app: Flask) -> None:
                         screenshot_url=screenshot_url,
                         note=str(body.get("note") or "").strip(),
                     )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
         except Exception as e:
             return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
-
-    @app.route("/dashboard/api/economy/task/delete", methods=["POST"])
-    @login_required
-    def dashboard_economy_task_delete():
-        body = request.get_json(silent=True) or {}
-        try:
-            task_id = int(body.get("id") or 0)
-            if task_id < 1:
-                raise ValueError("Invalid task id")
-            with get_economy_sync_connection() as (conn, backend):
-                ensure_economy_schema(conn, backend)
-                deleted = delete_task(conn, backend, task_id)
-        except Exception as e:
-            return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
-                mimetype="application/json",
-            )
-        return app.response_class(response=json.dumps({"ok": True, "deleted": deleted}, default=str), mimetype="application/json")
 
     @app.route("/dashboard/api/economy/award", methods=["POST"])
     @login_required
@@ -738,10 +704,16 @@ def register_dashboard(app: Flask) -> None:
                     actor=str(body.get("approved_by") or "dashboard_admin").strip(),
                     source="economy_dashboard",
                 )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
         except Exception as e:
             return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
@@ -762,10 +734,16 @@ def register_dashboard(app: Flask) -> None:
                     actor=str(body.get("actor") or "dashboard").strip(),
                     source=str(body.get("source") or "dashboard").strip(),
                 )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
         except Exception as e:
             return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")
@@ -894,10 +872,16 @@ def register_dashboard(app: Flask) -> None:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
                 out = import_game_log_csv(conn, backend, log_type=log_type, content=content)
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
         except Exception as e:
             return app.response_class(
-                response=json.dumps({"ok": False, "error": str(e)}, default=str),
-                status=400,
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "summary": out}, default=str), mimetype="application/json")

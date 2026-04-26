@@ -1459,10 +1459,7 @@ def list_game_log_imports(conn, backend: str, limit: int = 30) -> List[dict]:
 def economy_kpis(conn, backend: str) -> dict:
     accounts = fetch_all(conn, backend, "SELECT code, name, kind FROM econ_accounts ORDER BY code", ())
     total_entries = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_journal_entries", ())
-    total_tasks = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_guild_bonus_tasks", ())
-    total_awards = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_guild_bonus_awards", ())
     pending = fetch_one(conn, backend, "SELECT COUNT(*) AS c FROM econ_journal_entries WHERE status='pending'", ())
-    rewards_sum = fetch_one(conn, backend, "SELECT COALESCE(SUM(reward_total),0) AS s FROM econ_guild_bonus_awards", ())
     unresolved_discrepancies = fetch_one(
         conn, backend, "SELECT COUNT(*) AS c FROM econ_import_discrepancies WHERE status='open'", ()
     )
@@ -1470,10 +1467,7 @@ def economy_kpis(conn, backend: str) -> dict:
     return {
         "accounts_count": len(accounts),
         "entries_count": int((total_entries or {}).get("c") or 0),
-        "tasks_count": int((total_tasks or {}).get("c") or 0),
-        "awards_count": int((total_awards or {}).get("c") or 0),
         "pending_entries": int((pending or {}).get("c") or 0),
-        "awards_total": int((rewards_sum or {}).get("s") or 0),
         "unresolved_discrepancies": int((unresolved_discrepancies or {}).get("c") or 0),
         "open_alerts": int((open_alerts or {}).get("c") or 0),
     }
