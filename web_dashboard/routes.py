@@ -61,6 +61,7 @@ from web_dashboard.economy_service import (
     list_pending_approvals,
     list_game_log_imports,
     list_import_player_totals,
+    list_current_player_totals,
     list_recent_entries,
     list_routing_rules,
     list_loot_buyback_requests,
@@ -964,9 +965,10 @@ def register_dashboard(app: Flask) -> None:
     def dashboard_economy_player_balances():
         log_type = str(request.args.get("log_type") or "").strip().lower()
         sign = str(request.args.get("sign") or "all").strip().lower()
+        scope = str(request.args.get("scope") or "").strip().lower()
         try:
             import_id_raw = str(request.args.get("import_id") or "").strip()
-            import_id = int(import_id_raw) if import_id_raw else None
+            import_id = int(import_id_raw) if (import_id_raw and import_id_raw.isdigit()) else None
         except ValueError:
             import_id = None
         try:
@@ -987,16 +989,27 @@ def register_dashboard(app: Flask) -> None:
         try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
-                rows = list_import_player_totals(
-                    conn,
-                    backend,
-                    log_type=log_type,
-                    import_id=import_id,
-                    sign=sign,
-                    min_amount=min_amount,
-                    max_amount=max_amount,
-                    limit=limit,
-                )
+                if scope == "current" or import_id_raw == "__current":
+                    rows = list_current_player_totals(
+                        conn,
+                        backend,
+                        log_type=log_type,
+                        sign=sign,
+                        min_amount=min_amount,
+                        max_amount=max_amount,
+                        limit=limit,
+                    )
+                else:
+                    rows = list_import_player_totals(
+                        conn,
+                        backend,
+                        log_type=log_type,
+                        import_id=import_id,
+                        sign=sign,
+                        min_amount=min_amount,
+                        max_amount=max_amount,
+                        limit=limit,
+                    )
         except ValueError as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),

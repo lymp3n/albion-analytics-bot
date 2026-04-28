@@ -1876,6 +1876,56 @@ def list_import_player_totals(
     return [dict(r) for r in rows]
 
 
+def list_current_player_totals(
+    conn,
+    backend: str,
+    *,
+    log_type: str,
+    sign: str = "all",
+    min_amount: Optional[int] = None,
+    max_amount: Optional[int] = None,
+    limit: int = 300,
+) -> List[dict]:
+    if log_type not in ("silver", "energy"):
+        raise ValueError("log_type must be silver or energy")
+    lim = max(10, min(int(limit), 1000))
+    sign_norm = str(sign or "all").strip().lower()
+    if sign_norm not in ("all", "pos", "neg"):
+        raise ValueError("sign must be all, pos or neg")
+
+    where = ["r.log_type = $1"]
+    params: List[object] = [log_type]
+    where_sql = " AND ".join(where)
+    having_parts: List[str] = []
+    if sign_norm == "pos":
+        having_parts.append("SUM(r.amount) > 0")
+    if sign_norm == "neg":
+        having_parts.append("SUM(r.amount) < 0")
+    if min_amount is not None:
+        having_parts.append(f"ABS(SUM(r.amount)) >= ${len(params)+1}")
+        params.append(abs(int(min_amount)))
+    if max_amount is not None and int(max_amount) > 0:
+        having_parts.append(f"ABS(SUM(r.amount)) <= ${len(params)+1}")
+        params.append(abs(int(max_amount)))
+    having_sql = ("HAVING " + " AND ".join(having_parts)) if having_parts else ""
+    rows = fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT COALESCE(NULLIF(TRIM(r.player_name), ''), 'unknown') AS player_name,
+               SUM(r.amount) AS net_amount
+        FROM econ_game_log_rows r
+        WHERE {where_sql}
+        GROUP BY COALESCE(NULLIF(TRIM(r.player_name), ''), 'unknown')
+        {having_sql}
+        ORDER BY ABS(SUM(r.amount)) DESC, player_name ASC
+        LIMIT {lim}
+        """,
+        tuple(params),
+    )
+    return [dict(r) for r in rows]
+
+
 def list_game_log_imports(conn, backend: str, limit: int = 30) -> List[dict]:
     lim = max(1, min(int(limit), 200))
     rows = fetch_all(

@@ -1050,15 +1050,14 @@
         const sel = $(selId);
         if (!sel) return;
         const arr = (imports || []).filter((x) => String(x.log_type || "").toLowerCase() === String(logType).toLowerCase());
-        const latest = _latestImportId(imports, logType);
-        const options = [`<option value="">latest</option>`].concat(arr.map((x) => {
+        const options = [`<option value="__current">current (all unique rows)</option>`].concat(arr.map((x) => {
           const id = esc(x.id);
           const ts = esc(String(x.imported_at || ""));
           const rows = esc(String(x.rows_count || ""));
           return `<option value="${id}">#${id} • ${rows} rows • ${ts}</option>`;
         }));
         sel.innerHTML = options.join("");
-        if (latest) sel.value = String(latest);
+        sel.value = "__current";
       }
 
       async function refreshPlayerBalances(kind) {
@@ -1078,6 +1077,7 @@
         const qs = new URLSearchParams({
           log_type: logType,
           import_id: String(selImport?.value || ""),
+          scope: String(selImport?.value || "") === "__current" ? "current" : "import",
           sign: String(selSign?.value || "all"),
           min: String(inpMin?.value || ""),
           max: String(inpMax?.value || ""),
@@ -1097,7 +1097,7 @@
           const sign = amt >= 0 ? "+" : "";
           return `<option value="${nm}">${nm} — ${sign}${fmt(amt)}</option>`;
         }).join("") || `<option value="">(no rows)</option>`;
-        meta.textContent = `rows: ${rows.length} | meaning: Deposit adds, Withdrawal subtracts (net)`;
+        meta.textContent = `rows: ${rows.length} | source: ${String(selImport?.value || "") === "__current" ? "all unique imported CSV rows" : "selected import"} | meaning: Deposit adds, Withdrawal subtracts (net)`;
       }
 
       async function load() {
@@ -1182,7 +1182,7 @@
 
         const imports = out.imports || [];
         $("#tbl-imports tbody").innerHTML = imports.map((i) =>
-          `<tr><td>${esc(i.id)}</td><td>${esc(i.log_type)}</td><td>${esc(i.rows_count)}</td><td>${esc(JSON.stringify(i.summary || {}))}</td><td>${esc(i.imported_at)}</td></tr>`
+          `<tr><td>${esc(i.id)}</td><td>${esc(i.log_type)}</td><td>${esc(i.rows_count)}</td><td>${esc(JSON.stringify(i.summary || {}))} <span class="status approved" style="margin-left:6px;">u:${esc((i.summary || {}).rows_unique_imported ?? i.rows_count)} / skip:${esc((i.summary || {}).rows_duplicates_skipped ?? 0)}</span></td><td>${esc(i.imported_at)}</td></tr>`
         ).join("") || `<tr><td colspan="5">${tr("no_imports")}</td></tr>`;
         _fillImportSelect("#bal-energy-import", imports, "energy");
         _fillImportSelect("#bal-silver-import", imports, "silver");
