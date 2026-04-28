@@ -62,6 +62,12 @@
             min-width:88px;
             padding:8px 10px;
         }
+        .btn-compact {
+            padding: 8px 10px;
+            min-width: auto !important;
+            width: auto !important;
+            flex: 0 0 auto !important;
+        }
         .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:24px; }
         .kpi-card { background:var(--bg-card); backdrop-filter:blur(10px); border:1px solid rgba(0,245,255,0.2); border-radius:12px; padding:20px; box-shadow:0 0 20px rgba(0,245,255,0.1); transition:all .3s ease; }
         .kpi-card:hover { transform:translateY(-2px); box-shadow:0 4px 30px rgba(0,245,255,0.2); }
@@ -76,6 +82,40 @@
         .action-btn { width:100%; padding:12px 16px; background:transparent; border:1px solid rgba(0,245,255,.3); border-radius:8px; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; gap:12px; margin-bottom:12px; transition:all .3s ease; font-family:'Inter',sans-serif; }
         .action-btn:hover { background:rgba(0,245,255,.1); border-color:var(--neon-cyan); color:var(--neon-cyan); box-shadow:0 0 15px rgba(0,245,255,.2); transform:translateX(4px); }
         .action-btn.primary { background:linear-gradient(135deg,rgba(0,245,255,.2),rgba(123,44,191,.2)); border-color:var(--neon-cyan); color:var(--neon-cyan); }
+        .treasury-strip {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,245,255,.22);
+            background: rgba(15,23,42,.35);
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 6px;
+        }
+        .treasury-strip .ttl {
+            font-size: 11px;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            color: rgba(148,163,184,.95);
+        }
+        .treasury-strip .vals {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            color: #dbeafe;
+        }
+        .treasury-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(0,245,255,.22);
+            background: rgba(2,6,23,.25);
+        }
+        .treasury-pill b { color: var(--neon-cyan); }
         #btn-reset-filters {
             background: linear-gradient(135deg, rgba(239,68,68,.85), rgba(190,24,93,.85));
             border-color: rgba(248,113,113,.9);
@@ -365,7 +405,7 @@
                     <button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Apply period/filters to data and reports." data-i18n="btn_apply">Apply</button>
                     <button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Reset filters back to default values." data-i18n="btn_reset">Reset</button>
                     <button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Save alert thresholds (cash/expense/unmatched)." data-i18n="btn_save_thresholds">Save thresholds</button>
-                    <button class="btn btn-primary tooltip" id="btn-apply-treasury" data-tip="Set treasury snapshot targets and auto-create adjustment postings." data-i18n="btn_apply_treasury">Apply treasury</button>
+                    <button class="btn btn-primary btn-compact tooltip" id="btn-apply-treasury" data-tip="Set treasury snapshot targets and auto-create adjustment postings." data-i18n="btn_apply_treasury">Apply</button>
                 </div>
                 <p class="mono" id="alert-state"></p>
             </section>
@@ -383,6 +423,14 @@
                 <div class="section-title">⚡ Quick Actions</div>
                 <button class="action-btn tooltip" id="btn-focus-op" data-tip="Open operation form and focus action tab."><span>➕</span><span>New Operation</span></button>
                 <button class="action-btn tooltip" id="btn-import-csv" data-tip="Open CSV import modal directly."><span>📥</span><span>Import CSV</span></button>
+                <div class="treasury-strip">
+                    <div class="ttl" data-i18n="treasury_now">Treasury now</div>
+                    <div class="vals">
+                        <span class="treasury-pill">Silver: <b id="treasury-now-silver">0</b></span>
+                        <span class="treasury-pill">Energy: <b id="treasury-now-energy">0</b></span>
+                    </div>
+                    <div class="mono" id="treasury-now-hint"></div>
+                </div>
             </div>
 
             <div class="chart-container micro-pop" id="chart-box">
@@ -510,7 +558,9 @@
           btn_apply: "Apply",
           btn_reset: "Reset",
           btn_save_thresholds: "Save thresholds",
-          btn_apply_treasury: "Apply treasury",
+          btn_apply_treasury: "Apply",
+          treasury_now: "Treasury now",
+          confirm_treasury: "Apply treasury snapshot? This will create a posted adjustment entry to match the target balances.",
           api_status: "🔌 API Status",
           recon_preview: "🔄 Reconciliation Preview",
           ops_title: "🧩 Operations Catalog",
@@ -556,6 +606,8 @@
           btn_reset: "Сброс",
           btn_save_thresholds: "Сохранить пороги",
           btn_apply_treasury: "Применить казну",
+          treasury_now: "Казна сейчас",
+          confirm_treasury: "Применить снимок казны? Будет создана проведённая корректирующая проводка, чтобы баланс точно совпал с целями.",
           api_status: "🔌 Статус API",
           recon_preview: "🔄 Превью сверки",
           ops_title: "🧩 Каталог операций",
@@ -987,6 +1039,12 @@
         const as = out.alert_state || {};
         $("#alert-state").textContent = `cash=${fmt(as.cash_balance)} | expense_30d=${fmt(as.expense_30d)} | unmatched=${fmt(as.unmatched_records)}`;
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
+        const treasuryHint = $("#treasury-now-hint");
+        if (treasuryHint) treasuryHint.textContent = "Balances are derived from POSTED entries only (pending does not affect KPI).";
+        const tnS = $("#treasury-now-silver");
+        const tnE = $("#treasury-now-energy");
+        if (tnS) tnS.textContent = fmt(cash);
+        if (tnE) tnE.textContent = fmt(energy);
 
         const entries = out.entries || [];
         renderRealChart(entries);
@@ -1086,6 +1144,8 @@
       });
       on("#btn-apply-treasury", "click", async () => {
         const btn = $("#btn-apply-treasury");
+        const ok = window.confirm(tr("confirm_treasury"));
+        if (!ok) return;
         setBusy(btn, true);
         const cash = parseInt($("#treasury-cash").value || "0", 10);
         const energy = parseInt($("#treasury-energy").value || "0", 10);
