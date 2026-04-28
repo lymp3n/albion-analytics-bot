@@ -60,6 +60,7 @@ from web_dashboard.economy_service import (
     list_discrepancy_queue,
     list_pending_approvals,
     list_game_log_imports,
+    list_import_player_totals,
     list_recent_entries,
     list_routing_rules,
     list_loot_buyback_requests,
@@ -905,9 +906,10 @@ def register_dashboard(app: Flask) -> None:
         try:
             log_type = str(body.get("log_type") or "").strip().lower()
             content = str(body.get("content") or "")
+            smart_merge = bool(body.get("smart_merge", True))
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
-                out = import_game_log_csv(conn, backend, log_type=log_type, content=content)
+                out = import_game_log_csv(conn, backend, log_type=log_type, content=content, smart_merge=smart_merge)
         except ValueError as e:
             return app.response_class(
                 response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
@@ -954,6 +956,63 @@ def register_dashboard(app: Flask) -> None:
         return app.response_class(
             response=json.dumps(out, default=str),
             status=status,
+            mimetype="application/json",
+        )
+
+    @app.route("/dashboard/api/economy/player-balances", methods=["GET"])
+    @login_required
+    def dashboard_economy_player_balances():
+        log_type = str(request.args.get("log_type") or "").strip().lower()
+        sign = str(request.args.get("sign") or "all").strip().lower()
+        try:
+            import_id_raw = str(request.args.get("import_id") or "").strip()
+            import_id = int(import_id_raw) if import_id_raw else None
+        except ValueError:
+            import_id = None
+        try:
+            min_amount_raw = str(request.args.get("min") or "").strip()
+            min_amount = int(min_amount_raw) if min_amount_raw else None
+        except ValueError:
+            min_amount = None
+        try:
+            max_amount_raw = str(request.args.get("max") or "").strip()
+            max_amount = int(max_amount_raw) if max_amount_raw else None
+        except ValueError:
+            max_amount = None
+        try:
+            limit_raw = str(request.args.get("limit") or "").strip()
+            limit = int(limit_raw) if limit_raw else 300
+        except ValueError:
+            limit = 300
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                rows = list_import_player_totals(
+                    conn,
+                    backend,
+                    log_type=log_type,
+                    import_id=import_id,
+                    sign=sign,
+                    min_amount=min_amount,
+                    max_amount=max_amount,
+                    limit=limit,
+                )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        except Exception as e:
+            app.logger.exception("Economy player-balances failed")
+            print("Economy player-balances failed:", _econ_err(e), flush=True)
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "rows": rows}, default=str),
             mimetype="application/json",
         )
 

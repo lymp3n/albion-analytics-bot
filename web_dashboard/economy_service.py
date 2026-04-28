@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import hashlib
 from difflib import SequenceMatcher
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -97,6 +98,43 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 summary_json TEXT NOT NULL,
                 imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_import_player_totals (
+                id SERIAL PRIMARY KEY,
+                import_id INTEGER NOT NULL REFERENCES econ_game_log_imports(id) ON DELETE CASCADE,
+                log_type TEXT NOT NULL,
+                player_name TEXT NOT NULL,
+                net_amount BIGINT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_game_log_rows (
+                id SERIAL PRIMARY KEY,
+                import_id INTEGER NOT NULL REFERENCES econ_game_log_imports(id) ON DELETE CASCADE,
+                log_type TEXT NOT NULL,
+                row_hash TEXT NOT NULL,
+                occurred_at TEXT,
+                player_name TEXT,
+                operation TEXT,
+                amount BIGINT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_econ_import_player_totals_import
+            ON econ_import_player_totals(import_id, log_type)
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_econ_game_log_rows_unique
+            ON econ_game_log_rows(log_type, row_hash)
             """
         )
         cur.execute(
@@ -276,6 +314,45 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 summary_json TEXT NOT NULL,
                 imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_import_player_totals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                import_id INTEGER NOT NULL,
+                log_type TEXT NOT NULL,
+                player_name TEXT NOT NULL,
+                net_amount INTEGER NOT NULL,
+                FOREIGN KEY (import_id) REFERENCES econ_game_log_imports(id) ON DELETE CASCADE
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_game_log_rows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                import_id INTEGER NOT NULL,
+                log_type TEXT NOT NULL,
+                row_hash TEXT NOT NULL,
+                occurred_at TEXT,
+                player_name TEXT,
+                operation TEXT,
+                amount INTEGER NOT NULL,
+                FOREIGN KEY (import_id) REFERENCES econ_game_log_imports(id) ON DELETE CASCADE
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_econ_import_player_totals_import
+            ON econ_import_player_totals(import_id, log_type)
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_econ_game_log_rows_unique
+            ON econ_game_log_rows(log_type, row_hash)
             """
         )
         cur.execute(
@@ -1572,7 +1649,7 @@ def upsert_routing_rule(
     conn.commit()
 
 
-def import_game_log_csv(conn, backend: str, *, log_type: str, content: str) -> dict:
+def import_game_log_csv(conn, backend: str, *, log_type: str, content: str, smart_merge: bool = True) -> dict:
     if log_type not in ("silver", "energy"):
         raise ValueError("log_type must be silver or energy")
     if not isinstance(content, str) or not content.strip():
@@ -1580,11 +1657,17 @@ def import_game_log_csv(conn, backend: str, *, log_type: str, content: str) -> d
 
     rdr = csv.DictReader(io.StringIO(content))
     rows = [r for r in rdr]
+    unique_rows: List[dict] = []
+    duplicates_skipped = 0
+    if smart_merge:
+        unique_rows, duplicates_skipped = _dedupe_rows_for_import(conn, backend, log_type=log_type, rows=rows)
+    else:
+        unique_rows = list(rows)
     deposits = 0
     withdrawals = 0
     dep_sum = 0
     wd_sum = 0
-    for r in rows:
+    for r in unique_rows:
         try:
             amt = int(float(str(r.get("Amount", "0")).strip().replace(",", "")))
         except ValueError:
@@ -1595,9 +1678,24 @@ def import_game_log_csv(conn, backend: str, *, log_type: str, content: str) -> d
         else:
             withdrawals += 1
             wd_sum += abs(amt)
+    # Per-player net balances from this CSV import (Deposit adds, Withdrawal subtracts).
+    player_totals: Dict[str, int] = {}
+    for r in unique_rows:
+        name = str(r.get("Player") or r.get("player") or "").strip()
+        if not name:
+            name = _guess_name(r)
+        if not name:
+            continue
+        amt = _to_int_amount(r.get("Amount"))
+        if not amt:
+            continue
+        player_totals[name] = int(player_totals.get(name, 0)) + int(amt)
     summary = {
         "log_type": log_type,
         "rows": len(rows),
+        "rows_unique_imported": len(unique_rows),
+        "rows_duplicates_skipped": int(duplicates_skipped),
+        "smart_merge": bool(smart_merge),
         "deposits_count": deposits,
         "withdrawals_count": withdrawals,
         "deposits_sum": dep_sum,
@@ -1623,7 +1721,9 @@ def import_game_log_csv(conn, backend: str, *, log_type: str, content: str) -> d
         import_id = int(cur.lastrowid)
     conn.commit()
     summary["import_id"] = import_id
-    discrepancies = _build_import_discrepancies(conn, backend, import_id=import_id, rows=rows)
+    _persist_import_rows(conn, backend, import_id=import_id, log_type=log_type, rows=unique_rows)
+    _upsert_import_player_totals(conn, backend, import_id=import_id, log_type=log_type, totals=player_totals)
+    discrepancies = _build_import_discrepancies(conn, backend, import_id=import_id, rows=unique_rows)
     summary["discrepancies"] = discrepancies
     _log_audit(
         conn,
@@ -1636,6 +1736,144 @@ def import_game_log_csv(conn, backend: str, *, log_type: str, content: str) -> d
     )
     conn.commit()
     return summary
+
+
+def _dedupe_rows_for_import(conn, backend: str, *, log_type: str, rows: List[dict]) -> Tuple[List[dict], int]:
+    unique_rows: List[dict] = []
+    skipped = 0
+    in_file_seen: set[str] = set()
+    for row in rows:
+        row_hash = _log_row_hash(log_type=log_type, row=row)
+        if row_hash in in_file_seen:
+            skipped += 1
+            continue
+        in_file_seen.add(row_hash)
+        exists = fetch_one(
+            conn,
+            backend,
+            "SELECT id FROM econ_game_log_rows WHERE log_type=$1 AND row_hash=$2 LIMIT 1",
+            (str(log_type), row_hash),
+        )
+        if exists:
+            skipped += 1
+            continue
+        unique_rows.append(row)
+    return unique_rows, skipped
+
+
+def _persist_import_rows(conn, backend: str, *, import_id: int, log_type: str, rows: List[dict]) -> None:
+    cur = conn.cursor()
+    for row in rows:
+        row_hash = _log_row_hash(log_type=log_type, row=row)
+        occurred_at = _norm_str(row.get("Date") or row.get("date") or row.get("Timestamp") or row.get("timestamp"))
+        player_name = _guess_name(row) or None
+        operation = _norm_str(row.get("Operation") or row.get("Type") or row.get("operation") or row.get("type")) or None
+        amount = int(_to_int_amount(row.get("Amount")))
+        if backend == "postgres":
+            cur.execute(
+                """
+                INSERT INTO econ_game_log_rows (import_id, log_type, row_hash, occurred_at, player_name, operation, amount)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (log_type, row_hash) DO NOTHING
+                """,
+                (int(import_id), str(log_type), row_hash, occurred_at, player_name, operation, amount),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO econ_game_log_rows (import_id, log_type, row_hash, occurred_at, player_name, operation, amount)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (int(import_id), str(log_type), row_hash, occurred_at, player_name, operation, amount),
+            )
+    conn.commit()
+
+
+def _upsert_import_player_totals(conn, backend: str, *, import_id: int, log_type: str, totals: Dict[str, int]) -> None:
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute("DELETE FROM econ_import_player_totals WHERE import_id=%s AND log_type=%s", (int(import_id), str(log_type)))
+    else:
+        cur.execute("DELETE FROM econ_import_player_totals WHERE import_id=? AND log_type=?", (int(import_id), str(log_type)))
+    for player_name, net_amount in (totals or {}).items():
+        nm = str(player_name or "").strip()
+        if not nm:
+            continue
+        if backend == "postgres":
+            cur.execute(
+                """
+                INSERT INTO econ_import_player_totals (import_id, log_type, player_name, net_amount)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (int(import_id), str(log_type), nm, int(net_amount)),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO econ_import_player_totals (import_id, log_type, player_name, net_amount)
+                VALUES (?, ?, ?, ?)
+                """,
+                (int(import_id), str(log_type), nm, int(net_amount)),
+            )
+    conn.commit()
+
+
+def list_import_player_totals(
+    conn,
+    backend: str,
+    *,
+    log_type: str,
+    import_id: Optional[int],
+    sign: str = "all",
+    min_amount: Optional[int] = None,
+    max_amount: Optional[int] = None,
+    limit: int = 300,
+) -> List[dict]:
+    if log_type not in ("silver", "energy"):
+        raise ValueError("log_type must be silver or energy")
+    lim = max(10, min(int(limit), 1000))
+    sign_norm = str(sign or "all").strip().lower()
+    if sign_norm not in ("all", "pos", "neg"):
+        raise ValueError("sign must be all, pos or neg")
+
+    where = ["t.log_type = $1"]
+    params: List[object] = [log_type]
+
+    if import_id is not None and int(import_id) > 0:
+        where.append(f"t.import_id = ${len(params)+1}")
+        params.append(int(import_id))
+    else:
+        where.append(
+            f"t.import_id = (SELECT MAX(id) FROM econ_game_log_imports WHERE log_type = ${len(params)+1})"
+        )
+        params.append(log_type)
+
+    if sign_norm == "pos":
+        where.append("t.net_amount > 0")
+    if sign_norm == "neg":
+        where.append("t.net_amount < 0")
+
+    if min_amount is not None:
+        where.append(f"ABS(t.net_amount) >= ${len(params)+1}")
+        params.append(abs(int(min_amount)))
+    if max_amount is not None and int(max_amount) > 0:
+        where.append(f"ABS(t.net_amount) <= ${len(params)+1}")
+        params.append(abs(int(max_amount)))
+
+    where_sql = " AND ".join(where)
+    rows = fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT t.player_name, t.net_amount
+        FROM econ_import_player_totals t
+        WHERE {where_sql}
+        ORDER BY ABS(t.net_amount) DESC, t.player_name ASC
+        LIMIT {lim}
+        """,
+        tuple(params),
+    )
+    return [dict(r) for r in rows]
 
 
 def list_game_log_imports(conn, backend: str, limit: int = 30) -> List[dict]:
@@ -1764,6 +2002,20 @@ def _to_int_amount(val: object) -> int:
         return int(float(str(val or "0").strip().replace(",", "")))
     except ValueError:
         return 0
+
+
+def _norm_str(val: object) -> str:
+    return " ".join(str(val or "").strip().split())
+
+
+def _log_row_hash(*, log_type: str, row: dict) -> str:
+    # Canonical hash for cross-import dedupe (24h/7d/4w overlap safe).
+    date_s = _norm_str(row.get("Date") or row.get("date") or row.get("Timestamp") or row.get("timestamp"))
+    player_s = _norm_str(_guess_name(row))
+    op_s = _norm_str(row.get("Operation") or row.get("operation") or row.get("Type") or row.get("type"))
+    amount_s = str(_to_int_amount(row.get("Amount")))
+    payload = f"{str(log_type).strip().lower()}|{date_s}|{player_s}|{op_s}|{amount_s}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _build_import_discrepancies(conn, backend: str, *, import_id: int, rows: List[dict]) -> int:
