@@ -358,11 +358,14 @@
                     <div class="form-group"><label class="form-label">Unmatched threshold</label><input id="cfg-unmatched" class="form-input" type="number" min="0"></div>
                     <div class="form-group"><label class="form-label">Reviewed by</label><input id="review-by" class="form-input" value="dashboard_admin"></div>
                     <div class="form-group"><label class="form-label">Review note</label><input id="review-note" class="form-input" placeholder="optional reason"></div>
+                    <div class="form-group"><label class="form-label">Treasury silver (target)</label><input id="treasury-cash" class="form-input" type="number" min="0" value="282128000"></div>
+                    <div class="form-group"><label class="form-label">Treasury energy (target)</label><input id="treasury-energy" class="form-input" type="number" min="0" value="402"></div>
                 </div>
                 <div class="filters-actions">
                     <button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Apply period/filters to data and reports." data-i18n="btn_apply">Apply</button>
                     <button class="btn btn-secondary tooltip" id="btn-reset-filters" data-tip="Reset filters back to default values." data-i18n="btn_reset">Reset</button>
                     <button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Save alert thresholds (cash/expense/unmatched)." data-i18n="btn_save_thresholds">Save thresholds</button>
+                    <button class="btn btn-primary tooltip" id="btn-apply-treasury" data-tip="Set treasury snapshot targets and auto-create adjustment postings." data-i18n="btn_apply_treasury">Apply treasury</button>
                 </div>
                 <p class="mono" id="alert-state"></p>
             </section>
@@ -507,6 +510,7 @@
           btn_apply: "Apply",
           btn_reset: "Reset",
           btn_save_thresholds: "Save thresholds",
+          btn_apply_treasury: "Apply treasury",
           api_status: "🔌 API Status",
           recon_preview: "🔄 Reconciliation Preview",
           ops_title: "🧩 Operations Catalog",
@@ -551,6 +555,7 @@
           btn_apply: "Применить",
           btn_reset: "Сброс",
           btn_save_thresholds: "Сохранить пороги",
+          btn_apply_treasury: "Применить казну",
           api_status: "🔌 Статус API",
           recon_preview: "🔄 Превью сверки",
           ops_title: "🧩 Каталог операций",
@@ -1077,6 +1082,21 @@
         setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Thresholds save failed");
         toast("Thresholds saved");
+        await load();
+      });
+      on("#btn-apply-treasury", "click", async () => {
+        const btn = $("#btn-apply-treasury");
+        setBusy(btn, true);
+        const cash = parseInt($("#treasury-cash").value || "0", 10);
+        const energy = parseInt($("#treasury-energy").value || "0", 10);
+        const out = await post("/dashboard/api/economy/treasury-snapshot", {
+          cash: Number.isFinite(cash) ? cash : 0,
+          energy: Number.isFinite(energy) ? energy : 0,
+          actor: $("#review-by").value || "dashboard_admin",
+        });
+        setBusy(btn, false);
+        if (!out.ok) return showErr(out.error || "Treasury apply failed");
+        toast("Treasury snapshot applied");
         await load();
       });
       on("#btn-op-create", "click", async () => {

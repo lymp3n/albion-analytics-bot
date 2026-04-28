@@ -668,6 +668,57 @@ def set_config_values(conn, backend: str, values: dict, actor: str = "dashboard_
     conn.commit()
 
 
+def apply_treasury_snapshot(conn, backend: str, *, cash: int, energy: int, actor: str = "dashboard_admin") -> dict:
+    cash_i = int(cash)
+    energy_i = int(energy)
+    if cash_i < 0:
+        raise ValueError("cash must be >= 0")
+    if energy_i < 0:
+        raise ValueError("energy must be >= 0")
+
+    cur = conn.cursor()
+    for key, val in (("treasury_cash_current", str(cash_i)), ("treasury_energy_current", str(energy_i))):
+        if backend == "postgres":
+            cur.execute(
+                """
+                INSERT INTO econ_config (key, value, updated_at)
+                VALUES (%s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=CURRENT_TIMESTAMP
+                """,
+                (key, val),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO econ_config (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+                """,
+                (key, val),
+            )
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="apply_treasury_snapshot",
+        entity_type="econ_config",
+        entity_id="treasury",
+        actor=actor,
+        payload={"cash": cash_i, "energy": energy_i},
+    )
+    conn.commit()
+
+    # Create adjustment entries to match the new targets.
+    _ensure_treasury_adjustments_from_config(conn, backend)
+
+    return {
+        "ok": True,
+        "cash_target": cash_i,
+        "energy_target": energy_i,
+        "cash_balance_after": _posted_account_balance(conn, backend, "1000"),
+        "energy_balance_after": _posted_account_balance(conn, backend, "1100"),
+    }
+
+
 def _insert_entry(conn, backend: str, category: str, amount: int, description: str, actor: str, source: str, status: str) -> int:
     cur = conn.cursor()
     if backend == "postgres":

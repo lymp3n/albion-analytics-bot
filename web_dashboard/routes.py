@@ -54,6 +54,7 @@ from web_dashboard.economy_service import (
     import_game_log_csv,
     get_config,
     set_config_values,
+    apply_treasury_snapshot,
     list_alerts,
     list_audit_trail,
     list_discrepancy_queue,
@@ -823,6 +824,33 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps({"ok": True, "config": cfg}, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/treasury-snapshot", methods=["POST"])
+    @login_required
+    def dashboard_economy_treasury_snapshot():
+        body = request.get_json(silent=True) or {}
+        try:
+            cash = int(body.get("cash") or 0)
+            energy = int(body.get("energy") or 0)
+            actor = str(body.get("actor") or "dashboard_admin").strip() or "dashboard_admin"
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = apply_treasury_snapshot(conn, backend, cash=cash, energy=energy, actor=actor)
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        except Exception as e:
+            app.logger.exception("Economy treasury-snapshot failed")
+            print("Economy treasury-snapshot failed:", _econ_err(e), flush=True)
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps(out, default=str), mimetype="application/json")
 
     @app.route("/dashboard/api/economy/alert/ack", methods=["POST"])
     @login_required
