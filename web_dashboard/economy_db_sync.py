@@ -30,8 +30,10 @@ def _economy_db_url() -> str:
     if url:
         return url
     # Safe default for deployments (e.g. Render) where env var might be missing.
-    # Prefer a local writable sqlite file under ./data; fall back to /tmp.
-    data_dir = os.path.abspath(os.path.join(os.getcwd(), "data"))
+    # Use a stable path anchored to project root (not current working directory),
+    # so all workers/processes read the same sqlite file.
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    data_dir = os.path.abspath(os.path.join(project_root, "data"))
     try:
         os.makedirs(data_dir, exist_ok=True)
         test_path = os.path.join(data_dir, "economy.db")

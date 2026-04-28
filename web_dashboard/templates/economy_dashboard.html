@@ -408,6 +408,7 @@
                     <button class="btn btn-primary tooltip" id="btn-save-thresholds" data-tip="Save alert thresholds (cash/expense/unmatched)." data-i18n="btn_save_thresholds">Save thresholds</button>
                     <button class="btn btn-primary btn-compact tooltip" id="btn-apply-treasury" data-tip="Set treasury snapshot targets and auto-create adjustment postings." data-i18n="btn_apply_treasury">Apply</button>
                 </div>
+                <p class="mono" id="treasury-apply-status"></p>
                 <p class="mono" id="alert-state"></p>
             </section>
         </div>
@@ -1134,6 +1135,9 @@
         $("#cfg-low-cash").value = num(cfg.alert_low_cash_threshold, 2000000);
         $("#cfg-high-expense").value = num(cfg.alert_high_expense_30d_threshold, 25000000);
         $("#cfg-unmatched").value = num(cfg.alert_unmatched_records_threshold, 0);
+        // Keep treasury target inputs synchronized with persisted config.
+        $("#treasury-cash").value = num(cfg.treasury_cash_current, 282128000);
+        $("#treasury-energy").value = num(cfg.treasury_energy_current, 402);
         const as = out.alert_state || {};
         $("#alert-state").textContent = `cash=${fmt(as.cash_balance)} | expense_30d=${fmt(as.expense_30d)} | unmatched=${fmt(as.unmatched_records)}`;
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
@@ -1227,7 +1231,16 @@
       on("#btn-refresh", "click", load);
       on("#btn-api-refresh-now", "click", () => updateApiHealth().catch(() => {}));
       on("#btn-apply-filters", "click", load);
-      on("#btn-reset-filters", "click", async () => { $("#flt-days").value = "30"; $("#flt-status").value = ""; $("#flt-category").value = ""; $("#flt-source").value = ""; await load(); });
+      on("#btn-reset-filters", "click", async () => {
+        $("#flt-days").value = "30";
+        $("#flt-status").value = "";
+        $("#flt-category").value = "";
+        $("#flt-source").value = "";
+        // Restore defaults visually before load; load() then reapplies persisted DB config.
+        $("#treasury-cash").value = "282128000";
+        $("#treasury-energy").value = "402";
+        await load();
+      });
       on("#btn-bal-energy", "click", () => refreshPlayerBalances("energy").catch(() => {}));
       on("#btn-bal-silver", "click", () => refreshPlayerBalances("silver").catch(() => {}));
       on("#btn-save-thresholds", "click", async () => {
@@ -1260,6 +1273,10 @@
         });
         setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Treasury apply failed");
+        const st = $("#treasury-apply-status");
+        if (st) {
+          st.textContent = `Applied target: Silver ${fmt(out.cash_target)} | Energy ${fmt(out.energy_target)} -> now Silver ${fmt(out.cash_balance_after)} | Energy ${fmt(out.energy_balance_after)}`;
+        }
         toast("Treasury snapshot applied");
         await load();
       });
