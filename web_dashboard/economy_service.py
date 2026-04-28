@@ -444,12 +444,13 @@ def _seed_defaults(conn, backend: str) -> None:
                 """,
                 (category, dt, kt, 1 if need_approval else 0, tag),
             )
+    # Base treasury snapshot (used as "target" for seeding/adjustments).
     config_defaults = {
         "alert_low_cash_threshold": "2000000",
         "alert_high_expense_30d_threshold": "25000000",
         "alert_unmatched_records_threshold": "0",
-        "treasury_cash_current": "295531023",
-        "treasury_energy_current": "379",
+        "treasury_cash_current": "282128000",
+        "treasury_energy_current": "402",
     }
     for k, v in config_defaults.items():
         if backend == "postgres":
@@ -468,6 +469,104 @@ def _seed_defaults(conn, backend: str) -> None:
     conn.commit()
 
     _seed_opening_balances_from_config(conn, backend)
+    _ensure_treasury_adjustments_from_config(conn, backend)
+
+
+def _posted_account_balance(conn, backend: str, account_code: str) -> int:
+    row = fetch_one(
+        conn,
+        backend,
+        """
+        SELECT
+          COALESCE(SUM(CASE WHEN l.side='debit' THEN l.amount ELSE 0 END),0) AS debit_total,
+          COALESCE(SUM(CASE WHEN l.side='credit' THEN l.amount ELSE 0 END),0) AS credit_total
+        FROM econ_journal_lines l
+        JOIN econ_journal_entries e ON e.id = l.entry_id
+        WHERE e.status='posted' AND l.account_code = $1
+        """,
+        (str(account_code),),
+    )
+    debit_total = int((row or {}).get("debit_total") or 0)
+    credit_total = int((row or {}).get("credit_total") or 0)
+    # asset balance convention for 1000/1100
+    return debit_total - credit_total
+
+
+def _ensure_treasury_adjustments_from_config(conn, backend: str) -> None:
+    """
+    Bring balances to configured targets using a one-time adjustment entry.
+    This is idempotent per target value via unique category name.
+    """
+    cfg = get_config(conn, backend)
+    cash_s = str(cfg.get("treasury_cash_current") or "").strip()
+    energy_s = str(cfg.get("treasury_energy_current") or "").strip()
+
+    def _to_int(s: str) -> int:
+        return int(s) if s and s.lstrip("-").isdigit() else 0
+
+    cash_target = _to_int(cash_s)
+    energy_target = _to_int(energy_s)
+
+    if cash_target:
+        cur_cash = _posted_account_balance(conn, backend, "1000")
+        delta = int(cash_target) - int(cur_cash)
+        if delta:
+            _seed_adjust_entry(
+                conn,
+                backend,
+                category=f"treasury_adjust_cash_{cash_target}",
+                delta=delta,
+                asset_code="1000",
+                equity_code="3000",
+            )
+    if energy_target:
+        cur_energy = _posted_account_balance(conn, backend, "1100")
+        delta = int(energy_target) - int(cur_energy)
+        if delta:
+            _seed_adjust_entry(
+                conn,
+                backend,
+                category=f"treasury_adjust_energy_{energy_target}",
+                delta=delta,
+                asset_code="1100",
+                equity_code="3100",
+            )
+
+
+def _seed_adjust_entry(conn, backend: str, *, category: str, delta: int, asset_code: str, equity_code: str) -> None:
+    exists = fetch_one(conn, backend, "SELECT id FROM econ_journal_entries WHERE category=$1 LIMIT 1", (category,))
+    if exists:
+        return
+    amt = abs(int(delta))
+    entry_id = _insert_entry(
+        conn,
+        backend,
+        category,
+        amt,
+        f"Treasury adjustment to match configured snapshot ({asset_code}).",
+        "system_seed",
+        "economy_seed",
+        "posted",
+    )
+    if delta > 0:
+        # Increase asset: Dr asset / Cr equity
+        lines = [(asset_code, "debit", amt), (equity_code, "credit", amt)]
+    else:
+        # Decrease asset: Dr equity / Cr asset
+        lines = [(equity_code, "debit", amt), (asset_code, "credit", amt)]
+    _validate_double_entry(lines)
+    for acc, side, a in lines:
+        _insert_line(conn, backend, entry_id, acc, side, a)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="seed_treasury_adjustment",
+        entity_type="journal_entry",
+        entity_id=str(entry_id),
+        actor="system_seed",
+        payload={"category": category, "delta": int(delta), "asset_code": asset_code, "equity_code": equity_code},
+    )
+    conn.commit()
 
 
 def _seed_opening_balances_from_config(conn, backend: str) -> None:
