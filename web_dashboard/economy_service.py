@@ -34,8 +34,9 @@ def _pg_unlock_econ_schema(conn, backend: str) -> None:
     cur.execute("SELECT pg_advisory_unlock(%s)", (_ECON_SCHEMA_LOCK_ID,))
 
 
-def ensure_economy_schema(conn, backend: str) -> None:
-    _pg_lock_econ_schema(conn, backend)
+def ensure_economy_schema(conn, backend: str, *, with_lock: bool = True) -> None:
+    if with_lock:
+        _pg_lock_econ_schema(conn, backend)
     cur = conn.cursor()
     try:
         if backend == "postgres":
@@ -474,7 +475,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
         conn.commit()
         _seed_defaults(conn, backend)
     finally:
-        _pg_unlock_econ_schema(conn, backend)
+        if with_lock:
+            _pg_unlock_econ_schema(conn, backend)
 
 
 def reset_economy_data(conn, backend: str) -> dict:
@@ -506,7 +508,8 @@ def reset_economy_data(conn, backend: str) -> dict:
             else:
                 cur.execute(f"DROP TABLE IF EXISTS {name}")
         conn.commit()
-        ensure_economy_schema(conn, backend)
+        # Lock is already held in this function for postgres.
+        ensure_economy_schema(conn, backend, with_lock=False)
         cfg = get_config(conn, backend)
         bal = balance_snapshot(conn, backend)
         return {
@@ -593,6 +596,8 @@ def _seed_defaults(conn, backend: str) -> None:
         "alert_unmatched_records_threshold": "0",
         "treasury_cash_current": "0",
         "treasury_energy_current": "0",
+        "treasury_opening_cash": "0",
+        "treasury_opening_energy": "0",
     }
     for k, v in config_defaults.items():
         if backend == "postgres":
@@ -640,8 +645,8 @@ def _ensure_treasury_adjustments_from_config(conn, backend: str) -> None:
     This is idempotent per target value via unique category name.
     """
     cfg = get_config(conn, backend)
-    cash_s = str(cfg.get("treasury_cash_current") or "").strip()
-    energy_s = str(cfg.get("treasury_energy_current") or "").strip()
+    cash_s = str(cfg.get("treasury_opening_cash") or "").strip()
+    energy_s = str(cfg.get("treasury_opening_energy") or "").strip()
 
     def _to_int(s: str) -> int:
         return int(s) if s and s.lstrip("-").isdigit() else 0

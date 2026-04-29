@@ -967,7 +967,7 @@
         const extText = $("#api-external-text");
         const meta = $("#api-meta");
         const t0 = performance.now();
-        const internal = await fetch("/dashboard/api/economy/reports?days=7", { credentials: "same-origin" })
+        const internal = await fetch("/dashboard/api/economy/health", { credentials: "same-origin" })
           .then((r) => r.json().then((j) => ({ ok: r.ok && !!j.ok, data: j })))
           .catch((e) => ({ ok: false, error: String(e) }));
         const t1 = performance.now();

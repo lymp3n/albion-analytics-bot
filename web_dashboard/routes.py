@@ -615,6 +615,34 @@ def register_dashboard(app: Flask) -> None:
             )
         return app.response_class(response=json.dumps(payload, default=str), mimetype="application/json")
 
+    @app.route("/dashboard/api/economy/health", methods=["GET"])
+    @login_required
+    def dashboard_economy_health():
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                counts = economy_db_counts(conn, backend)
+                return app.response_class(
+                    response=json.dumps(
+                        {
+                            "ok": True,
+                            "backend": backend,
+                            "db_info": economy_db_meta(),
+                            "counts": counts,
+                        },
+                        default=str,
+                    ),
+                    mimetype="application/json",
+                )
+        except Exception as e:
+            app.logger.exception("Economy health failed")
+            print("Economy health failed:", _econ_err(e), flush=True)
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+
     @app.route("/dashboard/api/economy/loot-buyback", methods=["POST"])
     @login_required
     def dashboard_economy_loot_buyback():
