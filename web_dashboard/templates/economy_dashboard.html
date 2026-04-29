@@ -344,6 +344,27 @@
             font-size: 12px;
             margin-bottom: 14px;
         }
+        .armory-stock-panel {
+            margin-top: 10px;
+            border: 1px solid rgba(0,245,255,.22);
+            border-radius: 10px;
+            background: rgba(2,6,23,.25);
+            padding: 10px;
+        }
+        .armory-stock-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .armory-stock-tools {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .armory-low { color: var(--warning); font-weight: 700; }
         .sparkline {
             width: 100%;
             height: 54px;
@@ -614,7 +635,22 @@
                 </div>
             </div>
             <div class="reconciliation mt-20">
-                <div class="recon-column"><div class="recon-title">Current stock</div><div class="scroll-wrap"><table id="tbl-armory-stock"><thead><tr><th>Item</th><th>Category</th><th>Tier</th><th>Enchant</th><th>Quality</th><th>Qty</th></tr></thead><tbody></tbody></table></div></div>
+                <div class="recon-column">
+                    <div class="recon-title">Current stock</div>
+                    <div class="armory-stock-panel">
+                        <div class="armory-stock-head">
+                            <button class="btn btn-secondary btn-compact" id="btn-armory-stock-toggle" data-open="0">Show full stock list</button>
+                            <span class="mono" id="armory-stock-summary"></span>
+                        </div>
+                        <div class="armory-stock-tools hidden" id="armory-stock-tools">
+                            <input id="armory-stock-search" class="form-input" placeholder="Search item/category/tier/quality...">
+                            <button class="btn btn-secondary btn-compact" id="btn-armory-stock-clear">Clear</button>
+                        </div>
+                        <div class="scroll-wrap hidden" id="armory-stock-wrap">
+                            <table id="tbl-armory-stock"><thead><tr><th>Item</th><th>Category</th><th>Tier</th><th>Enchant</th><th>Quality</th><th>Qty</th></tr></thead><tbody></tbody></table>
+                        </div>
+                    </div>
+                </div>
                 <div class="recon-column"><div class="recon-title">Movement log</div><div class="scroll-wrap"><table id="tbl-armory-movements"><thead><tr><th>Time</th><th>Action</th><th>Item</th><th>Qty</th><th>Officer</th></tr></thead><tbody></tbody></table></div></div>
             </div>
         </div>
@@ -644,6 +680,7 @@
       const latencyHistory = { internal: [], external: [] };
       let currentLang = "en";
       let _itemSuggestTimer = null;
+      let _armoryStockRows = [];
       const ROUTE_CATEGORY_FALLBACK = ["deposit", "deposit_energy", "withdrawal", "withdrawal_energy", "content_income", "buy_gear", "reward_payout", "loot_buyback", "regear_issue"];
       const I18N = {
         en: {
@@ -699,6 +736,9 @@
           armory_apply: "Apply movement",
           armory_import_title: "Import from Google table markdown",
           armory_import: "Import snapshot",
+          armory_stock_toggle_show: "Show full stock list",
+          armory_stock_toggle_hide: "Hide full stock list",
+          armory_search_placeholder: "Search item/category/tier/quality...",
         },
         ru: {
           tab_dashboard: "📊 Обзор",
@@ -753,9 +793,37 @@
           armory_apply: "Применить операцию",
           armory_import_title: "Импорт из markdown Google-таблицы",
           armory_import: "Импортировать снапшот",
+          armory_stock_toggle_show: "Показать полный список предметов",
+          armory_stock_toggle_hide: "Скрыть полный список предметов",
+          armory_search_placeholder: "Поиск: предмет/категория/тир/качество...",
         }
       };
       const tr = (k) => (I18N[currentLang] && I18N[currentLang][k]) || (I18N.en && I18N.en[k]) || k;
+      function setArmoryStockToggleText() {
+        const btn = $("#btn-armory-stock-toggle");
+        if (!btn) return;
+        const isOpen = String(btn.dataset.open || "0") === "1";
+        btn.textContent = tr(isOpen ? "armory_stock_toggle_hide" : "armory_stock_toggle_show");
+      }
+      function renderArmoryStockTable() {
+        const q = String($("#armory-stock-search")?.value || "").trim().toLowerCase();
+        const rows = (_armoryStockRows || []).filter((r) => {
+          if (!q) return true;
+          const text = [
+            r.item_name || "",
+            r.item_key || "",
+            r.category || "",
+            r.tier || "",
+            r.enchant || "",
+            r.quality || "",
+          ].join(" ").toLowerCase();
+          return text.includes(q);
+        }).sort((a, b) => num(a.quantity) - num(b.quantity));
+        $("#tbl-armory-stock tbody").innerHTML = rows.map((r) => {
+          const qty = num(r.quantity || 0);
+          return `<tr><td>${esc(r.item_name || r.item_key || "")}</td><td>${esc(r.category || "")}</td><td>${esc(r.tier || "")}</td><td>${esc(r.enchant || "")}</td><td>${esc(r.quality || "")}</td><td class="${qty <= 3 ? "armory-low" : ""}">${fmt(qty)}</td></tr>`;
+        }).join("") || `<tr><td colspan="6">(no stock)</td></tr>`;
+      }
       const STATIC_TEXT = {
         en: {
           ".logo span:last-child": "GUILD ACCOUNTING",
@@ -917,6 +985,9 @@
           t.textContent = opened ? tr("toggle_filters_hide") : tr("toggle_filters_show");
         }
         applyStaticTranslations();
+        const input = $("#armory-stock-search");
+        if (input) input.placeholder = tr("armory_search_placeholder");
+        setArmoryStockToggleText();
         document.documentElement.lang = currentLang;
       }
       function showErr(msg) { const b = $("#err-box"); b.style.display = msg ? "block" : "none"; b.textContent = msg || ""; }
@@ -1332,9 +1403,11 @@
           return `<tr><td>${esc(r.id)}</td><td>${esc(r.player_name)}</td><td>${esc(r.content_type || "regear")}</td><td>${fmt(total)}</td><td>${statusBadge(r.status === "issued" ? "approved" : r.status)}</td><td>${act}</td></tr>`;
         }).join("") || `<tr><td colspan="6">${tr("no_regear")}</td></tr>`;
         const armStock = out.armory_stock || [];
-        $("#tbl-armory-stock tbody").innerHTML = armStock.map((r) =>
-          `<tr><td>${esc(r.item_name || r.item_key || "")}</td><td>${esc(r.category || "")}</td><td>${esc(r.tier || "")}</td><td>${esc(r.enchant || "")}</td><td>${esc(r.quality || "")}</td><td>${fmt(r.quantity || 0)}</td></tr>`
-        ).join("") || `<tr><td colspan="6">(no stock)</td></tr>`;
+        _armoryStockRows = Array.isArray(armStock) ? armStock : [];
+        const lowCount = _armoryStockRows.filter((r) => num(r.quantity || 0) <= 3).length;
+        const summary = $("#armory-stock-summary");
+        if (summary) summary.textContent = `items: ${num(_armoryStockRows.length)} | low (<=3): ${num(lowCount)}`;
+        renderArmoryStockTable();
         const armMoves = out.armory_movements || [];
         $("#tbl-armory-movements tbody").innerHTML = armMoves.map((m) =>
           `<tr><td>${esc(m.occurred_at || m.created_at || "")}</td><td>${esc(m.action || "")}</td><td>${esc(m.item_name || m.item_key || "")}</td><td>${fmt(m.quantity || 0)}</td><td>${esc(m.officer || "")}</td></tr>`
@@ -1437,6 +1510,20 @@
         toast(`Imported ${num((out.rows_processed || 0))} armory rows`);
         await load();
       });
+      on("#btn-armory-stock-toggle", "click", () => {
+        const btn = $("#btn-armory-stock-toggle");
+        const isOpen = String(btn?.dataset.open || "0") === "1";
+        const next = !isOpen;
+        if (btn) btn.dataset.open = next ? "1" : "0";
+        $("#armory-stock-wrap")?.classList.toggle("hidden", !next);
+        $("#armory-stock-tools")?.classList.toggle("hidden", !next);
+        setArmoryStockToggleText();
+      });
+      on("#btn-armory-stock-clear", "click", () => {
+        if ($("#armory-stock-search")) $("#armory-stock-search").value = "";
+        renderArmoryStockTable();
+      });
+      on("#armory-stock-search", "input", () => renderArmoryStockTable());
       on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);
