@@ -48,6 +48,7 @@ from web_dashboard.economy_service import (
     create_routed_operation,
     economy_kpis,
     ensure_economy_schema,
+    economy_db_counts,
     fetch_market_price,
     suggest_item_ids,
     forecast_summary,
@@ -1075,8 +1076,12 @@ def register_dashboard(app: Flask) -> None:
                     "pnl_summary": pnl_summary(conn, backend, days),
                     "cashflow_summary": cashflow_summary(conn, backend, days),
                     "forecast": forecast_summary(conn, backend),
+                    "db_counts": economy_db_counts(conn, backend),
+                    "db_info": economy_db_meta(),
                 }
         except Exception as e:
+            app.logger.exception("Economy reports failed")
+            print("Economy reports failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
                 status=500,

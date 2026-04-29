@@ -1965,6 +1965,29 @@ def list_current_player_totals(
     return [dict(r) for r in rows]
 
 
+def economy_db_counts(conn, backend: str) -> dict:
+    """
+    Lightweight diagnostics for what exists in the economy DB.
+    Used by dashboard API health / debug.
+    """
+    def c(sql: str) -> int:
+        row = fetch_one(conn, backend, sql, ())
+        return int((row or {}).get("c") or 0)
+
+    # These COUNT queries are intentionally param-free.
+    return {
+        "econ_journal_entries": c("SELECT COUNT(*) AS c FROM econ_journal_entries"),
+        "econ_journal_lines": c("SELECT COUNT(*) AS c FROM econ_journal_lines"),
+        "econ_game_log_imports": c("SELECT COUNT(*) AS c FROM econ_game_log_imports"),
+        "econ_game_log_rows": c("SELECT COUNT(*) AS c FROM econ_game_log_rows"),
+        "econ_import_player_totals": c("SELECT COUNT(*) AS c FROM econ_import_player_totals"),
+        "econ_import_discrepancies": c("SELECT COUNT(*) AS c FROM econ_import_discrepancies"),
+        "econ_alerts": c("SELECT COUNT(*) AS c FROM econ_alerts"),
+        "econ_routing_rules": c("SELECT COUNT(*) AS c FROM econ_routing_rules"),
+        "econ_config": c("SELECT COUNT(*) AS c FROM econ_config"),
+    }
+
+
 def list_game_log_imports(conn, backend: str, limit: int = 30) -> List[dict]:
     lim = max(1, min(int(limit), 200))
     rows = fetch_all(
