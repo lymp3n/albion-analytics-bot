@@ -1966,6 +1966,8 @@ def list_current_player_totals(
     sign: str = "all",
     min_amount: Optional[int] = None,
     max_amount: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     limit: int = 300,
 ) -> List[dict]:
     if log_type not in ("silver", "energy"):
@@ -1977,6 +1979,14 @@ def list_current_player_totals(
 
     where = ["r.log_type = $1"]
     params: List[object] = [log_type]
+    date_from_s = str(date_from or "").strip()
+    date_to_s = str(date_to or "").strip()
+    if date_from_s:
+        where.append(f"COALESCE(NULLIF(TRIM(r.occurred_at), ''), '0000-00-00 00:00:00') >= ${len(params)+1}")
+        params.append(date_from_s)
+    if date_to_s:
+        where.append(f"COALESCE(NULLIF(TRIM(r.occurred_at), ''), '0000-00-00 00:00:00') <= ${len(params)+1}")
+        params.append(date_to_s)
     where_sql = " AND ".join(where)
     having_parts: List[str] = []
     if sign_norm == "pos":

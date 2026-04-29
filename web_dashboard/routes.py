@@ -1046,6 +1046,8 @@ def register_dashboard(app: Flask) -> None:
             limit = int(limit_raw) if limit_raw else 300
         except ValueError:
             limit = 300
+        date_from = str(request.args.get("date_from") or "").strip() or None
+        date_to = str(request.args.get("date_to") or "").strip() or None
         try:
             with get_economy_sync_connection() as (conn, backend):
                 ensure_economy_schema(conn, backend)
@@ -1057,6 +1059,8 @@ def register_dashboard(app: Flask) -> None:
                         sign=sign,
                         min_amount=min_amount,
                         max_amount=max_amount,
+                        date_from=date_from,
+                        date_to=date_to,
                         limit=limit,
                     )
                 else:

@@ -433,6 +433,14 @@
                     </div>
                     <div class="mono" id="treasury-now-hint"></div>
                 </div>
+                <div class="treasury-strip mt-20">
+                    <div class="ttl">Guild snapshot (manual)</div>
+                    <div class="vals">
+                        <span class="treasury-pill">Silver: <b id="guild-snap-silver">0</b></span>
+                        <span class="treasury-pill">Energy: <b id="guild-snap-energy">0</b></span>
+                    </div>
+                    <div class="mono" id="guild-snap-hint">From treasury target config.</div>
+                </div>
             </div>
 
             <div class="chart-container micro-pop" id="chart-box">
@@ -499,6 +507,10 @@
             <div class="reconciliation mt-20">
                 <div class="recon-column">
                     <div class="recon-title">Player balances (Energy) from CSV</div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Date from</label><input id="bal-energy-date-from" class="form-input" type="datetime-local"></div>
+                        <div class="form-group"><label class="form-label">Date to</label><input id="bal-energy-date-to" class="form-input" type="datetime-local"></div>
+                    </div>
                     <button class="btn btn-secondary" id="btn-bal-energy">Refresh</button>
                     <div class="scroll-wrap mt-20">
                         <table id="tbl-bal-energy">
@@ -510,6 +522,10 @@
                 </div>
                 <div class="recon-column">
                     <div class="recon-title">Player balances (Silver) from CSV</div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Date from</label><input id="bal-silver-date-from" class="form-input" type="datetime-local"></div>
+                        <div class="form-group"><label class="form-label">Date to</label><input id="bal-silver-date-to" class="form-input" type="datetime-local"></div>
+                    </div>
                     <button class="btn btn-secondary" id="btn-bal-silver">Refresh</button>
                     <div class="scroll-wrap mt-20">
                         <table id="tbl-bal-silver">
@@ -1058,11 +1074,18 @@
         return data;
       }
 
+      function _toServerDateTime(v) {
+        const s = String(v || "").trim();
+        return s ? (s.replace("T", " ") + ":00").slice(0, 19) : "";
+      }
+
       async function refreshPlayerBalances(kind) {
         const logType = kind === "energy" ? "energy" : "silver";
         const btn = kind === "energy" ? $("#btn-bal-energy") : $("#btn-bal-silver");
         const tbody = kind === "energy" ? $("#tbl-bal-energy tbody") : $("#tbl-bal-silver tbody");
         const meta = kind === "energy" ? $("#bal-energy-meta") : $("#bal-silver-meta");
+        const dateFrom = kind === "energy" ? $("#bal-energy-date-from") : $("#bal-silver-date-from");
+        const dateTo = kind === "energy" ? $("#bal-energy-date-to") : $("#bal-silver-date-to");
         if (!tbody || !meta) return;
 
         setBusy(btn, true);
@@ -1072,6 +1095,8 @@
           log_type: logType,
           scope: "current",
           sign: "all",
+          date_from: _toServerDateTime(dateFrom?.value || ""),
+          date_to: _toServerDateTime(dateTo?.value || ""),
           limit: "300",
         });
         const out = await fetch("/dashboard/api/economy/player-balances?" + qs.toString(), { credentials: "same-origin" })
@@ -1132,6 +1157,10 @@
         // Keep treasury target inputs synchronized with persisted config.
         $("#treasury-cash").value = num(cfg.treasury_cash_current, 0);
         $("#treasury-energy").value = num(cfg.treasury_energy_current, 0);
+        const gsS = $("#guild-snap-silver");
+        const gsE = $("#guild-snap-energy");
+        if (gsS) gsS.textContent = fmt(num(cfg.treasury_cash_current, 0));
+        if (gsE) gsE.textContent = fmt(num(cfg.treasury_energy_current, 0));
         const as = out.alert_state || {};
         $("#alert-state").textContent = `cash=${fmt(as.cash_balance)} | expense_30d=${fmt(as.expense_30d)} | unmatched=${fmt(as.unmatched_records)}`;
         const dbi = out.db_info || {};
