@@ -579,7 +579,7 @@
       const latencyHistory = { internal: [], external: [] };
       let currentLang = "en";
       let _itemSuggestTimer = null;
-      const ROUTE_CATEGORY_FALLBACK = ["deposit", "withdrawal", "content_income", "buy_gear", "reward_payout", "loot_buyback", "regear_issue"];
+      const ROUTE_CATEGORY_FALLBACK = ["deposit", "deposit_energy", "withdrawal", "withdrawal_energy", "content_income", "buy_gear", "reward_payout", "loot_buyback", "regear_issue"];
       const I18N = {
         en: {
           tab_dashboard: "📊 Dashboard",
@@ -1118,7 +1118,7 @@
         const csvSilver = num((rep.csv_treasury_snapshot || {}).silver_balance || 0);
         const csvEnergy = num((rep.csv_treasury_snapshot || {}).energy_balance || 0);
         const csvRows = num((rep.csv_treasury_snapshot || {}).rows_total || 0);
-        $("#kpi-balance-note").textContent = `energy: ${fmt(energy)} | entries: ${fmt(k.entries_count || 0)}`;
+        $("#kpi-balance-note").textContent = `posted accounting balance | entries: ${fmt(k.entries_count || 0)}`;
         $("#kpi-profit-note").textContent = "period " + String(f.days) + "d";
         $("#kpi-gap-note").textContent = "forecast_30d - cash";
         $("#kpi-mismatch-note").textContent = "open discrepancies";
@@ -1154,10 +1154,8 @@
         if (treasuryHint) treasuryHint.textContent = `Current (CSV) uses deduped imports (${fmt(csvRows)} rows). KPI Balance uses POSTED double-entry journal only.`;
         const tnS = $("#treasury-now-silver");
         const tnE = $("#treasury-now-energy");
-        const tnSilverVal = csvRows > 0 ? csvSilver : cash;
-        const tnEnergyVal = csvRows > 0 ? csvEnergy : energy;
-        if (tnS) tnS.textContent = fmt(tnSilverVal);
-        if (tnE) tnE.textContent = fmt(tnEnergyVal);
+        if (tnS) tnS.textContent = fmt(csvSilver);
+        if (tnE) tnE.textContent = fmt(csvEnergy);
 
         const entries = out.entries || [];
         renderRealChart(entries);

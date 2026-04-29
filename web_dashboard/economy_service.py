@@ -575,7 +575,9 @@ def _seed_defaults(conn, backend: str) -> None:
 
     rules = [
         ("deposit", "1000", "3000", False, "capital_in"),
+        ("deposit_energy", "1100", "3100", False, "capital_in_energy"),
         ("withdrawal", "3000", "1000", True, "capital_out"),
+        ("withdrawal_energy", "3100", "1100", True, "capital_out_energy"),
         ("content_income", "1000", "4000", False, "content"),
         ("buy_gear", "1200", "1000", False, "gear"),
         ("reward_payout", "5200", "1000", True, "rewards"),
@@ -1736,8 +1738,7 @@ def import_game_log_csv(conn, backend: str, *, log_type: str, content: str, smar
     if not isinstance(content, str) or not content.strip():
         raise ValueError("CSV content is required")
 
-    rdr = csv.DictReader(io.StringIO(content))
-    rows = [r for r in rdr]
+    rows = _parse_game_log_rows(content)
     unique_rows: List[dict] = []
     duplicates_skipped = 0
     if smart_merge:
@@ -2004,7 +2005,17 @@ def list_current_player_totals(
         """,
         tuple(params),
     )
-    return [dict(r) for r in rows]
+    out: List[dict] = []
+    for r in rows:
+        rec = dict(r)
+        nm = str(rec.get("player_name") or "").strip()
+        amt = int(rec.get("net_amount") or 0)
+        if not nm or nm.lower() == "unknown":
+            continue
+        if amt == 0:
+            continue
+        out.append({"player_name": nm, "net_amount": amt})
+    return out
 
 
 def economy_db_counts(conn, backend: str) -> dict:
@@ -2149,6 +2160,37 @@ def _guess_name(row: dict) -> str:
         if key in row and str(row.get(key) or "").strip():
             return str(row.get(key)).strip()
     return ""
+
+
+def _clean_row_dict(row: dict) -> dict:
+    out: Dict[str, object] = {}
+    for k, v in (row or {}).items():
+        kk = str(k or "").strip().strip("\"'").replace("\ufeff", "")
+        vv = str(v or "").strip().strip("\"'")
+        if kk:
+            out[kk] = vv
+    return out
+
+
+def _parse_game_log_rows(content: str) -> List[dict]:
+    data = str(content or "").strip()
+    if not data:
+        return []
+    sio = io.StringIO(data)
+    try:
+        sample = data[:4096]
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+        rdr = csv.DictReader(sio, dialect=dialect)
+    except Exception:
+        # Most in-game logs are tab-separated with quoted values.
+        sio = io.StringIO(data)
+        rdr = csv.DictReader(sio, delimiter="\t")
+    rows: List[dict] = []
+    for row in rdr:
+        cleaned = _clean_row_dict(row or {})
+        if cleaned:
+            rows.append(cleaned)
+    return rows
 
 
 def _to_int_amount(val: object) -> int:
