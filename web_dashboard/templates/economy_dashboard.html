@@ -1539,6 +1539,13 @@
       on("#btn-arm-import", "click", async () => {
         const btn = $("#btn-arm-import");
         setBusy(btn, true);
+        const importLabel = tr("armory_import");
+        const watchdog = setTimeout(() => {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = importLabel;
+          }
+        }, 20000);
         try {
           const out = await post("/dashboard/api/economy/armory-import", {
             content: $("#arm-import-content").value || "",
@@ -1553,7 +1560,12 @@
         } catch (e) {
           showErr(String(e || "Armory import failed"));
         } finally {
+          clearTimeout(watchdog);
           setBusy(btn, false);
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = importLabel;
+          }
         }
       });
       on("#btn-armory-stock-toggle", "click", () => {

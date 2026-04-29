@@ -2981,16 +2981,58 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
                 return f"{bits[0]}|{m.group(1)}|{m.group(2)}|{qual}"
         return base
 
+    def _split_item_key(raw_key: str) -> Tuple[str, str, str, str]:
+        rk = str(raw_key or "").strip().replace(" ", "")
+        bits = [b.strip() for b in rk.split("|") if b is not None]
+        if len(bits) >= 4 and str(bits[1]).upper().startswith("T"):
+            return bits[0], bits[1], bits[2], bits[3]
+        if len(bits) >= 3:
+            m = re.match(r"^(T\d+)\.([0-9.]+)$", str(bits[1] or ""), flags=re.IGNORECASE)
+            if m:
+                return bits[0], m.group(1), m.group(2), str(bits[2] or "").strip()
+        return "", "", "", ""
+
+    def _norm_enchant_display(raw: str) -> str:
+        s = str(raw or "").strip()
+        if not s:
+            return ""
+        m = re.match(r"^0(?:\.0+)?\.?([0-9]+)$", s)
+        if m and m.group(1):
+            return m.group(1)
+        m2 = re.match(r"^0\.([0-9]+)$", s)
+        if m2:
+            return m2.group(1)
+        if s.startswith("0.") and len(s) > 2:
+            tail = s[2:]
+            if tail.isdigit():
+                return tail
+        return s
+
     def _import_row(parts: List[str], source: str) -> None:
         nonlocal added, touched
         if len(parts) < 8:
             return
+        raw_item_key = parts[0].strip() if len(parts) > 0 else ""
         item_name = parts[1].strip() if len(parts) > 1 else ""
         category = parts[2].strip() if len(parts) > 2 else ""
         tier = parts[3].strip() if len(parts) > 3 else ""
-        enchant = parts[4].strip() if len(parts) > 4 else ""
+        enchant_raw = parts[4].strip() if len(parts) > 4 else ""
         quality = parts[5].strip() if len(parts) > 5 else ""
-        item_key = _norm_item_key(parts[0].strip() if len(parts) > 0 else "", item_name, tier, enchant, quality)
+        key_item, key_tier, key_ench, key_quality = _split_item_key(raw_item_key)
+
+        # Preserve hidden item key, but keep visible columns clean.
+        if not item_name or "|" in item_name:
+            item_name = key_item or item_name.replace("|", " ").strip()
+        if not category or "|" in category:
+            category = item_name
+        if not tier:
+            tier = key_tier
+        if not enchant_raw:
+            enchant_raw = key_ench
+        if not quality:
+            quality = key_quality
+        enchant = _norm_enchant_display(enchant_raw)
+        item_key = _norm_item_key(raw_item_key, item_name, tier, enchant_raw, quality)
         qty_s = parts[6].strip() if len(parts) > 6 else "0"
         notes = parts[7].strip() if len(parts) > 7 else ""
         if not item_key or not item_name:
