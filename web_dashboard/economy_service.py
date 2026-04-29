@@ -485,30 +485,29 @@ def reset_economy_data(conn, backend: str) -> dict:
     Does not touch main bot DB tables.
     """
     _pg_lock_econ_schema(conn, backend)
-    # IMPORTANT: avoid fetch_all/fetch_one wrapper here.
-    # Some SQL wrapper logic converts $1 placeholders for postgres/psycopg2 and can
-    # fail on queries without params. We keep this query fully param-free.
     try:
         cur = conn.cursor()
         if backend == "sqlite":
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'econ_%'", ())
             rows = cur.fetchall()
             names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
+            for name in names:
+                cur.execute(f"DELETE FROM {name}")
+            # Reset AUTOINCREMENT counters for econ tables.
+            cur.execute("DELETE FROM sqlite_sequence WHERE name LIKE 'econ_%'")
         else:
             cur.execute(
                 "SELECT tablename AS name FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'econ_%%'",
                 (),
             )
             rows = cur.fetchall()
-            # Postgres cursor returns tuples unless a cursor_factory is used.
             names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
-        for name in names:
-            if backend == "postgres":
-                cur.execute(f"DROP TABLE IF EXISTS {name} CASCADE")
-            else:
-                cur.execute(f"DROP TABLE IF EXISTS {name}")
+            if names:
+                # TRUNCATE is significantly safer than DROP under concurrency and avoids DDL deadlocks.
+                quoted = ", ".join([f"\"{name.replace('\"', '\"\"')}\"" for name in names])
+                cur.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
         conn.commit()
-        # Lock is already held in this function for postgres.
+        # Re-seed defaults after full data wipe.
         ensure_economy_schema(conn, backend, with_lock=False)
         cfg = get_config(conn, backend)
         bal = balance_snapshot(conn, backend)
@@ -519,7 +518,19 @@ def reset_economy_data(conn, backend: str) -> dict:
             "cash_balance": int(bal.get("cash_balance") or 0),
             "energy_balance": int(bal.get("energy_balance") or 0),
         }
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
+        if backend == "postgres":
+            # Advisory unlock must run in a clean transaction; rollback clears aborted state.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         _pg_unlock_econ_schema(conn, backend)
 
 

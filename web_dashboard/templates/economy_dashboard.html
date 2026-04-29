@@ -499,27 +499,25 @@
             <div class="reconciliation mt-20">
                 <div class="recon-column">
                     <div class="recon-title">Player balances (Energy) from CSV</div>
-                    <div class="form-row">
-                        <div class="form-group"><label class="form-label">Min</label><input id="bal-energy-min" class="form-input" type="number" placeholder=""></div>
-                        <div class="form-group"><label class="form-label">Max</label><input id="bal-energy-max" class="form-input" type="number" placeholder=""></div>
-                    </div>
                     <button class="btn btn-secondary" id="btn-bal-energy">Refresh</button>
-                    <div class="mt-20">
-                        <select id="bal-energy-list" class="form-select" size="10"></select>
-                        <div class="mono mt-20" id="bal-energy-meta"></div>
+                    <div class="scroll-wrap mt-20">
+                        <table id="tbl-bal-energy">
+                            <thead><tr><th><button class="table-btn" id="bal-energy-sort-player">Player</button></th><th><button class="table-btn" id="bal-energy-sort-net">Balance</button></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
+                    <div class="mono mt-20" id="bal-energy-meta"></div>
                 </div>
                 <div class="recon-column">
                     <div class="recon-title">Player balances (Silver) from CSV</div>
-                    <div class="form-row">
-                        <div class="form-group"><label class="form-label">Min</label><input id="bal-silver-min" class="form-input" type="number" placeholder=""></div>
-                        <div class="form-group"><label class="form-label">Max</label><input id="bal-silver-max" class="form-input" type="number" placeholder=""></div>
-                    </div>
                     <button class="btn btn-secondary" id="btn-bal-silver">Refresh</button>
-                    <div class="mt-20">
-                        <select id="bal-silver-list" class="form-select" size="10"></select>
-                        <div class="mono mt-20" id="bal-silver-meta"></div>
+                    <div class="scroll-wrap mt-20">
+                        <table id="tbl-bal-silver">
+                            <thead><tr><th><button class="table-btn" id="bal-silver-sort-player">Player</button></th><th><button class="table-btn" id="bal-silver-sort-net">Balance</button></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
+                    <div class="mono mt-20" id="bal-silver-meta"></div>
                 </div>
             </div>
 
@@ -572,6 +570,10 @@
         journal: "#section-journal",
         recon: "#section-recon",
         reports: "#section-reports",
+      };
+      const playerBalanceSort = {
+        energy: { key: "net_amount", dir: "asc" },
+        silver: { key: "net_amount", dir: "asc" },
       };
       let apiHealthTimer = null;
       const latencyHistory = { internal: [], external: [] };
@@ -1035,24 +1037,41 @@
         if (el) el.addEventListener(event, cb);
       }
 
+      function _toggleBalanceSort(kind, key) {
+        const st = playerBalanceSort[kind] || { key: "net_amount", dir: "asc" };
+        if (st.key === key) st.dir = st.dir === "asc" ? "desc" : "asc";
+        else { st.key = key; st.dir = "asc"; }
+        playerBalanceSort[kind] = st;
+      }
+
+      function _sortedBalanceRows(kind, rows) {
+        const st = playerBalanceSort[kind] || { key: "net_amount", dir: "asc" };
+        const mul = st.dir === "asc" ? 1 : -1;
+        const data = Array.isArray(rows) ? rows.slice() : [];
+        data.sort((a, b) => {
+          if (st.key === "player_name") return mul * String(a.player_name || "").localeCompare(String(b.player_name || ""));
+          const an = num(a.net_amount || 0);
+          const bn = num(b.net_amount || 0);
+          if (an !== bn) return mul * (an - bn);
+          return String(a.player_name || "").localeCompare(String(b.player_name || ""));
+        });
+        return data;
+      }
+
       async function refreshPlayerBalances(kind) {
         const logType = kind === "energy" ? "energy" : "silver";
         const btn = kind === "energy" ? $("#btn-bal-energy") : $("#btn-bal-silver");
-        const inpMin = kind === "energy" ? $("#bal-energy-min") : $("#bal-silver-min");
-        const inpMax = kind === "energy" ? $("#bal-energy-max") : $("#bal-silver-max");
-        const list = kind === "energy" ? $("#bal-energy-list") : $("#bal-silver-list");
+        const tbody = kind === "energy" ? $("#tbl-bal-energy tbody") : $("#tbl-bal-silver tbody");
         const meta = kind === "energy" ? $("#bal-energy-meta") : $("#bal-silver-meta");
-        if (!list || !meta) return;
+        if (!tbody || !meta) return;
 
         setBusy(btn, true);
         meta.textContent = "Loading...";
-        list.innerHTML = "";
+        tbody.innerHTML = "";
         const qs = new URLSearchParams({
           log_type: logType,
           scope: "current",
           sign: "all",
-          min: String(inpMin?.value || ""),
-          max: String(inpMax?.value || ""),
           limit: "300",
         });
         const out = await fetch("/dashboard/api/economy/player-balances?" + qs.toString(), { credentials: "same-origin" })
@@ -1062,14 +1081,15 @@
           meta.textContent = "Error: " + String(out.error || "failed");
           return;
         }
-        const rows = out.rows || [];
-        list.innerHTML = rows.map((r) => {
+        const rows = _sortedBalanceRows(kind, out.rows || []);
+        tbody.innerHTML = rows.map((r) => {
           const nm = esc(r.player_name || "");
           const amt = num(r.net_amount || 0);
-          const sign = amt >= 0 ? "+" : "";
-          return `<option value="${nm}">${nm}: ${sign}${fmt(amt)}</option>`;
-        }).join("") || `<option value="">(no rows)</option>`;
-        meta.textContent = `rows: ${rows.length} | source: current aggregated CSV (all unique rows) | ordered: min -> max`;
+          const sign = amt > 0 ? "+" : "";
+          return `<tr><td>${nm}</td><td>${sign}${fmt(amt)}</td></tr>`;
+        }).join("") || `<tr><td colspan="2">(no rows)</td></tr>`;
+        const st = playerBalanceSort[kind] || { key: "net_amount", dir: "asc" };
+        meta.textContent = `rows: ${rows.length} | source: current aggregated CSV (all unique rows) | sort: ${st.key} ${st.dir}`;
       }
 
       async function load() {
@@ -1134,8 +1154,10 @@
         if (treasuryHint) treasuryHint.textContent = `Current (CSV) uses deduped imports (${fmt(csvRows)} rows). KPI Balance uses POSTED double-entry journal only.`;
         const tnS = $("#treasury-now-silver");
         const tnE = $("#treasury-now-energy");
-        if (tnS) tnS.textContent = fmt(csvSilver);
-        if (tnE) tnE.textContent = fmt(csvEnergy);
+        const tnSilverVal = csvRows > 0 ? csvSilver : cash;
+        const tnEnergyVal = csvRows > 0 ? csvEnergy : energy;
+        if (tnS) tnS.textContent = fmt(tnSilverVal);
+        if (tnE) tnE.textContent = fmt(tnEnergyVal);
 
         const entries = out.entries || [];
         renderRealChart(entries);
@@ -1244,6 +1266,10 @@
       });
       on("#btn-bal-energy", "click", () => refreshPlayerBalances("energy").catch(() => {}));
       on("#btn-bal-silver", "click", () => refreshPlayerBalances("silver").catch(() => {}));
+      on("#bal-energy-sort-player", "click", () => { _toggleBalanceSort("energy", "player_name"); refreshPlayerBalances("energy").catch(() => {}); });
+      on("#bal-energy-sort-net", "click", () => { _toggleBalanceSort("energy", "net_amount"); refreshPlayerBalances("energy").catch(() => {}); });
+      on("#bal-silver-sort-player", "click", () => { _toggleBalanceSort("silver", "player_name"); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#bal-silver-sort-net", "click", () => { _toggleBalanceSort("silver", "net_amount"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);
