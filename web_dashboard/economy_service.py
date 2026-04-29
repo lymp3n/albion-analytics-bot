@@ -2956,16 +2956,31 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
         except ValueError:
             return None
 
+    def _norm_item_key(raw_key: str, item_name: str, tier: str, enchant: str, quality: str) -> str:
+        base = f"{str(item_name or '').strip()}|{str(tier or '').strip()}|{str(enchant or '').strip()}|{str(quality or '').strip()}"
+        rk = str(raw_key or "").strip().replace(" ", "")
+        if not rk:
+            return base
+        bits = [b.strip() for b in rk.split("|") if b is not None]
+        if len(bits) >= 4 and str(bits[1]).upper().startswith("T"):
+            return f"{bits[0]}|{bits[1]}|{bits[2]}|{bits[3]}"
+        if len(bits) >= 3:
+            m = re.match(r"^(T\d+)\.([0-9.]+)$", str(bits[1] or ""), flags=re.IGNORECASE)
+            if m:
+                qual = str(bits[2] or "").strip() or str(quality or "").strip()
+                return f"{bits[0]}|{m.group(1)}|{m.group(2)}|{qual}"
+        return base
+
     def _import_row(parts: List[str], source: str) -> None:
         nonlocal added, touched
         if len(parts) < 8:
             return
-        item_key = parts[0].strip()
         item_name = parts[1].strip() if len(parts) > 1 else ""
         category = parts[2].strip() if len(parts) > 2 else ""
         tier = parts[3].strip() if len(parts) > 3 else ""
         enchant = parts[4].strip() if len(parts) > 4 else ""
         quality = parts[5].strip() if len(parts) > 5 else ""
+        item_key = _norm_item_key(parts[0].strip() if len(parts) > 0 else "", item_name, tier, enchant, quality)
         qty_s = parts[6].strip() if len(parts) > 6 else "0"
         notes = parts[7].strip() if len(parts) > 7 else ""
         if not item_key or not item_name:
@@ -2994,10 +3009,18 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
 
     simple_key_re = re.compile(r"^(?P<key>.+\|T\d+\|[^|]+\|[^|\s]+)(?:\s*[xX*;,:-]\s*(?P<qty>\d+)|\s+(?P<qty2>\d+))?\s*$")
 
-    for ln in txt.splitlines():
-        s = ln.strip()
-        if not s:
+    # Some paste sources break quantity to a separate line ("... Good" + "\n2").
+    stitched_lines: List[str] = []
+    for raw_ln in txt.splitlines():
+        s0 = str(raw_ln or "").strip()
+        if not s0:
             continue
+        if re.fullmatch(r"\d+", s0) and stitched_lines:
+            stitched_lines[-1] = f"{stitched_lines[-1]}\t{s0}"
+            continue
+        stitched_lines.append(s0)
+
+    for s in stitched_lines:
         if s.startswith("|"):
             parts = _split_md_row(s)
             if len(parts) < 9:
@@ -3020,6 +3043,36 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
                 # fallback for column-like text with multiple spaces
                 raw_parts = [p.strip() for p in re.split(r"\s{2,}", s) if p.strip()]
             if len(raw_parts) < 8:
+                # fallback for "single-spaced row" with predictable tail:
+                # <item_id> <item_name...> <category...> T6 0.2 Excellent 1 [notes]
+                m_tail = re.match(
+                    r"^(?P<item_id>\S+)\s+(?P<head>.+?)\s+(?P<tier>T\d+)\s+(?P<enchant>[0-9.]+)\s+(?P<quality>[A-Za-z]+)\s+(?P<qty>-?\d+)(?:\s+(?P<notes>.*))?$",
+                    s,
+                )
+                if m_tail:
+                    item_id = str(m_tail.group("item_id") or "").strip()
+                    head = str(m_tail.group("head") or "").strip()
+                    head_parts = [p for p in re.split(r"\s{2,}", head) if p.strip()]
+                    if len(head_parts) >= 2:
+                        item_name = head_parts[0].strip()
+                        category = head_parts[1].strip()
+                    else:
+                        item_name = head.strip()
+                        category = head.strip()
+                    _import_row(
+                        [
+                            item_id,
+                            item_name,
+                            category,
+                            str(m_tail.group("tier") or "").strip(),
+                            str(m_tail.group("enchant") or "").strip(),
+                            str(m_tail.group("quality") or "").strip(),
+                            str(m_tail.group("qty") or "").strip(),
+                            str(m_tail.group("notes") or "").strip(),
+                        ],
+                        "armory_import_text",
+                    )
+                    continue
                 if not m:
                     continue
                 key = str(m.group("key") or "").strip()

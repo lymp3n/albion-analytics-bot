@@ -642,6 +642,7 @@
                 <div class="recon-column">
                     <div class="recon-title" data-i18n="armory_import_title">Import from Google table markdown</div>
                     <div class="form-group"><label class="form-label">Content</label><textarea id="arm-import-content" class="form-input" style="min-height:180px;"></textarea></div>
+                    <div class="mono" id="armory-import-hint">Supported: full table (markdown/TSV), or compact lines like "Beef Stew|T8|0.1|Normal x20".</div>
                     <button class="btn btn-secondary" id="btn-arm-import" data-i18n="armory_import">Import snapshot</button>
                 </div>
             </div>
@@ -749,6 +750,7 @@
           armory_apply: "Apply movement",
           armory_import_title: "Import from Google table markdown",
           armory_import: "Import snapshot",
+          armory_import_hint: "Supported: full table (markdown/TSV), or compact lines like \"Beef Stew|T8|0.1|Normal x20\".",
           armory_stock_toggle_show: "Show full stock list",
           armory_stock_toggle_hide: "Hide full stock list",
           armory_search_placeholder: "Search item/category/tier/quality...",
@@ -807,6 +809,7 @@
           armory_apply: "Применить операцию",
           armory_import_title: "Импорт из markdown Google-таблицы",
           armory_import: "Импортировать снапшот",
+          armory_import_hint: "Поддерживается: полная таблица (markdown/TSV) или строки вида \"Beef Stew|T8|0.1|Normal x20\".",
           armory_stock_toggle_show: "Показать полный список предметов",
           armory_stock_toggle_hide: "Скрыть полный список предметов",
           armory_search_placeholder: "Поиск: предмет/категория/тир/качество...",
@@ -1006,6 +1009,8 @@
         applyStaticTranslations();
         const input = $("#armory-stock-search");
         if (input) input.placeholder = tr("armory_search_placeholder");
+        const importHint = $("#armory-import-hint");
+        if (importHint) importHint.textContent = tr("armory_import_hint");
         const deficitLabel = $("#armory-deficit-only-label");
         if (deficitLabel) deficitLabel.textContent = tr("armory_deficit_only");
         setArmoryStockToggleText();
