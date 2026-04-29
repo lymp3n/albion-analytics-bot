@@ -44,6 +44,7 @@ from web_dashboard.economy_service import (
     create_regear_request,
     issue_regear_request,
     balance_snapshot,
+    csv_treasury_snapshot,
     cashflow_summary,
     create_routed_operation,
     economy_kpis,
@@ -581,6 +582,7 @@ def register_dashboard(app: Flask) -> None:
                     "config": get_config(conn, backend),
                     "reports": {
                         "balance_snapshot": balance_snapshot(conn, backend),
+                        "csv_treasury_snapshot": csv_treasury_snapshot(conn, backend),
                         "pnl_summary": pnl_summary(conn, backend, days),
                         "cashflow_summary": cashflow_summary(conn, backend, days),
                     },

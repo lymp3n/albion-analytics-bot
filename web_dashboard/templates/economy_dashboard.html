@@ -1126,6 +1126,9 @@
         $("#kpi-gap").textContent = (gap >= 0 ? "+" : "") + fmt(gap);
         $("#kpi-mismatch").textContent = String(mismatches) + " ⚠️";
         const energy = num((rep.balance_snapshot || {}).energy_balance || 0);
+        const csvSilver = num((rep.csv_treasury_snapshot || {}).silver_balance || 0);
+        const csvEnergy = num((rep.csv_treasury_snapshot || {}).energy_balance || 0);
+        const csvRows = num((rep.csv_treasury_snapshot || {}).rows_total || 0);
         $("#kpi-balance-note").textContent = `energy: ${fmt(energy)} | entries: ${fmt(k.entries_count || 0)}`;
         $("#kpi-profit-note").textContent = "period " + String(f.days) + "d";
         $("#kpi-gap-note").textContent = "forecast_30d - cash";
@@ -1159,11 +1162,11 @@
         }
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
         const treasuryHint = $("#treasury-now-hint");
-        if (treasuryHint) treasuryHint.textContent = "Balances are derived from POSTED entries only (pending does not affect KPI).";
+        if (treasuryHint) treasuryHint.textContent = `Current (CSV) uses deduped imports (${fmt(csvRows)} rows). KPI Balance uses POSTED double-entry journal only.`;
         const tnS = $("#treasury-now-silver");
         const tnE = $("#treasury-now-energy");
-        if (tnS) tnS.textContent = fmt(cash);
-        if (tnE) tnE.textContent = fmt(energy);
+        if (tnS) tnS.textContent = fmt(csvSilver);
+        if (tnE) tnE.textContent = fmt(csvEnergy);
 
         const entries = out.entries || [];
         renderRealChart(entries);

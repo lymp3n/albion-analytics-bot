@@ -2156,8 +2156,9 @@ def _log_row_hash(*, log_type: str, row: dict) -> str:
     date_s = _norm_str(row.get("Date") or row.get("date") or row.get("Timestamp") or row.get("timestamp"))
     player_s = _norm_str(_guess_name(row))
     op_s = _norm_str(row.get("Operation") or row.get("operation") or row.get("Type") or row.get("type"))
+    reason_s = _norm_str(row.get("Reason") or row.get("reason") or row.get("Description") or row.get("description"))
     amount_s = str(_to_int_amount(row.get("Amount")))
-    payload = f"{str(log_type).strip().lower()}|{date_s}|{player_s}|{op_s}|{amount_s}"
+    payload = f"{str(log_type).strip().lower()}|{date_s}|{player_s}|{op_s}|{reason_s}|{amount_s}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -2459,6 +2460,32 @@ def balance_snapshot(conn, backend: str) -> dict:
         "cash_balance": cash_balance,
         "energy_balance": energy_balance,
         "accounts": items,
+    }
+
+
+def csv_treasury_snapshot(conn, backend: str) -> dict:
+    """
+    Current treasury view from imported CSV logs (deduped rows in econ_game_log_rows).
+    This is a lightweight operational view and is intentionally separate from
+    accounting balance_snapshot() based on posted double-entry journal lines.
+    """
+    row = fetch_one(
+        conn,
+        backend,
+        """
+        SELECT
+          COALESCE(SUM(CASE WHEN log_type='silver' THEN amount ELSE 0 END), 0) AS silver_total,
+          COALESCE(SUM(CASE WHEN log_type='energy' THEN amount ELSE 0 END), 0) AS energy_total,
+          COUNT(*) AS rows_total
+        FROM econ_game_log_rows
+        """,
+        (),
+    )
+    return {
+        "silver_balance": int((row or {}).get("silver_total") or 0),
+        "energy_balance": int((row or {}).get("energy_total") or 0),
+        "rows_total": int((row or {}).get("rows_total") or 0),
+        "as_of_utc": _utc_now(),
     }
 
 
