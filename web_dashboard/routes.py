@@ -38,7 +38,7 @@ from web_dashboard.data_service import (
 )
 from web_dashboard.db_sync import fetch_all, get_sync_connection
 from web_dashboard.discord_roles_client import fetch_discord_guild_roles
-from web_dashboard.economy_db_sync import get_economy_sync_connection
+from web_dashboard.economy_db_sync import economy_db_meta, get_economy_sync_connection
 from web_dashboard.economy_service import (
     create_manual_loot_buyback_from_price,
     create_regear_request,
@@ -583,6 +583,7 @@ def register_dashboard(app: Flask) -> None:
                         "cashflow_summary": cashflow_summary(conn, backend, days),
                     },
                     "forecast": forecast_summary(conn, backend),
+                    "db_info": economy_db_meta(),
                 }
             # Player nickname suggestions come from the main bot DB.
             try:

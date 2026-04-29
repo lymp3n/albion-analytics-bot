@@ -45,6 +45,14 @@ def _economy_db_url() -> str:
         return f"sqlite:///{tmp_path}"
 
 
+def economy_db_meta() -> dict:
+    url = _economy_db_url()
+    if url.startswith("sqlite"):
+        path = url.replace("sqlite:///", "").replace("sqlite://", "")
+        return {"backend": "sqlite", "source": path}
+    return {"backend": "postgres", "source": "ECON_DATABASE_URL"}
+
+
 @contextmanager
 def get_economy_sync_connection() -> Generator[Tuple[Any, str], None, None]:
     url = _economy_db_url()

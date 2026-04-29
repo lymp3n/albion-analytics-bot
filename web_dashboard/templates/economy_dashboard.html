@@ -399,8 +399,8 @@
                     <div class="form-group"><label class="form-label">Unmatched threshold</label><input id="cfg-unmatched" class="form-input" type="number" min="0"></div>
                     <div class="form-group"><label class="form-label">Reviewed by</label><input id="review-by" class="form-input" value="dashboard_admin"></div>
                     <div class="form-group"><label class="form-label">Review note</label><input id="review-note" class="form-input" placeholder="optional reason"></div>
-                    <div class="form-group"><label class="form-label">Treasury silver (target)</label><input id="treasury-cash" class="form-input" type="number" min="0" value="282128000"></div>
-                    <div class="form-group"><label class="form-label">Treasury energy (target)</label><input id="treasury-energy" class="form-input" type="number" min="0" value="402"></div>
+                    <div class="form-group"><label class="form-label">Treasury silver (target)</label><input id="treasury-cash" class="form-input" type="number" min="0" value="0"></div>
+                    <div class="form-group"><label class="form-label">Treasury energy (target)</label><input id="treasury-energy" class="form-input" type="number" min="0" value="0"></div>
                 </div>
                 <div class="filters-actions">
                     <button class="btn btn-primary tooltip" id="btn-apply-filters" data-tip="Apply period/filters to data and reports." data-i18n="btn_apply">Apply</button>
@@ -1136,10 +1136,17 @@
         $("#cfg-high-expense").value = num(cfg.alert_high_expense_30d_threshold, 25000000);
         $("#cfg-unmatched").value = num(cfg.alert_unmatched_records_threshold, 0);
         // Keep treasury target inputs synchronized with persisted config.
-        $("#treasury-cash").value = num(cfg.treasury_cash_current, 282128000);
-        $("#treasury-energy").value = num(cfg.treasury_energy_current, 402);
+        $("#treasury-cash").value = num(cfg.treasury_cash_current, 0);
+        $("#treasury-energy").value = num(cfg.treasury_energy_current, 0);
         const as = out.alert_state || {};
         $("#alert-state").textContent = `cash=${fmt(as.cash_balance)} | expense_30d=${fmt(as.expense_30d)} | unmatched=${fmt(as.unmatched_records)}`;
+        const dbi = out.db_info || {};
+        const dbBackend = String(dbi.backend || "unknown");
+        const dbSource = String(dbi.source || "n/a");
+        const st = $("#treasury-apply-status");
+        if (st && !String(st.textContent || "").trim()) {
+          st.textContent = `DB: ${dbBackend} | source: ${dbSource}`;
+        }
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
         const treasuryHint = $("#treasury-now-hint");
         if (treasuryHint) treasuryHint.textContent = "Balances are derived from POSTED entries only (pending does not affect KPI).";
@@ -1237,8 +1244,8 @@
         $("#flt-category").value = "";
         $("#flt-source").value = "";
         // Restore defaults visually before load; load() then reapplies persisted DB config.
-        $("#treasury-cash").value = "282128000";
-        $("#treasury-energy").value = "402";
+        $("#treasury-cash").value = "0";
+        $("#treasury-energy").value = "0";
         await load();
       });
       on("#btn-bal-energy", "click", () => refreshPlayerBalances("energy").catch(() => {}));

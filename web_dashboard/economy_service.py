@@ -526,8 +526,8 @@ def _seed_defaults(conn, backend: str) -> None:
         "alert_low_cash_threshold": "2000000",
         "alert_high_expense_30d_threshold": "25000000",
         "alert_unmatched_records_threshold": "0",
-        "treasury_cash_current": "282128000",
-        "treasury_energy_current": "402",
+        "treasury_cash_current": "0",
+        "treasury_energy_current": "0",
     }
     for k, v in config_defaults.items():
         if backend == "postgres":
