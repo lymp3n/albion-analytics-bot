@@ -68,6 +68,10 @@ from web_dashboard.economy_service import (
     list_routing_rules,
     list_loot_buyback_requests,
     list_regear_requests,
+    list_armory_stock,
+    list_armory_movements,
+    record_armory_movement,
+    import_armory_table_markdown,
     resolve_discrepancy,
     acknowledge_alert,
     pnl_summary,
@@ -573,6 +577,8 @@ def register_dashboard(app: Flask) -> None:
                     "routing_rules": list_routing_rules(conn, backend),
                     "loot_buybacks": list_loot_buyback_requests(conn, backend, 80),
                     "regear_requests": list_regear_requests(conn, backend, 80),
+                    "armory_stock": list_armory_stock(conn, backend, 600),
+                    "armory_movements": list_armory_movements(conn, backend, 600),
                     "imports": list_game_log_imports(conn, backend, 40),
                     "pending_approvals": list_pending_approvals(conn, backend, 120),
                     "audit_trail": list_audit_trail(conn, backend, 180),
@@ -1118,6 +1124,70 @@ def register_dashboard(app: Flask) -> None:
             print("Economy reports failed:", _econ_err(e), flush=True)
             return app.response_class(
                 response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps(out, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/armory-move", methods=["POST"])
+    @login_required
+    def dashboard_economy_armory_move():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = record_armory_movement(
+                    conn,
+                    backend,
+                    action=str(body.get("action") or "").strip().upper(),
+                    item_key=str(body.get("item_key") or "").strip(),
+                    item_name=str(body.get("item_name") or "").strip(),
+                    category=str(body.get("category") or "").strip(),
+                    tier=str(body.get("tier") or "").strip(),
+                    enchant=str(body.get("enchant") or "").strip(),
+                    quality=str(body.get("quality") or "").strip(),
+                    quantity=int(body.get("quantity") or 0),
+                    officer=str(body.get("officer") or "dashboard_admin").strip(),
+                    notes=str(body.get("notes") or "").strip(),
+                    occurred_at=str(body.get("occurred_at") or "").strip(),
+                    source="armory_web",
+                )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps(out, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/armory-import", methods=["POST"])
+    @login_required
+    def dashboard_economy_armory_import():
+        body = request.get_json(silent=True) or {}
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = import_armory_table_markdown(
+                    conn,
+                    backend,
+                    content=str(body.get("content") or ""),
+                    actor=str(body.get("actor") or "dashboard_admin").strip() or "dashboard_admin",
+                )
+        except ValueError as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
                 status=500,
                 mimetype="application/json",
             )

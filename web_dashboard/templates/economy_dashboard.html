@@ -370,6 +370,7 @@
                 <button class="nav-tab tooltip" data-target="operation" data-i18n="tab_operation" data-tip="Operations, buyback/regear requests, imports and routing rules.">➕ Operation</button>
                 <button class="nav-tab tooltip" data-target="journal" data-i18n="tab_journal" data-tip="Pending approval queue and manual moderation.">📋 Journal</button>
                 <button class="nav-tab tooltip" data-target="recon" data-i18n="tab_recon" data-tip="Reconciliation entities: tasks/imports/buyback/regear.">🔄 Reconciliation</button>
+                <button class="nav-tab tooltip" data-target="armory" data-tip="Armory stock and movement log.">🧰 Armory</button>
                 <button class="nav-tab tooltip" data-target="reports" data-i18n="tab_reports" data-tip="Financial reports, forecast and audit trail.">📈 Reports</button>
             </nav>
             <div class="header-right">
@@ -583,6 +584,39 @@
                 </table>
             </div>
         </div>
+        <div class="table-container hidden" id="section-armory">
+            <div class="section-title">🧰 Armory Stock + Transactions</div>
+            <div class="reconciliation">
+                <div class="recon-column">
+                    <div class="recon-title">Armory movement</div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Action</label><select id="arm-act" class="form-select"><option>ADD</option><option>REMOVE</option><option>SET</option></select></div>
+                        <div class="form-group"><label class="form-label">Quantity</label><input id="arm-qty" class="form-input" type="number" min="0" value="1"></div>
+                    </div>
+                    <div class="form-group"><label class="form-label">Item Name</label><input id="arm-name" class="form-input"></div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Category</label><input id="arm-cat" class="form-input"></div>
+                        <div class="form-group"><label class="form-label">Tier</label><input id="arm-tier" class="form-input" placeholder="T6"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Enchant</label><input id="arm-ench" class="form-input" placeholder="0.2"></div>
+                        <div class="form-group"><label class="form-label">Quality</label><input id="arm-quality" class="form-input" placeholder="Excellent"></div>
+                    </div>
+                    <div class="form-group"><label class="form-label">Officer</label><input id="arm-officer" class="form-input" value="dashboard_admin"></div>
+                    <div class="form-group"><label class="form-label">Notes</label><input id="arm-notes" class="form-input"></div>
+                    <button class="btn btn-primary" id="btn-arm-move">Apply movement</button>
+                </div>
+                <div class="recon-column">
+                    <div class="recon-title">Import from Google table markdown</div>
+                    <div class="form-group"><label class="form-label">Content</label><textarea id="arm-import-content" class="form-input" style="min-height:180px;"></textarea></div>
+                    <button class="btn btn-secondary" id="btn-arm-import">Import snapshot</button>
+                </div>
+            </div>
+            <div class="reconciliation mt-20">
+                <div class="recon-column"><div class="recon-title">Current stock</div><div class="scroll-wrap"><table id="tbl-armory-stock"><thead><tr><th>Item</th><th>Category</th><th>Tier</th><th>Enchant</th><th>Quality</th><th>Qty</th></tr></thead><tbody></tbody></table></div></div>
+                <div class="recon-column"><div class="recon-title">Movement log</div><div class="scroll-wrap"><table id="tbl-armory-movements"><thead><tr><th>Time</th><th>Action</th><th>Item</th><th>Qty</th><th>Officer</th></tr></thead><tbody></tbody></table></div></div>
+            </div>
+        </div>
     </div>
 
     <div class="toast-wrap" id="toast-wrap"></div>
@@ -598,6 +632,7 @@
         operation: "#section-operation",
         journal: "#section-journal",
         recon: "#section-recon",
+        armory: "#section-armory",
         reports: "#section-reports",
       };
       const playerBalanceSort = {
@@ -1269,6 +1304,14 @@
             : "—";
           return `<tr><td>${esc(r.id)}</td><td>${esc(r.player_name)}</td><td>${esc(r.content_type || "regear")}</td><td>${fmt(total)}</td><td>${statusBadge(r.status === "issued" ? "approved" : r.status)}</td><td>${act}</td></tr>`;
         }).join("") || `<tr><td colspan="6">${tr("no_regear")}</td></tr>`;
+        const armStock = out.armory_stock || [];
+        $("#tbl-armory-stock tbody").innerHTML = armStock.map((r) =>
+          `<tr><td>${esc(r.item_name || r.item_key || "")}</td><td>${esc(r.category || "")}</td><td>${esc(r.tier || "")}</td><td>${esc(r.enchant || "")}</td><td>${esc(r.quality || "")}</td><td>${fmt(r.quantity || 0)}</td></tr>`
+        ).join("") || `<tr><td colspan="6">(no stock)</td></tr>`;
+        const armMoves = out.armory_movements || [];
+        $("#tbl-armory-movements tbody").innerHTML = armMoves.map((m) =>
+          `<tr><td>${esc(m.occurred_at || m.created_at || "")}</td><td>${esc(m.action || "")}</td><td>${esc(m.item_name || m.item_key || "")}</td><td>${fmt(m.quantity || 0)}</td><td>${esc(m.officer || "")}</td></tr>`
+        ).join("") || `<tr><td colspan="5">(no movements)</td></tr>`;
         $$(".btn-regear-issue").forEach((btn) => btn.addEventListener("click", async () => {
           const out = await post("/dashboard/api/economy/regear", {
             action: "issue",
@@ -1335,6 +1378,37 @@
       on("#btn-range-silver-7d", "click", () => { _applyJournalRange(7, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#btn-range-silver-14d", "click", () => { _applyJournalRange(14, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#btn-recalc-balance", "click", async () => { await load(); toast("Balance recalculated from journal entries"); });
+      on("#btn-arm-move", "click", async () => {
+        const btn = $("#btn-arm-move");
+        setBusy(btn, true);
+        const out = await post("/dashboard/api/economy/armory-move", {
+          action: $("#arm-act").value || "ADD",
+          item_name: $("#arm-name").value || "",
+          category: $("#arm-cat").value || "",
+          tier: $("#arm-tier").value || "",
+          enchant: $("#arm-ench").value || "",
+          quality: $("#arm-quality").value || "",
+          quantity: parseInt($("#arm-qty").value || "0", 10),
+          officer: $("#arm-officer").value || "dashboard_admin",
+          notes: $("#arm-notes").value || "",
+        });
+        setBusy(btn, false);
+        if (!out.ok) return showErr(out.error || "Armory movement failed");
+        toast("Armory movement saved");
+        await load();
+      });
+      on("#btn-arm-import", "click", async () => {
+        const btn = $("#btn-arm-import");
+        setBusy(btn, true);
+        const out = await post("/dashboard/api/economy/armory-import", {
+          content: $("#arm-import-content").value || "",
+          actor: $("#arm-officer").value || "dashboard_admin",
+        });
+        setBusy(btn, false);
+        if (!out.ok) return showErr(out.error || "Armory import failed");
+        toast(`Imported ${num((out.rows_processed || 0))} armory rows`);
+        await load();
+      });
       on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);

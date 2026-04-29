@@ -253,6 +253,48 @@ def ensure_economy_schema(conn, backend: str, *, with_lock: bool = True) -> None
             )
             """
             )
+            cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_armory_stock (
+                item_key TEXT PRIMARY KEY,
+                item_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                enchant TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                quantity BIGINT NOT NULL DEFAULT 0,
+                notes TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            )
+            cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_armory_movements (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                occurred_at TEXT,
+                action TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                enchant TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                quantity BIGINT NOT NULL,
+                officer TEXT,
+                notes TEXT,
+                source TEXT DEFAULT 'armory_web',
+                journal_entry_id INTEGER
+            )
+            """
+            )
+            cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_econ_armory_movements_item_created
+            ON econ_armory_movements(item_key, created_at DESC)
+            """
+            )
         else:
             cur.execute(
             """
@@ -470,6 +512,48 @@ def ensure_economy_schema(conn, backend: str, *, with_lock: bool = True) -> None
                 journal_entry_id INTEGER,
                 note TEXT
             )
+            """
+            )
+            cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_armory_stock (
+                item_key TEXT PRIMARY KEY,
+                item_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                enchant TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            )
+            cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS econ_armory_movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                occurred_at TEXT,
+                action TEXT NOT NULL,
+                item_key TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                tier TEXT NOT NULL,
+                enchant TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                officer TEXT,
+                notes TEXT,
+                source TEXT DEFAULT 'armory_web',
+                journal_entry_id INTEGER
+            )
+            """
+            )
+            cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_econ_armory_movements_item_created
+            ON econ_armory_movements(item_key, created_at DESC)
             """
             )
         conn.commit()
@@ -2648,3 +2732,216 @@ def fetch_market_price(item_id: str, location: str, quality: int) -> dict:
 def suggest_item_ids(query: str, limit: int = 20) -> dict:
     items, err = search_item_ids(query, limit=limit)
     return {"ok": err is None, "items": items, "error": err}
+
+
+def list_armory_stock(conn, backend: str, limit: int = 500) -> List[dict]:
+    lim = max(1, min(int(limit), 2000))
+    rows = fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT item_key, item_name, category, tier, enchant, quality, quantity, notes, updated_at
+        FROM econ_armory_stock
+        ORDER BY category ASC, item_name ASC, tier ASC, enchant ASC, quality ASC
+        LIMIT {lim}
+        """,
+        (),
+    )
+    return [dict(r) for r in rows]
+
+
+def list_armory_movements(conn, backend: str, limit: int = 500) -> List[dict]:
+    lim = max(1, min(int(limit), 2000))
+    rows = fetch_all(
+        conn,
+        backend,
+        f"""
+        SELECT id, created_at, occurred_at, action, item_key, item_name, category, tier, enchant, quality,
+               quantity, officer, notes, source, journal_entry_id
+        FROM econ_armory_movements
+        ORDER BY id DESC
+        LIMIT {lim}
+        """,
+        (),
+    )
+    return [dict(r) for r in rows]
+
+
+def _armory_item_key(item_name: str, tier: str, enchant: str, quality: str) -> str:
+    nm = str(item_name or "").strip()
+    tr = str(tier or "").strip()
+    en = str(enchant or "").strip()
+    ql = str(quality or "").strip()
+    return f"{nm}|{tr}|{en}|{ql}"
+
+
+def _armory_row_get(row: dict, *names: str) -> str:
+    for n in names:
+        if n in row and str(row.get(n) or "").strip():
+            return str(row.get(n) or "").strip()
+    return ""
+
+
+def record_armory_movement(
+    conn,
+    backend: str,
+    *,
+    action: str,
+    item_name: str,
+    category: str,
+    tier: str,
+    enchant: str,
+    quality: str,
+    quantity: int,
+    officer: str = "",
+    notes: str = "",
+    occurred_at: str = "",
+    source: str = "armory_web",
+    item_key: str = "",
+) -> dict:
+    action_norm = str(action or "").strip().upper()
+    if action_norm not in ("ADD", "REMOVE", "SET"):
+        raise ValueError("action must be ADD, REMOVE or SET")
+    qty = int(quantity)
+    if qty < 0:
+        raise ValueError("quantity must be >= 0")
+    if action_norm in ("ADD", "REMOVE") and qty == 0:
+        raise ValueError("quantity must be > 0 for ADD/REMOVE")
+    key = str(item_key or "").strip() or _armory_item_key(item_name, tier, enchant, quality)
+    if not key:
+        raise ValueError("item key is required")
+    name_s = str(item_name or "").strip() or key.split("|")[0]
+    cat_s = str(category or "").strip() or name_s
+    tier_s = str(tier or "").strip()
+    ench_s = str(enchant or "").strip()
+    qual_s = str(quality or "").strip()
+    occ_s = str(occurred_at or "").strip() or _utc_now()
+
+    existing = fetch_one(conn, backend, "SELECT quantity FROM econ_armory_stock WHERE item_key=$1", (key,))
+    cur_qty = int((existing or {}).get("quantity") or 0)
+    if action_norm == "ADD":
+        new_qty = cur_qty + qty
+    elif action_norm == "REMOVE":
+        if cur_qty < qty:
+            raise ValueError(f"Not enough stock ({cur_qty}) for remove {qty}")
+        new_qty = cur_qty - qty
+    else:
+        new_qty = qty
+
+    cur = conn.cursor()
+    if backend == "postgres":
+        cur.execute(
+            """
+            INSERT INTO econ_armory_stock (item_key, item_name, category, tier, enchant, quality, quantity, notes, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (item_key) DO UPDATE SET
+              item_name=EXCLUDED.item_name,
+              category=EXCLUDED.category,
+              tier=EXCLUDED.tier,
+              enchant=EXCLUDED.enchant,
+              quality=EXCLUDED.quality,
+              quantity=EXCLUDED.quantity,
+              notes=EXCLUDED.notes,
+              updated_at=CURRENT_TIMESTAMP
+            """,
+            (key, name_s, cat_s, tier_s, ench_s, qual_s, int(new_qty), str(notes or "").strip() or None),
+        )
+        cur.execute(
+            """
+            INSERT INTO econ_armory_movements
+            (occurred_at, action, item_key, item_name, category, tier, enchant, quality, quantity, officer, notes, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (occ_s, action_norm, key, name_s, cat_s, tier_s, ench_s, qual_s, int(qty), str(officer or "").strip(), str(notes or "").strip(), str(source or "armory_web").strip()),
+        )
+        movement_id = int(cur.fetchone()[0])
+    else:
+        cur.execute(
+            """
+            INSERT INTO econ_armory_stock (item_key, item_name, category, tier, enchant, quality, quantity, notes, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(item_key) DO UPDATE SET
+              item_name=excluded.item_name,
+              category=excluded.category,
+              tier=excluded.tier,
+              enchant=excluded.enchant,
+              quality=excluded.quality,
+              quantity=excluded.quantity,
+              notes=excluded.notes,
+              updated_at=CURRENT_TIMESTAMP
+            """,
+            (key, name_s, cat_s, tier_s, ench_s, qual_s, int(new_qty), str(notes or "").strip() or None),
+        )
+        cur.execute(
+            """
+            INSERT INTO econ_armory_movements
+            (occurred_at, action, item_key, item_name, category, tier, enchant, quality, quantity, officer, notes, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (occ_s, action_norm, key, name_s, cat_s, tier_s, ench_s, qual_s, int(qty), str(officer or "").strip(), str(notes or "").strip(), str(source or "armory_web").strip()),
+        )
+        movement_id = int(cur.lastrowid)
+    _log_audit(
+        conn,
+        backend,
+        mutation_type="armory_movement",
+        entity_type="armory_item",
+        entity_id=key,
+        actor=str(officer or "dashboard_admin").strip() or "dashboard_admin",
+        payload={"movement_id": movement_id, "action": action_norm, "qty": int(qty), "new_qty": int(new_qty), "occurred_at": occ_s},
+    )
+    conn.commit()
+    return {"ok": True, "movement_id": movement_id, "item_key": key, "quantity_after": int(new_qty)}
+
+
+def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str = "dashboard_admin") -> dict:
+    txt = str(content or "").strip()
+    if not txt:
+        raise ValueError("content is required")
+    added = 0
+    touched = 0
+    for ln in txt.splitlines():
+        s = ln.strip()
+        if not s.startswith("|"):
+            continue
+        parts = [p.strip() for p in s.strip("|").split("|")]
+        if len(parts) < 9:
+            continue
+        if parts[0].lower() in ("a", "1", "---", "item id"):
+            continue
+        item_key = parts[1].strip()
+        item_name = parts[2].strip() if len(parts) > 2 else ""
+        category = parts[3].strip() if len(parts) > 3 else ""
+        tier = parts[4].strip() if len(parts) > 4 else ""
+        enchant = parts[5].strip() if len(parts) > 5 else ""
+        quality = parts[6].strip() if len(parts) > 6 else ""
+        qty_s = parts[7].strip() if len(parts) > 7 else "0"
+        notes = parts[8].strip() if len(parts) > 8 else ""
+        if not item_key or not item_name:
+            continue
+        try:
+            qty = int(float(qty_s)) if qty_s else 0
+        except ValueError:
+            continue
+        if qty < 0:
+            continue
+        rec = record_armory_movement(
+            conn,
+            backend,
+            action="SET",
+            item_key=item_key,
+            item_name=item_name,
+            category=category,
+            tier=tier,
+            enchant=enchant,
+            quality=quality,
+            quantity=qty,
+            officer=actor,
+            notes=notes,
+            source="armory_import_md",
+        )
+        touched += 1
+        if int(rec.get("movement_id") or 0) > 0:
+            added += 1
+    return {"ok": True, "rows_processed": touched, "movements_created": added}
