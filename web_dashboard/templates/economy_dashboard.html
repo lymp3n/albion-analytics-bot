@@ -426,7 +426,7 @@
                 <button class="action-btn tooltip" id="btn-focus-op" data-tip="Open operation form and focus action tab."><span>➕</span><span>New Operation</span></button>
                 <button class="action-btn tooltip" id="btn-import-csv" data-tip="Open CSV import modal directly."><span>📥</span><span>Import CSV</span></button>
                 <div class="treasury-strip">
-                    <div class="ttl" data-i18n="treasury_now">Treasury now</div>
+                    <div class="ttl" data-i18n="treasury_now">CSV net (imports)</div>
                     <div class="vals">
                         <span class="treasury-pill">Silver: <b id="treasury-now-silver">0</b></span>
                         <span class="treasury-pill">Energy: <b id="treasury-now-energy">0</b></span>
@@ -1118,7 +1118,7 @@
         const csvSilver = num((rep.csv_treasury_snapshot || {}).silver_balance || 0);
         const csvEnergy = num((rep.csv_treasury_snapshot || {}).energy_balance || 0);
         const csvRows = num((rep.csv_treasury_snapshot || {}).rows_total || 0);
-        $("#kpi-balance-note").textContent = `posted accounting balance | entries: ${fmt(k.entries_count || 0)}`;
+        $("#kpi-balance-note").textContent = `posted accounting: silver ${fmt(cash)} | energy ${fmt(energy)} | entries: ${fmt(k.entries_count || 0)}`;
         $("#kpi-profit-note").textContent = "period " + String(f.days) + "d";
         $("#kpi-gap-note").textContent = "forecast_30d - cash";
         $("#kpi-mismatch-note").textContent = "open discrepancies";
@@ -1151,7 +1151,7 @@
         }
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
         const treasuryHint = $("#treasury-now-hint");
-        if (treasuryHint) treasuryHint.textContent = `Current (CSV) uses deduped imports (${fmt(csvRows)} rows). KPI Balance uses POSTED double-entry journal only.`;
+        if (treasuryHint) treasuryHint.textContent = `CSV net movement from imports (${fmt(csvRows)} rows), not current guild treasury snapshot.`;
         const tnS = $("#treasury-now-silver");
         const tnE = $("#treasury-now-energy");
         if (tnS) tnS.textContent = fmt(csvSilver);
