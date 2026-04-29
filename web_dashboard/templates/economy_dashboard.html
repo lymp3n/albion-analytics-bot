@@ -1197,17 +1197,29 @@
         };
       }
       async function post(url, body) {
-        const r = await fetch(url, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body || {}),
-        });
-        const payload = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          return { ok: false, error: payload.error || `HTTP ${r.status}` };
+        const ctrl = new AbortController();
+        const timeout = setTimeout(() => ctrl.abort(), 90000);
+        try {
+          const r = await fetch(url, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {}),
+            signal: ctrl.signal,
+          });
+          const payload = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            return { ok: false, error: payload.error || `HTTP ${r.status}` };
+          }
+          return payload && typeof payload === "object" ? payload : { ok: false, error: "Invalid server response" };
+        } catch (e) {
+          if (String(e || "").toLowerCase().includes("abort")) {
+            return { ok: false, error: "Request timeout (90s). Try smaller import chunk." };
+          }
+          return { ok: false, error: String(e || "Network error") };
+        } finally {
+          clearTimeout(timeout);
         }
-        return payload && typeof payload === "object" ? payload : { ok: false, error: "Invalid server response" };
       }
       function switchTab(target) {
         $$(".nav-tab").forEach((b) => b.classList.toggle("active", b.dataset.target === target));
@@ -1527,14 +1539,19 @@
       on("#btn-arm-import", "click", async () => {
         const btn = $("#btn-arm-import");
         setBusy(btn, true);
-        const out = await post("/dashboard/api/economy/armory-import", {
-          content: $("#arm-import-content").value || "",
-          actor: $("#arm-officer").value || "dashboard_admin",
-        });
-        setBusy(btn, false);
-        if (!out.ok) return showErr(out.error || "Armory import failed");
-        toast(`Imported ${num((out.rows_processed || 0))} armory rows`);
-        await load();
+        try {
+          const out = await post("/dashboard/api/economy/armory-import", {
+            content: $("#arm-import-content").value || "",
+            actor: $("#arm-officer").value || "dashboard_admin",
+          });
+          if (!out.ok) return showErr(out.error || "Armory import failed");
+          toast(`Imported ${num((out.rows_processed || 0))} armory rows`);
+          await load();
+        } catch (e) {
+          showErr(String(e || "Armory import failed"));
+        } finally {
+          setBusy(btn, false);
+        }
       });
       on("#btn-armory-stock-toggle", "click", () => {
         const btn = $("#btn-armory-stock-toggle");

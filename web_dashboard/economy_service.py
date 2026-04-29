@@ -2802,6 +2802,7 @@ def record_armory_movement(
     source: str = "armory_web",
     item_key: str = "",
     unit_cost: int = 0,
+    auto_commit: bool = True,
 ) -> dict:
     action_norm = str(action or "").strip().upper()
     if action_norm not in ("ADD", "REMOVE", "SET"):
@@ -2915,7 +2916,8 @@ def record_armory_movement(
         actor=str(officer or "dashboard_admin").strip() or "dashboard_admin",
         payload={"movement_id": movement_id, "action": action_norm, "qty": int(qty), "new_qty": int(new_qty), "occurred_at": occ_s, "unit_cost": unit_cost_i, "journal_entry_id": journal_entry_id},
     )
-    conn.commit()
+    if auto_commit:
+        conn.commit()
     return {"ok": True, "movement_id": movement_id, "item_key": key, "quantity_after": int(new_qty), "journal_entry_id": journal_entry_id}
 
 
@@ -3002,6 +3004,7 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
             officer=actor,
             notes=notes,
             source=source,
+            auto_commit=False,
         )
         touched += 1
         if int(rec.get("movement_id") or 0) > 0:
@@ -3020,78 +3023,86 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
             continue
         stitched_lines.append(s0)
 
-    for s in stitched_lines:
-        if s.startswith("|"):
-            parts = _split_md_row(s)
-            if len(parts) < 9:
+    try:
+        for s in stitched_lines:
+            if s.startswith("|"):
+                parts = _split_md_row(s)
+                if len(parts) < 9:
+                    continue
+                if parts[0].lower() in ("a", "1", "---", "item id"):
+                    continue
+                # Google markdown rows: [A, ItemID, ItemName, Category, Tier, Enchant, Quality, Qty, Notes]
+                _import_row(parts[1:9], "armory_import_md")
                 continue
-            if parts[0].lower() in ("a", "1", "---", "item id"):
-                continue
-            # Google markdown rows: [A, ItemID, ItemName, Category, Tier, Enchant, Quality, Qty, Notes]
-            _import_row(parts[1:9], "armory_import_md")
-            continue
-        # Plain TSV/CSV-like rows:
-        raw_parts = [p.strip() for p in s.split("\t")]
-        if len(raw_parts) < 8:
-            raw_parts = [p.strip() for p in s.split(",")]
-        if len(raw_parts) < 8:
-            # Optional compact format:
-            #   Beef Stew|T8|0.1|Normal
-            #   Beef Stew|T8|0.1|Normal x20
-            m = simple_key_re.match(s)
-            if not m:
-                # fallback for column-like text with multiple spaces
-                raw_parts = [p.strip() for p in re.split(r"\s{2,}", s) if p.strip()]
+            # Plain TSV/CSV-like rows:
+            raw_parts = [p.strip() for p in s.split("\t")]
             if len(raw_parts) < 8:
-                # fallback for "single-spaced row" with predictable tail:
-                # <item_id> <item_name...> <category...> T6 0.2 Excellent 1 [notes]
-                m_tail = re.match(
-                    r"^(?P<item_id>\S+)\s+(?P<head>.+?)\s+(?P<tier>T\d+)\s+(?P<enchant>[0-9.]+)\s+(?P<quality>[A-Za-z]+)\s+(?P<qty>-?\d+)(?:\s+(?P<notes>.*))?$",
-                    s,
-                )
-                if m_tail:
-                    item_id = str(m_tail.group("item_id") or "").strip()
-                    head = str(m_tail.group("head") or "").strip()
-                    head_parts = [p for p in re.split(r"\s{2,}", head) if p.strip()]
-                    if len(head_parts) >= 2:
-                        item_name = head_parts[0].strip()
-                        category = head_parts[1].strip()
-                    else:
-                        item_name = head.strip()
-                        category = head.strip()
-                    _import_row(
-                        [
-                            item_id,
-                            item_name,
-                            category,
-                            str(m_tail.group("tier") or "").strip(),
-                            str(m_tail.group("enchant") or "").strip(),
-                            str(m_tail.group("quality") or "").strip(),
-                            str(m_tail.group("qty") or "").strip(),
-                            str(m_tail.group("notes") or "").strip(),
-                        ],
-                        "armory_import_text",
-                    )
-                    continue
+                raw_parts = [p.strip() for p in s.split(",")]
+            if len(raw_parts) < 8:
+                # Optional compact format:
+                #   Beef Stew|T8|0.1|Normal
+                #   Beef Stew|T8|0.1|Normal x20
+                m = simple_key_re.match(s)
                 if not m:
+                    # fallback for column-like text with multiple spaces
+                    raw_parts = [p.strip() for p in re.split(r"\s{2,}", s) if p.strip()]
+                if len(raw_parts) < 8:
+                    # fallback for "single-spaced row" with predictable tail:
+                    # <item_id> <item_name...> <category...> T6 0.2 Excellent 1 [notes]
+                    m_tail = re.match(
+                        r"^(?P<item_id>\S+)\s+(?P<head>.+?)\s+(?P<tier>T\d+)\s+(?P<enchant>[0-9.]+)\s+(?P<quality>[A-Za-z]+)\s+(?P<qty>-?\d+)(?:\s+(?P<notes>.*))?$",
+                        s,
+                    )
+                    if m_tail:
+                        item_id = str(m_tail.group("item_id") or "").strip()
+                        head = str(m_tail.group("head") or "").strip()
+                        head_parts = [p for p in re.split(r"\s{2,}", head) if p.strip()]
+                        if len(head_parts) >= 2:
+                            item_name = head_parts[0].strip()
+                            category = head_parts[1].strip()
+                        else:
+                            item_name = head.strip()
+                            category = head.strip()
+                        _import_row(
+                            [
+                                item_id,
+                                item_name,
+                                category,
+                                str(m_tail.group("tier") or "").strip(),
+                                str(m_tail.group("enchant") or "").strip(),
+                                str(m_tail.group("quality") or "").strip(),
+                                str(m_tail.group("qty") or "").strip(),
+                                str(m_tail.group("notes") or "").strip(),
+                            ],
+                            "armory_import_text",
+                        )
+                        continue
+                    if not m:
+                        continue
+                    key = str(m.group("key") or "").strip()
+                    qty = int((m.group("qty") or m.group("qty2") or "1"))
+                    if not key:
+                        continue
+                    key_parts = [p.strip() for p in key.split("|")]
+                    if len(key_parts) < 4:
+                        continue
+                    item_name = key_parts[0]
+                    tier = key_parts[1]
+                    enchant = key_parts[2]
+                    quality = key_parts[3]
+                    # category defaults to item_name in compact mode
+                    _import_row([key, item_name, item_name, tier, enchant, quality, str(qty), ""], "armory_import_key")
                     continue
-                key = str(m.group("key") or "").strip()
-                qty = int((m.group("qty") or m.group("qty2") or "1"))
-                if not key:
-                    continue
-                key_parts = [p.strip() for p in key.split("|")]
-                if len(key_parts) < 4:
-                    continue
-                item_name = key_parts[0]
-                tier = key_parts[1]
-                enchant = key_parts[2]
-                quality = key_parts[3]
-                # category defaults to item_name in compact mode
-                _import_row([key, item_name, item_name, tier, enchant, quality, str(qty), ""], "armory_import_key")
+            hdr0 = str(raw_parts[0] or "").strip().lower()
+            hdr1 = str(raw_parts[1] or "").strip().lower()
+            if hdr0 in ("item id", "item_id") or hdr1 in ("item name", "item_name"):
                 continue
-        hdr0 = str(raw_parts[0] or "").strip().lower()
-        hdr1 = str(raw_parts[1] or "").strip().lower()
-        if hdr0 in ("item id", "item_id") or hdr1 in ("item name", "item_name"):
-            continue
-        _import_row(raw_parts[:8], "armory_import_text")
+            _import_row(raw_parts[:8], "armory_import_text")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     return {"ok": True, "rows_processed": touched, "movements_created": added}
