@@ -16,10 +16,30 @@ def _utc_now() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def ensure_economy_schema(conn, backend: str) -> None:
+# Shared Postgres advisory lock id for economy schema DDL/reset.
+_ECON_SCHEMA_LOCK_ID = 734105902331
+
+
+def _pg_lock_econ_schema(conn, backend: str) -> None:
+    if backend != "postgres":
+        return
     cur = conn.cursor()
-    if backend == "postgres":
-        cur.execute(
+    cur.execute("SELECT pg_advisory_lock(%s)", (_ECON_SCHEMA_LOCK_ID,))
+
+
+def _pg_unlock_econ_schema(conn, backend: str) -> None:
+    if backend != "postgres":
+        return
+    cur = conn.cursor()
+    cur.execute("SELECT pg_advisory_unlock(%s)", (_ECON_SCHEMA_LOCK_ID,))
+
+
+def ensure_economy_schema(conn, backend: str) -> None:
+    _pg_lock_econ_schema(conn, backend)
+    cur = conn.cursor()
+    try:
+        if backend == "postgres":
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_accounts (
                 code TEXT PRIMARY KEY,
@@ -27,8 +47,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 kind TEXT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_routing_rules (
                 category TEXT PRIMARY KEY,
@@ -38,8 +58,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 tag TEXT
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_journal_entries (
                 id SERIAL PRIMARY KEY,
@@ -52,8 +72,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 status TEXT DEFAULT 'posted'
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_journal_lines (
                 id SERIAL PRIMARY KEY,
@@ -63,8 +83,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 amount BIGINT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_guild_bonus_tasks (
                 id SERIAL PRIMARY KEY,
@@ -75,8 +95,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_guild_bonus_awards (
                 id SERIAL PRIMARY KEY,
@@ -88,8 +108,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_game_log_imports (
                 id SERIAL PRIMARY KEY,
@@ -99,8 +119,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_import_player_totals (
                 id SERIAL PRIMARY KEY,
@@ -110,8 +130,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 net_amount BIGINT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_game_log_rows (
                 id SERIAL PRIMARY KEY,
@@ -124,20 +144,20 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 amount BIGINT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_econ_import_player_totals_import
             ON econ_import_player_totals(import_id, log_type)
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_econ_game_log_rows_unique
             ON econ_game_log_rows(log_type, row_hash)
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_audit_log (
                 id SERIAL PRIMARY KEY,
@@ -149,8 +169,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 payload_json TEXT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_import_discrepancies (
                 id SERIAL PRIMARY KEY,
@@ -167,8 +187,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_alerts (
                 id SERIAL PRIMARY KEY,
@@ -182,8 +202,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 resolved_at TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_config (
                 key TEXT PRIMARY KEY,
@@ -191,8 +211,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_loot_buyback_requests (
                 id SERIAL PRIMARY KEY,
@@ -212,8 +232,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 note TEXT
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_regear_requests (
                 id SERIAL PRIMARY KEY,
@@ -231,9 +251,9 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 note TEXT
             )
             """
-        )
-    else:
-        cur.execute(
+            )
+        else:
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_accounts (
                 code TEXT PRIMARY KEY,
@@ -241,8 +261,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 kind TEXT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_routing_rules (
                 category TEXT PRIMARY KEY,
@@ -252,8 +272,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 tag TEXT
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_journal_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -266,8 +286,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 status TEXT DEFAULT 'posted'
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_journal_lines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,8 +298,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 FOREIGN KEY (entry_id) REFERENCES econ_journal_entries(id) ON DELETE CASCADE
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_guild_bonus_tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -290,8 +310,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_guild_bonus_awards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,8 +324,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 FOREIGN KEY (task_id) REFERENCES econ_guild_bonus_tasks(id) ON DELETE SET NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_game_log_imports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,8 +335,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_import_player_totals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -327,8 +347,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 FOREIGN KEY (import_id) REFERENCES econ_game_log_imports(id) ON DELETE CASCADE
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_game_log_rows (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -342,20 +362,20 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 FOREIGN KEY (import_id) REFERENCES econ_game_log_imports(id) ON DELETE CASCADE
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_econ_import_player_totals_import
             ON econ_import_player_totals(import_id, log_type)
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_econ_game_log_rows_unique
             ON econ_game_log_rows(log_type, row_hash)
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -367,8 +387,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 payload_json TEXT NOT NULL
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_import_discrepancies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -386,8 +406,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 FOREIGN KEY (import_id) REFERENCES econ_game_log_imports(id) ON DELETE CASCADE
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_alerts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -401,8 +421,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 resolved_at TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_config (
                 key TEXT PRIMARY KEY,
@@ -410,8 +430,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_loot_buyback_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -431,8 +451,8 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 note TEXT
             )
             """
-        )
-        cur.execute(
+            )
+            cur.execute(
             """
             CREATE TABLE IF NOT EXISTS econ_regear_requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -450,9 +470,11 @@ def ensure_economy_schema(conn, backend: str) -> None:
                 note TEXT
             )
             """
-        )
-    conn.commit()
-    _seed_defaults(conn, backend)
+            )
+        conn.commit()
+        _seed_defaults(conn, backend)
+    finally:
+        _pg_unlock_econ_schema(conn, backend)
 
 
 def reset_economy_data(conn, backend: str) -> dict:
@@ -460,38 +482,42 @@ def reset_economy_data(conn, backend: str) -> dict:
     Hard reset economy domain only (econ_* tables).
     Does not touch main bot DB tables.
     """
+    _pg_lock_econ_schema(conn, backend)
     # IMPORTANT: avoid fetch_all/fetch_one wrapper here.
     # Some SQL wrapper logic converts $1 placeholders for postgres/psycopg2 and can
     # fail on queries without params. We keep this query fully param-free.
-    cur = conn.cursor()
-    if backend == "sqlite":
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'econ_%'", ())
-        rows = cur.fetchall()
-        names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
-    else:
-        cur.execute(
-            "SELECT tablename AS name FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'econ_%%'",
-            (),
-        )
-        rows = cur.fetchall()
-        # Postgres cursor returns tuples unless a cursor_factory is used.
-        names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
-    for name in names:
-        if backend == "postgres":
-            cur.execute(f"DROP TABLE IF EXISTS {name} CASCADE")
+    try:
+        cur = conn.cursor()
+        if backend == "sqlite":
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'econ_%'", ())
+            rows = cur.fetchall()
+            names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
         else:
-            cur.execute(f"DROP TABLE IF EXISTS {name}")
-    conn.commit()
-    ensure_economy_schema(conn, backend)
-    cfg = get_config(conn, backend)
-    bal = balance_snapshot(conn, backend)
-    return {
-        "dropped_tables": len(names),
-        "treasury_cash_current": int(cfg.get("treasury_cash_current") or 0),
-        "treasury_energy_current": int(cfg.get("treasury_energy_current") or 0),
-        "cash_balance": int(bal.get("cash_balance") or 0),
-        "energy_balance": int(bal.get("energy_balance") or 0),
-    }
+            cur.execute(
+                "SELECT tablename AS name FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'econ_%%'",
+                (),
+            )
+            rows = cur.fetchall()
+            # Postgres cursor returns tuples unless a cursor_factory is used.
+            names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
+        for name in names:
+            if backend == "postgres":
+                cur.execute(f"DROP TABLE IF EXISTS {name} CASCADE")
+            else:
+                cur.execute(f"DROP TABLE IF EXISTS {name}")
+        conn.commit()
+        ensure_economy_schema(conn, backend)
+        cfg = get_config(conn, backend)
+        bal = balance_snapshot(conn, backend)
+        return {
+            "dropped_tables": len(names),
+            "treasury_cash_current": int(cfg.get("treasury_cash_current") or 0),
+            "treasury_energy_current": int(cfg.get("treasury_energy_current") or 0),
+            "cash_balance": int(bal.get("cash_balance") or 0),
+            "energy_balance": int(bal.get("energy_balance") or 0),
+        }
+    finally:
+        _pg_unlock_econ_schema(conn, backend)
 
 
 def _seed_defaults(conn, backend: str) -> None:
