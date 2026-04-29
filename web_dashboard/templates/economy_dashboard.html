@@ -500,12 +500,8 @@
                 <div class="recon-column">
                     <div class="recon-title">Player balances (Energy) from CSV</div>
                     <div class="form-row">
-                        <div class="form-group"><label class="form-label">Import</label><select id="bal-energy-import" class="form-select"></select></div>
-                        <div class="form-group"><label class="form-label">Sign</label><select id="bal-energy-sign" class="form-select"><option value="all">all</option><option value="neg">negative</option><option value="pos">positive</option></select></div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group"><label class="form-label">Min |net|</label><input id="bal-energy-min" class="form-input" type="number" min="0" placeholder="0"></div>
-                        <div class="form-group"><label class="form-label">Max |net|</label><input id="bal-energy-max" class="form-input" type="number" min="0" placeholder=""></div>
+                        <div class="form-group"><label class="form-label">Min</label><input id="bal-energy-min" class="form-input" type="number" placeholder=""></div>
+                        <div class="form-group"><label class="form-label">Max</label><input id="bal-energy-max" class="form-input" type="number" placeholder=""></div>
                     </div>
                     <button class="btn btn-secondary" id="btn-bal-energy">Refresh</button>
                     <div class="mt-20">
@@ -516,12 +512,8 @@
                 <div class="recon-column">
                     <div class="recon-title">Player balances (Silver) from CSV</div>
                     <div class="form-row">
-                        <div class="form-group"><label class="form-label">Import</label><select id="bal-silver-import" class="form-select"></select></div>
-                        <div class="form-group"><label class="form-label">Sign</label><select id="bal-silver-sign" class="form-select"><option value="all">all</option><option value="neg">negative</option><option value="pos">positive</option></select></div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group"><label class="form-label">Min |net|</label><input id="bal-silver-min" class="form-input" type="number" min="0" placeholder="0"></div>
-                        <div class="form-group"><label class="form-label">Max |net|</label><input id="bal-silver-max" class="form-input" type="number" min="0" placeholder=""></div>
+                        <div class="form-group"><label class="form-label">Min</label><input id="bal-silver-min" class="form-input" type="number" placeholder=""></div>
+                        <div class="form-group"><label class="form-label">Max</label><input id="bal-silver-max" class="form-input" type="number" placeholder=""></div>
                     </div>
                     <button class="btn btn-secondary" id="btn-bal-silver">Refresh</button>
                     <div class="mt-20">
@@ -1043,31 +1035,9 @@
         if (el) el.addEventListener(event, cb);
       }
 
-      function _latestImportId(imports, logType) {
-        const arr = (imports || []).filter((x) => String(x.log_type || "").toLowerCase() === String(logType).toLowerCase());
-        if (!arr.length) return null;
-        return Math.max.apply(null, arr.map((x) => parseInt(x.id, 10) || 0).filter((n) => n > 0)) || null;
-      }
-
-      function _fillImportSelect(selId, imports, logType) {
-        const sel = $(selId);
-        if (!sel) return;
-        const arr = (imports || []).filter((x) => String(x.log_type || "").toLowerCase() === String(logType).toLowerCase());
-        const options = [`<option value="__current">current (all unique rows)</option>`].concat(arr.map((x) => {
-          const id = esc(x.id);
-          const ts = esc(String(x.imported_at || ""));
-          const rows = esc(String(x.rows_count || ""));
-          return `<option value="${id}">#${id} • ${rows} rows • ${ts}</option>`;
-        }));
-        sel.innerHTML = options.join("");
-        sel.value = "__current";
-      }
-
       async function refreshPlayerBalances(kind) {
         const logType = kind === "energy" ? "energy" : "silver";
         const btn = kind === "energy" ? $("#btn-bal-energy") : $("#btn-bal-silver");
-        const selImport = kind === "energy" ? $("#bal-energy-import") : $("#bal-silver-import");
-        const selSign = kind === "energy" ? $("#bal-energy-sign") : $("#bal-silver-sign");
         const inpMin = kind === "energy" ? $("#bal-energy-min") : $("#bal-silver-min");
         const inpMax = kind === "energy" ? $("#bal-energy-max") : $("#bal-silver-max");
         const list = kind === "energy" ? $("#bal-energy-list") : $("#bal-silver-list");
@@ -1079,9 +1049,8 @@
         list.innerHTML = "";
         const qs = new URLSearchParams({
           log_type: logType,
-          import_id: String(selImport?.value || ""),
-          scope: String(selImport?.value || "") === "__current" ? "current" : "import",
-          sign: String(selSign?.value || "all"),
+          scope: "current",
+          sign: "all",
           min: String(inpMin?.value || ""),
           max: String(inpMax?.value || ""),
           limit: "300",
@@ -1098,9 +1067,9 @@
           const nm = esc(r.player_name || "");
           const amt = num(r.net_amount || 0);
           const sign = amt >= 0 ? "+" : "";
-          return `<option value="${nm}">${nm} — ${sign}${fmt(amt)}</option>`;
+          return `<option value="${nm}">${nm}: ${sign}${fmt(amt)}</option>`;
         }).join("") || `<option value="">(no rows)</option>`;
-        meta.textContent = `rows: ${rows.length} | source: ${String(selImport?.value || "") === "__current" ? "all unique imported CSV rows" : "selected import"} | meaning: Deposit adds, Withdrawal subtracts (net)`;
+        meta.textContent = `rows: ${rows.length} | source: current aggregated CSV (all unique rows) | ordered: min -> max`;
       }
 
       async function load() {
@@ -1208,8 +1177,6 @@
         $("#tbl-imports tbody").innerHTML = imports.map((i) =>
           `<tr><td>${esc(i.id)}</td><td>${esc(i.log_type)}</td><td>${esc(i.rows_count)}</td><td>${esc(JSON.stringify(i.summary || {}))} <span class="status approved" style="margin-left:6px;">u:${esc((i.summary || {}).rows_unique_imported ?? i.rows_count)} / skip:${esc((i.summary || {}).rows_duplicates_skipped ?? 0)}</span></td><td>${esc(i.imported_at)}</td></tr>`
         ).join("") || `<tr><td colspan="5">${tr("no_imports")}</td></tr>`;
-        _fillImportSelect("#bal-energy-import", imports, "energy");
-        _fillImportSelect("#bal-silver-import", imports, "silver");
         const buybacks = out.loot_buybacks || [];
         $("#tbl-buyback tbody").innerHTML = buybacks.map((b) =>
           `<tr><td>${esc(b.id)}</td><td>${esc(b.seller_name)}</td><td>${esc(b.item_id)} x${esc(b.quantity)}</td><td>${fmt(b.payout_total)}</td><td>${statusBadge(b.status)}</td></tr>`

@@ -1924,11 +1924,11 @@ def list_import_player_totals(
         where.append("t.net_amount < 0")
 
     if min_amount is not None:
-        where.append(f"ABS(t.net_amount) >= ${len(params)+1}")
-        params.append(abs(int(min_amount)))
-    if max_amount is not None and int(max_amount) > 0:
-        where.append(f"ABS(t.net_amount) <= ${len(params)+1}")
-        params.append(abs(int(max_amount)))
+        where.append(f"t.net_amount >= ${len(params)+1}")
+        params.append(int(min_amount))
+    if max_amount is not None:
+        where.append(f"t.net_amount <= ${len(params)+1}")
+        params.append(int(max_amount))
 
     where_sql = " AND ".join(where)
     rows = fetch_all(
@@ -1938,7 +1938,7 @@ def list_import_player_totals(
         SELECT t.player_name, t.net_amount
         FROM econ_import_player_totals t
         WHERE {where_sql}
-        ORDER BY ABS(t.net_amount) DESC, t.player_name ASC
+        ORDER BY t.net_amount ASC, t.player_name ASC
         LIMIT {lim}
         """,
         tuple(params),
@@ -1972,11 +1972,11 @@ def list_current_player_totals(
     if sign_norm == "neg":
         having_parts.append("SUM(r.amount) < 0")
     if min_amount is not None:
-        having_parts.append(f"ABS(SUM(r.amount)) >= ${len(params)+1}")
-        params.append(abs(int(min_amount)))
-    if max_amount is not None and int(max_amount) > 0:
-        having_parts.append(f"ABS(SUM(r.amount)) <= ${len(params)+1}")
-        params.append(abs(int(max_amount)))
+        having_parts.append(f"SUM(r.amount) >= ${len(params)+1}")
+        params.append(int(min_amount))
+    if max_amount is not None:
+        having_parts.append(f"SUM(r.amount) <= ${len(params)+1}")
+        params.append(int(max_amount))
     having_sql = ("HAVING " + " AND ".join(having_parts)) if having_parts else ""
     rows = fetch_all(
         conn,
@@ -1988,7 +1988,7 @@ def list_current_player_totals(
         WHERE {where_sql}
         GROUP BY COALESCE(NULLIF(TRIM(r.player_name), ''), 'unknown')
         {having_sql}
-        ORDER BY ABS(SUM(r.amount)) DESC, player_name ASC
+        ORDER BY SUM(r.amount) ASC, player_name ASC
         LIMIT {lim}
         """,
         tuple(params),
