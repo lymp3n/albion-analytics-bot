@@ -511,6 +511,11 @@
                         <div class="form-group"><label class="form-label">Date from</label><input id="bal-energy-date-from" class="form-input" type="datetime-local"></div>
                         <div class="form-group"><label class="form-label">Date to</label><input id="bal-energy-date-to" class="form-input" type="datetime-local"></div>
                     </div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" id="btn-range-24h">24h</button>
+                        <button class="btn btn-secondary" id="btn-range-7d">7d</button>
+                        <button class="btn btn-secondary" id="btn-range-4w">4w</button>
+                    </div>
                     <button class="btn btn-secondary" id="btn-bal-energy">Refresh</button>
                     <div class="scroll-wrap mt-20">
                         <table id="tbl-bal-energy">
@@ -1079,6 +1084,22 @@
         return s ? (s.replace("T", " ") + ":00").slice(0, 19) : "";
       }
 
+      function _fmtLocalInputDate(d) {
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      function _applyJournalRange(days) {
+        const now = new Date();
+        const from = new Date(now.getTime() - (Math.max(1, days) * 24 * 60 * 60 * 1000));
+        const fromVal = _fmtLocalInputDate(from);
+        const toVal = _fmtLocalInputDate(now);
+        const ids = ["bal-energy-date-from", "bal-silver-date-from"];
+        ids.forEach((id) => { const el = $("#" + id); if (el) el.value = fromVal; });
+        const idsTo = ["bal-energy-date-to", "bal-silver-date-to"];
+        idsTo.forEach((id) => { const el = $("#" + id); if (el) el.value = toVal; });
+      }
+
       async function refreshPlayerBalances(kind) {
         const logType = kind === "energy" ? "energy" : "silver";
         const btn = kind === "energy" ? $("#btn-bal-energy") : $("#btn-bal-silver");
@@ -1297,6 +1318,9 @@
       on("#bal-energy-sort-net", "click", () => { _toggleBalanceSort("energy", "net_amount"); refreshPlayerBalances("energy").catch(() => {}); });
       on("#bal-silver-sort-player", "click", () => { _toggleBalanceSort("silver", "player_name"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#bal-silver-sort-net", "click", () => { _toggleBalanceSort("silver", "net_amount"); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-range-24h", "click", () => { _applyJournalRange(1); refreshPlayerBalances("energy").catch(() => {}); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-range-7d", "click", () => { _applyJournalRange(7); refreshPlayerBalances("energy").catch(() => {}); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-range-4w", "click", () => { _applyJournalRange(28); refreshPlayerBalances("energy").catch(() => {}); refreshPlayerBalances("silver").catch(() => {}); });
       on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);

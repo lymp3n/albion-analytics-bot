@@ -737,8 +737,8 @@ def _seed_opening_balances_from_config(conn, backend: str) -> None:
     - KPI balance is then derived from posted journal lines
     """
     cfg = get_config(conn, backend)
-    cash_s = str(cfg.get("treasury_cash_current") or "").strip()
-    energy_s = str(cfg.get("treasury_energy_current") or "").strip()
+    cash_s = str(cfg.get("treasury_opening_cash") or "").strip()
+    energy_s = str(cfg.get("treasury_opening_energy") or "").strip()
 
     def _to_pos_int(s: str) -> int:
         return int(s) if s and s.lstrip("-").isdigit() and int(s) > 0 else 0
@@ -867,13 +867,11 @@ def apply_treasury_snapshot(conn, backend: str, *, cash: int, energy: int, actor
     )
     conn.commit()
 
-    # Create adjustment entries to match the new targets.
-    _ensure_treasury_adjustments_from_config(conn, backend)
-
     return {
         "ok": True,
         "cash_target": cash_i,
         "energy_target": energy_i,
+        # Snapshot update only: does NOT create accounting entries.
         "cash_balance_after": _posted_account_balance(conn, backend, "1000"),
         "energy_balance_after": _posted_account_balance(conn, backend, "1100"),
     }
