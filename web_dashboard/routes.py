@@ -72,6 +72,7 @@ from web_dashboard.economy_service import (
     review_pending_entry,
     run_alert_threshold_checks,
     upsert_routing_rule,
+    reset_economy_data,
 )
 
 from event_templates_store import read_raw_text, save_raw_text, templates_file_path
@@ -854,6 +855,33 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps(out, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/reset-all", methods=["POST"])
+    @login_required
+    def dashboard_economy_reset_all():
+        body = request.get_json(silent=True) or {}
+        confirm = str(body.get("confirm") or "").strip().lower()
+        if confirm not in ("reset", "yes", "true", "1"):
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "Confirmation required: { confirm: 'reset' }"}),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                out = reset_economy_data(conn, backend)
+        except Exception as e:
+            app.logger.exception("Economy reset-all failed")
+            print("Economy reset-all failed:", _econ_err(e), flush=True)
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=500,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "result": out}, default=str),
+            mimetype="application/json",
+        )
 
     @app.route("/dashboard/api/economy/alert/ack", methods=["POST"])
     @login_required

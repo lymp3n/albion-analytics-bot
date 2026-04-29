@@ -455,8 +455,10 @@
                 <svg class="sparkline" id="sparkline-internal" viewBox="0 0 240 54" preserveAspectRatio="none"><path d=""></path></svg>
                 <div class="api-pill mt-20" id="api-external-pill"><span class="api-dot"></span><span id="api-external-text">Albion API checking...</span></div>
                 <svg class="sparkline" id="sparkline-external" viewBox="0 0 240 54" preserveAspectRatio="none"><path d=""></path></svg>
+                <div class="api-pill mt-20" id="api-db-pill"><span class="api-dot"></span><span id="api-db-text">DB checking...</span></div>
                 <div class="mono mt-20" id="api-meta"></div>
                 <button class="btn btn-secondary mt-20" id="btn-api-refresh-now">Refresh now</button>
+                <button class="btn btn-secondary mt-20" id="btn-econ-reset-all">Reset economy to zero</button>
             </div>
         </div>
 
@@ -1143,9 +1145,17 @@
         const dbi = out.db_info || {};
         const dbBackend = String(dbi.backend || "unknown");
         const dbSource = String(dbi.source || "n/a");
-        const st = $("#treasury-apply-status");
-        if (st && !String(st.textContent || "").trim()) {
-          st.textContent = `DB: ${dbBackend} | source: ${dbSource}`;
+        const dbPill = $("#api-db-pill");
+        const dbText = $("#api-db-text");
+        if (dbPill && dbText) {
+          dbPill.classList.remove("ok", "bad");
+          if (dbBackend === "unknown") {
+            dbPill.classList.add("bad");
+            dbText.textContent = "DB unknown";
+          } else {
+            dbPill.classList.add("ok");
+            dbText.textContent = `DB ${dbBackend.toUpperCase()} connected`;
+          }
         }
         $("#reports-inline").textContent = "P&L income: " + fmt((rep.pnl_summary || {}).income_total) + " | expense: " + fmt((rep.pnl_summary || {}).expense_total);
         const treasuryHint = $("#treasury-now-hint");
@@ -1237,6 +1247,20 @@
       $$(".nav-tab").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.target)));
       on("#btn-refresh", "click", load);
       on("#btn-api-refresh-now", "click", () => updateApiHealth().catch(() => {}));
+      on("#btn-econ-reset-all", "click", async () => {
+        const btn = $("#btn-econ-reset-all");
+        const ok = window.confirm("Reset ALL economy data to zero? This removes imports, entries, requests, audit, alerts.");
+        if (!ok) return;
+        setBusy(btn, true);
+        const out = await post("/dashboard/api/economy/reset-all", { confirm: "reset" });
+        setBusy(btn, false);
+        if (!out.ok) return showErr(out.error || "Economy reset failed");
+        const res = out.result || {};
+        const st = $("#treasury-apply-status");
+        if (st) st.textContent = `Reset done: dropped ${num(res.dropped_tables || 0)} tables | cash=${fmt(res.cash_balance || 0)} | energy=${fmt(res.energy_balance || 0)}`;
+        toast("Economy reset completed");
+        await load();
+      });
       on("#btn-apply-filters", "click", load);
       on("#btn-reset-filters", "click", async () => {
         $("#flt-days").value = "30";

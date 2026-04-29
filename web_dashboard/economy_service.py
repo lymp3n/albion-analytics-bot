@@ -455,6 +455,40 @@ def ensure_economy_schema(conn, backend: str) -> None:
     _seed_defaults(conn, backend)
 
 
+def reset_economy_data(conn, backend: str) -> dict:
+    """
+    Hard reset economy domain only (econ_* tables).
+    Does not touch main bot DB tables.
+    """
+    if backend == "sqlite":
+        rows = fetch_all(conn, backend, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'econ_%'", ())
+    else:
+        rows = fetch_all(
+            conn,
+            backend,
+            "SELECT tablename AS name FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'econ_%'",
+            (),
+        )
+    names = [str(r.get("name") or "").strip() for r in rows if str(r.get("name") or "").strip()]
+    cur = conn.cursor()
+    for name in names:
+        if backend == "postgres":
+            cur.execute(f"DROP TABLE IF EXISTS {name} CASCADE")
+        else:
+            cur.execute(f"DROP TABLE IF EXISTS {name}")
+    conn.commit()
+    ensure_economy_schema(conn, backend)
+    cfg = get_config(conn, backend)
+    bal = balance_snapshot(conn, backend)
+    return {
+        "dropped_tables": len(names),
+        "treasury_cash_current": int(cfg.get("treasury_cash_current") or 0),
+        "treasury_energy_current": int(cfg.get("treasury_energy_current") or 0),
+        "cash_balance": int(bal.get("cash_balance") or 0),
+        "energy_balance": int(bal.get("energy_balance") or 0),
+    }
+
+
 def _seed_defaults(conn, backend: str) -> None:
     cur = conn.cursor()
     accounts = [
