@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import hashlib
+import re
 from difflib import SequenceMatcher
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -2991,6 +2992,8 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
         if int(rec.get("movement_id") or 0) > 0:
             added += 1
 
+    simple_key_re = re.compile(r"^(?P<key>.+\|T\d+\|[^|]+\|[^|\s]+)(?:\s*[xX*;,:-]\s*(?P<qty>\d+)|\s+(?P<qty2>\d+))?\s*$")
+
     for ln in txt.splitlines():
         s = ln.strip()
         if not s:
@@ -3009,7 +3012,30 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
         if len(raw_parts) < 8:
             raw_parts = [p.strip() for p in s.split(",")]
         if len(raw_parts) < 8:
-            continue
+            # Optional compact format:
+            #   Beef Stew|T8|0.1|Normal
+            #   Beef Stew|T8|0.1|Normal x20
+            m = simple_key_re.match(s)
+            if not m:
+                # fallback for column-like text with multiple spaces
+                raw_parts = [p.strip() for p in re.split(r"\s{2,}", s) if p.strip()]
+            if len(raw_parts) < 8:
+                if not m:
+                    continue
+                key = str(m.group("key") or "").strip()
+                qty = int((m.group("qty") or m.group("qty2") or "1"))
+                if not key:
+                    continue
+                key_parts = [p.strip() for p in key.split("|")]
+                if len(key_parts) < 4:
+                    continue
+                item_name = key_parts[0]
+                tier = key_parts[1]
+                enchant = key_parts[2]
+                quality = key_parts[3]
+                # category defaults to item_name in compact mode
+                _import_row([key, item_name, item_name, tier, enchant, quality, str(qty), ""], "armory_import_key")
+                continue
         hdr0 = str(raw_parts[0] or "").strip().lower()
         hdr1 = str(raw_parts[1] or "").strip().lower()
         if hdr0 in ("item id", "item_id") or hdr1 in ("item name", "item_name"):
