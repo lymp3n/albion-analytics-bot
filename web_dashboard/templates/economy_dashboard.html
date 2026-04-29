@@ -370,7 +370,7 @@
                 <button class="nav-tab tooltip" data-target="operation" data-i18n="tab_operation" data-tip="Operations, buyback/regear requests, imports and routing rules.">➕ Operation</button>
                 <button class="nav-tab tooltip" data-target="journal" data-i18n="tab_journal" data-tip="Pending approval queue and manual moderation.">📋 Journal</button>
                 <button class="nav-tab tooltip" data-target="recon" data-i18n="tab_recon" data-tip="Reconciliation entities: tasks/imports/buyback/regear.">🔄 Reconciliation</button>
-                <button class="nav-tab tooltip" data-target="armory" data-tip="Armory stock and movement log.">🧰 Armory</button>
+                <button class="nav-tab tooltip" data-target="armory" data-tip="Armory stock and movement log." data-i18n="tab_armory">🧰 Armory</button>
                 <button class="nav-tab tooltip" data-target="reports" data-i18n="tab_reports" data-tip="Financial reports, forecast and audit trail.">📈 Reports</button>
             </nav>
             <div class="header-right">
@@ -585,14 +585,15 @@
             </div>
         </div>
         <div class="table-container hidden" id="section-armory">
-            <div class="section-title">🧰 Armory Stock + Transactions</div>
+            <div class="section-title" data-i18n="armory_title">🧰 Armory Stock + Transactions</div>
             <div class="reconciliation">
                 <div class="recon-column">
-                    <div class="recon-title">Armory movement</div>
+                    <div class="recon-title" data-i18n="armory_move">Armory movement</div>
                     <div class="form-row">
                         <div class="form-group"><label class="form-label">Action</label><select id="arm-act" class="form-select"><option>ADD</option><option>REMOVE</option><option>SET</option></select></div>
                         <div class="form-group"><label class="form-label">Quantity</label><input id="arm-qty" class="form-input" type="number" min="0" value="1"></div>
                     </div>
+                    <div class="form-group"><label class="form-label" data-i18n="armory_unit_cost">Unit cost (optional, for auto-posting)</label><input id="arm-unit-cost" class="form-input" type="number" min="0" value="0"></div>
                     <div class="form-group"><label class="form-label">Item Name</label><input id="arm-name" class="form-input"></div>
                     <div class="form-row">
                         <div class="form-group"><label class="form-label">Category</label><input id="arm-cat" class="form-input"></div>
@@ -604,12 +605,12 @@
                     </div>
                     <div class="form-group"><label class="form-label">Officer</label><input id="arm-officer" class="form-input" value="dashboard_admin"></div>
                     <div class="form-group"><label class="form-label">Notes</label><input id="arm-notes" class="form-input"></div>
-                    <button class="btn btn-primary" id="btn-arm-move">Apply movement</button>
+                    <button class="btn btn-primary" id="btn-arm-move" data-i18n="armory_apply">Apply movement</button>
                 </div>
                 <div class="recon-column">
-                    <div class="recon-title">Import from Google table markdown</div>
+                    <div class="recon-title" data-i18n="armory_import_title">Import from Google table markdown</div>
                     <div class="form-group"><label class="form-label">Content</label><textarea id="arm-import-content" class="form-input" style="min-height:180px;"></textarea></div>
-                    <button class="btn btn-secondary" id="btn-arm-import">Import snapshot</button>
+                    <button class="btn btn-secondary" id="btn-arm-import" data-i18n="armory_import">Import snapshot</button>
                 </div>
             </div>
             <div class="reconciliation mt-20">
@@ -650,6 +651,7 @@
           tab_operation: "➕ Operation",
           tab_journal: "📋 Journal",
           tab_recon: "🔄 Reconciliation",
+          tab_armory: "🧰 Armory",
           tab_reports: "📈 Reports",
           toggle_filters_show: "Show filters & alerts",
           toggle_filters_hide: "Hide filters & alerts",
@@ -691,12 +693,19 @@
           toast_task_deleted: "Task deleted",
           toast_alert_acked: "Alert acknowledged",
           toast_disc_resolved: "Discrepancy resolved",
+          armory_title: "🧰 Armory Stock + Transactions",
+          armory_move: "Armory movement",
+          armory_unit_cost: "Unit cost (optional, for auto-posting)",
+          armory_apply: "Apply movement",
+          armory_import_title: "Import from Google table markdown",
+          armory_import: "Import snapshot",
         },
         ru: {
           tab_dashboard: "📊 Обзор",
           tab_operation: "➕ Операции",
           tab_journal: "📋 Журнал",
           tab_recon: "🔄 Сверка",
+          tab_armory: "🧰 Армори",
           tab_reports: "📈 Отчёты",
           toggle_filters_show: "Показать фильтры и алерты",
           toggle_filters_hide: "Скрыть фильтры и алерты",
@@ -738,6 +747,12 @@
           toast_task_deleted: "Задача удалена",
           toast_alert_acked: "Алерт закрыт",
           toast_disc_resolved: "Расхождение решено",
+          armory_title: "🧰 Склад регира + транзакции",
+          armory_move: "Операция склада",
+          armory_unit_cost: "Цена за штуку (опц., для авто-проводки)",
+          armory_apply: "Применить операцию",
+          armory_import_title: "Импорт из markdown Google-таблицы",
+          armory_import: "Импортировать снапшот",
         }
       };
       const tr = (k) => (I18N[currentLang] && I18N[currentLang][k]) || (I18N.en && I18N.en[k]) || k;
@@ -792,6 +807,12 @@
           "#section-journal .section-title": "📋 Journal + Pending Approvals",
           "#section-recon .section-title": "🧮 Imports, Rules, Buyback, Regear",
           "#section-reports .section-title": "📈 Reports + Forecast + Audit",
+          "#section-armory .recon-column:nth-child(1) .form-row:nth-child(2) .form-group:nth-child(1) .form-label": "Action",
+          "#section-armory .recon-column:nth-child(1) .form-row:nth-child(2) .form-group:nth-child(2) .form-label": "Quantity",
+          "#section-armory .recon-column:nth-child(1) .form-group:nth-child(4) .form-label": "Item Name",
+          "#section-armory .recon-column:nth-child(2) .form-group .form-label": "Content",
+          "#section-armory .reconciliation.mt-20 .recon-column:nth-child(1) .recon-title": "Current stock",
+          "#section-armory .reconciliation.mt-20 .recon-column:nth-child(2) .recon-title": "Movement log",
         },
         ru: {
           ".logo span:last-child": "УЧЕТ ГИЛЬДИИ",
@@ -843,6 +864,12 @@
           "#section-journal .section-title": "📋 Журнал и ожидания",
           "#section-recon .section-title": "🧮 Импорты, правила, buyback, regear",
           "#section-reports .section-title": "📈 Отчеты, прогноз и аудит",
+          "#section-armory .recon-column:nth-child(1) .form-row:nth-child(2) .form-group:nth-child(1) .form-label": "Действие",
+          "#section-armory .recon-column:nth-child(1) .form-row:nth-child(2) .form-group:nth-child(2) .form-label": "Количество",
+          "#section-armory .recon-column:nth-child(1) .form-group:nth-child(4) .form-label": "Название предмета",
+          "#section-armory .recon-column:nth-child(2) .form-group .form-label": "Содержимое",
+          "#section-armory .reconciliation.mt-20 .recon-column:nth-child(1) .recon-title": "Текущий склад",
+          "#section-armory .reconciliation.mt-20 .recon-column:nth-child(2) .recon-title": "Журнал движений",
         },
       };
       function applyStaticTranslations() {
@@ -1389,12 +1416,13 @@
           enchant: $("#arm-ench").value || "",
           quality: $("#arm-quality").value || "",
           quantity: parseInt($("#arm-qty").value || "0", 10),
+          unit_cost: parseInt($("#arm-unit-cost").value || "0", 10),
           officer: $("#arm-officer").value || "dashboard_admin",
           notes: $("#arm-notes").value || "",
         });
         setBusy(btn, false);
         if (!out.ok) return showErr(out.error || "Armory movement failed");
-        toast("Armory movement saved");
+        toast(out.journal_entry_id ? `Armory movement saved (journal #${out.journal_entry_id})` : "Armory movement saved");
         await load();
       });
       on("#btn-arm-import", "click", async () => {

@@ -662,6 +662,8 @@ def _seed_defaults(conn, backend: str) -> None:
         ("deposit_energy", "1100", "3100", False, "capital_in_energy"),
         ("withdrawal", "3000", "1000", True, "capital_out"),
         ("withdrawal_energy", "3100", "1100", True, "capital_out_energy"),
+        ("armory_add", "1210", "3000", False, "armory_stock_in"),
+        ("armory_remove", "5210", "1210", True, "armory_stock_out"),
         ("content_income", "1000", "4000", False, "content"),
         ("buy_gear", "1200", "1000", False, "gear"),
         ("reward_payout", "5200", "1000", True, "rewards"),
@@ -2798,6 +2800,7 @@ def record_armory_movement(
     occurred_at: str = "",
     source: str = "armory_web",
     item_key: str = "",
+    unit_cost: int = 0,
 ) -> dict:
     action_norm = str(action or "").strip().upper()
     if action_norm not in ("ADD", "REMOVE", "SET"):
@@ -2816,6 +2819,7 @@ def record_armory_movement(
     ench_s = str(enchant or "").strip()
     qual_s = str(quality or "").strip()
     occ_s = str(occurred_at or "").strip() or _utc_now()
+    unit_cost_i = max(0, int(unit_cost or 0))
 
     existing = fetch_one(conn, backend, "SELECT quantity FROM econ_armory_stock WHERE item_key=$1", (key,))
     cur_qty = int((existing or {}).get("quantity") or 0)
@@ -2882,6 +2886,25 @@ def record_armory_movement(
             (occ_s, action_norm, key, name_s, cat_s, tier_s, ench_s, qual_s, int(qty), str(officer or "").strip(), str(notes or "").strip(), str(source or "armory_web").strip()),
         )
         movement_id = int(cur.lastrowid)
+    journal_entry_id = None
+    if action_norm in ("ADD", "REMOVE") and unit_cost_i > 0:
+        amount = int(qty) * int(unit_cost_i)
+        if amount > 0:
+            op = create_routed_operation(
+                conn,
+                backend,
+                category="armory_add" if action_norm == "ADD" else "armory_remove",
+                amount=amount,
+                description=f"{action_norm} {name_s} x{qty} @ {unit_cost_i}",
+                actor=str(officer or "dashboard_admin").strip() or "dashboard_admin",
+                source="armory_auto_posting",
+            )
+            journal_entry_id = int((op or {}).get("entry_id") or 0) or None
+            if journal_entry_id:
+                if backend == "postgres":
+                    cur.execute("UPDATE econ_armory_movements SET journal_entry_id=%s WHERE id=%s", (journal_entry_id, movement_id))
+                else:
+                    cur.execute("UPDATE econ_armory_movements SET journal_entry_id=? WHERE id=?", (journal_entry_id, movement_id))
     _log_audit(
         conn,
         backend,
@@ -2889,13 +2912,34 @@ def record_armory_movement(
         entity_type="armory_item",
         entity_id=key,
         actor=str(officer or "dashboard_admin").strip() or "dashboard_admin",
-        payload={"movement_id": movement_id, "action": action_norm, "qty": int(qty), "new_qty": int(new_qty), "occurred_at": occ_s},
+        payload={"movement_id": movement_id, "action": action_norm, "qty": int(qty), "new_qty": int(new_qty), "occurred_at": occ_s, "unit_cost": unit_cost_i, "journal_entry_id": journal_entry_id},
     )
     conn.commit()
-    return {"ok": True, "movement_id": movement_id, "item_key": key, "quantity_after": int(new_qty)}
+    return {"ok": True, "movement_id": movement_id, "item_key": key, "quantity_after": int(new_qty), "journal_entry_id": journal_entry_id}
 
 
 def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str = "dashboard_admin") -> dict:
+    def _split_md_row(line: str) -> List[str]:
+        raw = str(line or "").strip().strip("|")
+        out: List[str] = []
+        cur: List[str] = []
+        esc = False
+        for ch in raw:
+            if esc:
+                cur.append(ch)
+                esc = False
+                continue
+            if ch == "\\":
+                esc = True
+                continue
+            if ch == "|":
+                out.append("".join(cur).strip())
+                cur = []
+                continue
+            cur.append(ch)
+        out.append("".join(cur).strip())
+        return out
+
     txt = str(content or "").strip()
     if not txt:
         raise ValueError("content is required")
@@ -2905,7 +2949,7 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
         s = ln.strip()
         if not s.startswith("|"):
             continue
-        parts = [p.strip() for p in s.strip("|").split("|")]
+        parts = _split_md_row(s)
         if len(parts) < 9:
             continue
         if parts[0].lower() in ("a", "1", "---", "item id"):

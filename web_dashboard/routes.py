@@ -1150,6 +1150,7 @@ def register_dashboard(app: Flask) -> None:
                     officer=str(body.get("officer") or "dashboard_admin").strip(),
                     notes=str(body.get("notes") or "").strip(),
                     occurred_at=str(body.get("occurred_at") or "").strip(),
+                    unit_cost=int(body.get("unit_cost") or 0),
                     source="armory_web",
                 )
         except ValueError as e:
