@@ -591,17 +591,23 @@ def reset_economy_data(conn, backend: str) -> dict:
                 # TRUNCATE is significantly safer than DROP under concurrency and avoids DDL deadlocks.
                 quoted = ", ".join([f"\"{name.replace('\"', '\"\"')}\"" for name in names])
                 cur.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
+            # Explicit armory cleanup safety pass (imported item snapshots).
+            cur.execute("DELETE FROM econ_armory_movements")
+            cur.execute("DELETE FROM econ_armory_stock")
         conn.commit()
         # Re-seed defaults after full data wipe.
         ensure_economy_schema(conn, backend, with_lock=False)
         cfg = get_config(conn, backend)
         bal = balance_snapshot(conn, backend)
+        counts = economy_db_counts(conn, backend)
         return {
             "dropped_tables": len(names),
             "treasury_cash_current": int(cfg.get("treasury_cash_current") or 0),
             "treasury_energy_current": int(cfg.get("treasury_energy_current") or 0),
             "cash_balance": int(bal.get("cash_balance") or 0),
             "energy_balance": int(bal.get("energy_balance") or 0),
+            "armory_stock_rows": int((counts or {}).get("econ_armory_stock") or 0),
+            "armory_movement_rows": int((counts or {}).get("econ_armory_movements") or 0),
         }
     except Exception:
         try:
@@ -2131,6 +2137,8 @@ def economy_db_counts(conn, backend: str) -> dict:
         "econ_import_player_totals": c("SELECT COUNT(*) AS c FROM econ_import_player_totals"),
         "econ_import_discrepancies": c("SELECT COUNT(*) AS c FROM econ_import_discrepancies"),
         "econ_alerts": c("SELECT COUNT(*) AS c FROM econ_alerts"),
+        "econ_armory_stock": c("SELECT COUNT(*) AS c FROM econ_armory_stock"),
+        "econ_armory_movements": c("SELECT COUNT(*) AS c FROM econ_armory_movements"),
         "econ_routing_rules": c("SELECT COUNT(*) AS c FROM econ_routing_rules"),
         "econ_config": c("SELECT COUNT(*) AS c FROM econ_config"),
     }

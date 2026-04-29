@@ -1546,7 +1546,10 @@
           });
           if (!out.ok) return showErr(out.error || "Armory import failed");
           toast(`Imported ${num((out.rows_processed || 0))} armory rows`);
-          await load();
+          // Release UI immediately; refresh data in background to avoid "stuck loading" perception.
+          setBusy(btn, false);
+          load().catch(() => {});
+          return;
         } catch (e) {
           showErr(String(e || "Armory import failed"));
         } finally {
