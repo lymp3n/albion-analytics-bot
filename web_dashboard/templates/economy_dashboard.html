@@ -419,6 +419,9 @@
             <div class="kpi-card"><div class="kpi-label">Cash Gap</div><div class="kpi-value magenta" id="kpi-gap">0</div><div class="kpi-delta negative"><span>🔻</span><span id="kpi-gap-note">forecast delta</span></div></div>
             <div class="kpi-card"><div class="kpi-label">Mismatches</div><div class="kpi-value magenta" id="kpi-mismatch">0</div><div class="kpi-delta negative"><span>⚠️</span><span id="kpi-mismatch-note">requires review</span></div></div>
         </div>
+        <div class="btn-group mt-20">
+            <button class="btn btn-secondary" id="btn-recalc-balance">Recalculate Balance (journal only)</button>
+        </div>
 
         <div class="main-grid">
             <div class="quick-actions">
@@ -512,11 +515,11 @@
                         <div class="form-group"><label class="form-label">Date to</label><input id="bal-energy-date-to" class="form-input" type="datetime-local"></div>
                     </div>
                     <div class="btn-group">
-                        <button class="btn btn-secondary" id="btn-range-24h">24h</button>
-                        <button class="btn btn-secondary" id="btn-range-7d">7d</button>
-                        <button class="btn btn-secondary" id="btn-range-4w">4w</button>
+                        <button class="btn btn-secondary" id="btn-range-energy-24h">24h</button>
+                        <button class="btn btn-secondary" id="btn-range-energy-7d">7d</button>
+                        <button class="btn btn-secondary" id="btn-range-energy-14d">14d</button>
                     </div>
-                    <button class="btn btn-secondary" id="btn-bal-energy">Refresh</button>
+                    <button class="btn btn-secondary mt-20" id="btn-bal-energy">Refresh</button>
                     <div class="scroll-wrap mt-20">
                         <table id="tbl-bal-energy">
                             <thead><tr><th><button class="table-btn" id="bal-energy-sort-player">Player</button></th><th><button class="table-btn" id="bal-energy-sort-net">Balance</button></th></tr></thead>
@@ -531,7 +534,12 @@
                         <div class="form-group"><label class="form-label">Date from</label><input id="bal-silver-date-from" class="form-input" type="datetime-local"></div>
                         <div class="form-group"><label class="form-label">Date to</label><input id="bal-silver-date-to" class="form-input" type="datetime-local"></div>
                     </div>
-                    <button class="btn btn-secondary" id="btn-bal-silver">Refresh</button>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" id="btn-range-silver-24h">24h</button>
+                        <button class="btn btn-secondary" id="btn-range-silver-7d">7d</button>
+                        <button class="btn btn-secondary" id="btn-range-silver-14d">14d</button>
+                    </div>
+                    <button class="btn btn-secondary mt-20" id="btn-bal-silver">Refresh</button>
                     <div class="scroll-wrap mt-20">
                         <table id="tbl-bal-silver">
                             <thead><tr><th><button class="table-btn" id="bal-silver-sort-player">Player</button></th><th><button class="table-btn" id="bal-silver-sort-net">Balance</button></th></tr></thead>
@@ -1089,15 +1097,17 @@
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       }
 
-      function _applyJournalRange(days) {
+      function _applyJournalRange(days, kind) {
         const now = new Date();
         const from = new Date(now.getTime() - (Math.max(1, days) * 24 * 60 * 60 * 1000));
         const fromVal = _fmtLocalInputDate(from);
         const toVal = _fmtLocalInputDate(now);
-        const ids = ["bal-energy-date-from", "bal-silver-date-from"];
-        ids.forEach((id) => { const el = $("#" + id); if (el) el.value = fromVal; });
-        const idsTo = ["bal-energy-date-to", "bal-silver-date-to"];
-        idsTo.forEach((id) => { const el = $("#" + id); if (el) el.value = toVal; });
+        const fromId = kind === "energy" ? "bal-energy-date-from" : "bal-silver-date-from";
+        const toId = kind === "energy" ? "bal-energy-date-to" : "bal-silver-date-to";
+        const fromEl = $("#" + fromId);
+        const toEl = $("#" + toId);
+        if (fromEl) fromEl.value = fromVal;
+        if (toEl) toEl.value = toVal;
       }
 
       async function refreshPlayerBalances(kind) {
@@ -1318,9 +1328,13 @@
       on("#bal-energy-sort-net", "click", () => { _toggleBalanceSort("energy", "net_amount"); refreshPlayerBalances("energy").catch(() => {}); });
       on("#bal-silver-sort-player", "click", () => { _toggleBalanceSort("silver", "player_name"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#bal-silver-sort-net", "click", () => { _toggleBalanceSort("silver", "net_amount"); refreshPlayerBalances("silver").catch(() => {}); });
-      on("#btn-range-24h", "click", () => { _applyJournalRange(1); refreshPlayerBalances("energy").catch(() => {}); refreshPlayerBalances("silver").catch(() => {}); });
-      on("#btn-range-7d", "click", () => { _applyJournalRange(7); refreshPlayerBalances("energy").catch(() => {}); refreshPlayerBalances("silver").catch(() => {}); });
-      on("#btn-range-4w", "click", () => { _applyJournalRange(28); refreshPlayerBalances("energy").catch(() => {}); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-range-energy-24h", "click", () => { _applyJournalRange(1, "energy"); refreshPlayerBalances("energy").catch(() => {}); });
+      on("#btn-range-energy-7d", "click", () => { _applyJournalRange(7, "energy"); refreshPlayerBalances("energy").catch(() => {}); });
+      on("#btn-range-energy-14d", "click", () => { _applyJournalRange(14, "energy"); refreshPlayerBalances("energy").catch(() => {}); });
+      on("#btn-range-silver-24h", "click", () => { _applyJournalRange(1, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-range-silver-7d", "click", () => { _applyJournalRange(7, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-range-silver-14d", "click", () => { _applyJournalRange(14, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
+      on("#btn-recalc-balance", "click", async () => { await load(); toast("Balance recalculated from journal entries"); });
       on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);
