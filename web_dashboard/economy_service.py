@@ -460,17 +460,22 @@ def reset_economy_data(conn, backend: str) -> dict:
     Hard reset economy domain only (econ_* tables).
     Does not touch main bot DB tables.
     """
+    # IMPORTANT: avoid fetch_all/fetch_one wrapper here.
+    # Some SQL wrapper logic converts $1 placeholders for postgres/psycopg2 and can
+    # fail on queries without params. We keep this query fully param-free.
+    cur = conn.cursor()
     if backend == "sqlite":
-        rows = fetch_all(conn, backend, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'econ_%'", ())
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'econ_%'", ())
+        rows = cur.fetchall()
+        names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
     else:
-        rows = fetch_all(
-            conn,
-            backend,
-            "SELECT tablename AS name FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'econ_%'",
+        cur.execute(
+            "SELECT tablename AS name FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'econ_%%'",
             (),
         )
-    names = [str(r.get("name") or "").strip() for r in rows if str(r.get("name") or "").strip()]
-    cur = conn.cursor()
+        rows = cur.fetchall()
+        # Postgres cursor returns tuples unless a cursor_factory is used.
+        names = [str(r[0] or "").strip() for r in rows if str(r[0] or "").strip()]
     for name in names:
         if backend == "postgres":
             cur.execute(f"DROP TABLE IF EXISTS {name} CASCADE")
