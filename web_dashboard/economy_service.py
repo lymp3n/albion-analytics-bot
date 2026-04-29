@@ -2945,31 +2945,33 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
         raise ValueError("content is required")
     added = 0
     touched = 0
-    for ln in txt.splitlines():
-        s = ln.strip()
-        if not s.startswith("|"):
-            continue
-        parts = _split_md_row(s)
-        if len(parts) < 9:
-            continue
-        if parts[0].lower() in ("a", "1", "---", "item id"):
-            continue
-        item_key = parts[1].strip()
-        item_name = parts[2].strip() if len(parts) > 2 else ""
-        category = parts[3].strip() if len(parts) > 3 else ""
-        tier = parts[4].strip() if len(parts) > 4 else ""
-        enchant = parts[5].strip() if len(parts) > 5 else ""
-        quality = parts[6].strip() if len(parts) > 6 else ""
-        qty_s = parts[7].strip() if len(parts) > 7 else "0"
-        notes = parts[8].strip() if len(parts) > 8 else ""
-        if not item_key or not item_name:
-            continue
+
+    def _parse_qty(raw: str) -> Optional[int]:
+        s = str(raw or "").strip()
+        if not s:
+            return 0
         try:
-            qty = int(float(qty_s)) if qty_s else 0
+            return int(float(s))
         except ValueError:
-            continue
-        if qty < 0:
-            continue
+            return None
+
+    def _import_row(parts: List[str], source: str) -> None:
+        nonlocal added, touched
+        if len(parts) < 8:
+            return
+        item_key = parts[0].strip()
+        item_name = parts[1].strip() if len(parts) > 1 else ""
+        category = parts[2].strip() if len(parts) > 2 else ""
+        tier = parts[3].strip() if len(parts) > 3 else ""
+        enchant = parts[4].strip() if len(parts) > 4 else ""
+        quality = parts[5].strip() if len(parts) > 5 else ""
+        qty_s = parts[6].strip() if len(parts) > 6 else "0"
+        notes = parts[7].strip() if len(parts) > 7 else ""
+        if not item_key or not item_name:
+            return
+        qty = _parse_qty(qty_s)
+        if qty is None or qty < 0:
+            return
         rec = record_armory_movement(
             conn,
             backend,
@@ -2983,9 +2985,34 @@ def import_armory_table_markdown(conn, backend: str, *, content: str, actor: str
             quantity=qty,
             officer=actor,
             notes=notes,
-            source="armory_import_md",
+            source=source,
         )
         touched += 1
         if int(rec.get("movement_id") or 0) > 0:
             added += 1
+
+    for ln in txt.splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        if s.startswith("|"):
+            parts = _split_md_row(s)
+            if len(parts) < 9:
+                continue
+            if parts[0].lower() in ("a", "1", "---", "item id"):
+                continue
+            # Google markdown rows: [A, ItemID, ItemName, Category, Tier, Enchant, Quality, Qty, Notes]
+            _import_row(parts[1:9], "armory_import_md")
+            continue
+        # Plain TSV/CSV-like rows:
+        raw_parts = [p.strip() for p in s.split("\t")]
+        if len(raw_parts) < 8:
+            raw_parts = [p.strip() for p in s.split(",")]
+        if len(raw_parts) < 8:
+            continue
+        hdr0 = str(raw_parts[0] or "").strip().lower()
+        hdr1 = str(raw_parts[1] or "").strip().lower()
+        if hdr0 in ("item id", "item_id") or hdr1 in ("item name", "item_name"):
+            continue
+        _import_row(raw_parts[:8], "armory_import_text")
     return {"ok": True, "rows_processed": touched, "movements_created": added}

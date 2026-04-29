@@ -364,6 +364,17 @@
             gap: 10px;
             margin-bottom: 10px;
         }
+        .armory-deficit-filter {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        .armory-deficit-filter input[type="number"] {
+            width: 78px;
+            padding: 6px 8px;
+        }
         .armory-low { color: var(--warning); font-weight: 700; }
         .sparkline {
             width: 100%;
@@ -644,6 +655,8 @@
                         </div>
                         <div class="armory-stock-tools hidden" id="armory-stock-tools">
                             <input id="armory-stock-search" class="form-input" placeholder="Search item/category/tier/quality...">
+                            <label class="armory-deficit-filter"><input id="armory-deficit-only" type="checkbox"><span id="armory-deficit-only-label">Deficit only</span></label>
+                            <label class="armory-deficit-filter"><= <input id="armory-deficit-threshold" type="number" min="0" value="3"></label>
                             <button class="btn btn-secondary btn-compact" id="btn-armory-stock-clear">Clear</button>
                         </div>
                         <div class="scroll-wrap hidden" id="armory-stock-wrap">
@@ -739,6 +752,7 @@
           armory_stock_toggle_show: "Show full stock list",
           armory_stock_toggle_hide: "Hide full stock list",
           armory_search_placeholder: "Search item/category/tier/quality...",
+          armory_deficit_only: "Deficit only",
         },
         ru: {
           tab_dashboard: "📊 Обзор",
@@ -796,6 +810,7 @@
           armory_stock_toggle_show: "Показать полный список предметов",
           armory_stock_toggle_hide: "Скрыть полный список предметов",
           armory_search_placeholder: "Поиск: предмет/категория/тир/качество...",
+          armory_deficit_only: "Только дефицит",
         }
       };
       const tr = (k) => (I18N[currentLang] && I18N[currentLang][k]) || (I18N.en && I18N.en[k]) || k;
@@ -807,7 +822,11 @@
       }
       function renderArmoryStockTable() {
         const q = String($("#armory-stock-search")?.value || "").trim().toLowerCase();
+        const deficitOnly = !!$("#armory-deficit-only")?.checked;
+        const deficitThreshold = Math.max(0, parseInt($("#armory-deficit-threshold")?.value || "3", 10) || 0);
         const rows = (_armoryStockRows || []).filter((r) => {
+          const qty = num(r.quantity || 0);
+          if (deficitOnly && qty > deficitThreshold) return false;
           if (!q) return true;
           const text = [
             r.item_name || "",
@@ -821,7 +840,7 @@
         }).sort((a, b) => num(a.quantity) - num(b.quantity));
         $("#tbl-armory-stock tbody").innerHTML = rows.map((r) => {
           const qty = num(r.quantity || 0);
-          return `<tr><td>${esc(r.item_name || r.item_key || "")}</td><td>${esc(r.category || "")}</td><td>${esc(r.tier || "")}</td><td>${esc(r.enchant || "")}</td><td>${esc(r.quality || "")}</td><td class="${qty <= 3 ? "armory-low" : ""}">${fmt(qty)}</td></tr>`;
+          return `<tr><td>${esc(r.item_name || r.item_key || "")}</td><td>${esc(r.category || "")}</td><td>${esc(r.tier || "")}</td><td>${esc(r.enchant || "")}</td><td>${esc(r.quality || "")}</td><td class="${qty <= deficitThreshold ? "armory-low" : ""}">${fmt(qty)}</td></tr>`;
         }).join("") || `<tr><td colspan="6">(no stock)</td></tr>`;
       }
       const STATIC_TEXT = {
@@ -987,6 +1006,8 @@
         applyStaticTranslations();
         const input = $("#armory-stock-search");
         if (input) input.placeholder = tr("armory_search_placeholder");
+        const deficitLabel = $("#armory-deficit-only-label");
+        if (deficitLabel) deficitLabel.textContent = tr("armory_deficit_only");
         setArmoryStockToggleText();
         document.documentElement.lang = currentLang;
       }
@@ -1521,9 +1542,13 @@
       });
       on("#btn-armory-stock-clear", "click", () => {
         if ($("#armory-stock-search")) $("#armory-stock-search").value = "";
+        if ($("#armory-deficit-only")) $("#armory-deficit-only").checked = false;
+        if ($("#armory-deficit-threshold")) $("#armory-deficit-threshold").value = "3";
         renderArmoryStockTable();
       });
       on("#armory-stock-search", "input", () => renderArmoryStockTable());
+      on("#armory-deficit-only", "change", () => renderArmoryStockTable());
+      on("#armory-deficit-threshold", "input", () => renderArmoryStockTable());
       on("#btn-save-thresholds", "click", async () => {
         const btn = $("#btn-save-thresholds");
         setBusy(btn, true);
