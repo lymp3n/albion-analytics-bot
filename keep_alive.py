@@ -199,8 +199,19 @@ def run():
     global _http_started
     _http_started = time.time()
     port = int(os.environ.get("PORT", 8080))
-    logger.info("Starting HTTP server on port %s (health + dashboard)", port)
-    serve(app, host="0.0.0.0", port=port, _quiet=True)
+    # Render/single-core hosts default to 4 threads; long economy imports + big GET /economy/data
+    # queue other requests unless thread pool is a bit larger (override with WAITRESS_THREADS).
+    try:
+        threads = int(os.environ.get("WAITRESS_THREADS", "10"))
+    except ValueError:
+        threads = 10
+    threads = max(4, min(threads, 32))
+    logger.info(
+        "Starting HTTP server on port %s (health + dashboard), waitress threads=%s",
+        port,
+        threads,
+    )
+    serve(app, host="0.0.0.0", port=port, threads=threads, _quiet=True)
 
 
 def keep_alive():

@@ -192,6 +192,7 @@
         .compact-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
         .block-title { margin: 18px 0 10px; font-size: 13px; color: var(--neon-cyan); letter-spacing: .03em; }
         .mt-20 { margin-top:20px; } .hidden { display:none !important; }
+        .btn-recalc-indent { margin-left: 16px; }
         .mono { font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--text-secondary); margin-top:8px; }
         .row-actions button{ margin-right:6px; }
         .micro-pop { animation: microPop .22s ease-out; }
@@ -410,7 +411,7 @@
                     <option value="en">English</option>
                     <option value="ru">Русский</option>
                 </select>
-                <button class="icon-btn tooltip" id="btn-refresh" data-tip="Обновить все данные и пересчитать виджеты.">↻<span class="badge" id="alerts-badge">0</span></button>
+                <button type="button" class="icon-btn tooltip" id="btn-refresh" data-tip="Обновить все данные и пересчитать виджеты.">↻<span class="badge" id="alerts-badge">0</span></button>
                 <a class="avatar" href="/dashboard" title="Back">⬅</a>
             </div>
         </header>
@@ -453,7 +454,7 @@
             <div class="kpi-card"><div class="kpi-label">Mismatches</div><div class="kpi-value magenta" id="kpi-mismatch">0</div><div class="kpi-delta negative"><span>⚠️</span><span id="kpi-mismatch-note">requires review</span></div></div>
         </div>
         <div class="btn-group mt-20">
-            <button class="btn btn-secondary" id="btn-recalc-balance">Recalculate Balance (journal only)</button>
+            <button type="button" class="btn btn-secondary btn-recalc-indent" id="btn-recalc-balance">Recalculate Balance (journal only)</button>
         </div>
 
         <div class="main-grid">
@@ -533,7 +534,7 @@
         <div class="ops-modal-wrap" id="modal-op"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-op" aria-label="close">✕</button><div class="modal-header">➕ New Operation</div></div><div class="ops-modal-help">Create manual routed operation. Preview checks mapped debit/credit.</div><div class="form-group"><label class="form-label">Category</label><select id="op-cat" class="form-select"></select></div><div class="form-group"><label class="form-label">Amount</label><input id="op-amount" class="form-input" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Player/Group (description)</label><input id="op-desc" class="form-input" placeholder="Player_X / group"></div><div class="form-row"><div class="form-group"><label class="form-label">Actor</label><input id="op-actor" class="form-input" value="dashboard"></div><div class="form-group"><label class="form-label">Tags</label><input id="rule-tag" class="form-input" placeholder="CTA, PvE"></div></div><div class="posting-preview"><div class="posting-row"><span class="posting-debit" id="preview-dr">Dr auto from rule</span><span class="posting-debit" id="preview-dr-sum">+0</span></div><div class="posting-row"><span class="posting-credit" id="preview-cr">Cr auto from rule</span><span class="posting-credit" id="preview-cr-sum">-0</span></div></div><div class="btn-group"><button class="btn btn-secondary" id="btn-op-clear">Clear</button><button class="btn btn-primary" id="btn-op-create">✅ Confirm</button></div></div></div>
         <div class="ops-modal-wrap" id="modal-award"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-award" aria-label="close">✕</button><div class="modal-header">💸 Award Payout</div></div><div class="ops-modal-help">Create reward payout operation directly (no task workflow).</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="award-player" list="player-nicknames"></div><div class="form-group"><label class="form-label">Amount</label><input class="form-input" id="award-amount" type="number" min="1" value="100000"></div><div class="form-group"><label class="form-label">Approved by</label><input class="form-input" id="award-by" value="dashboard_admin"></div><div class="form-group"><label class="form-label">Note</label><input class="form-input" id="award-note"></div><button class="btn btn-primary" id="btn-award">Approve payout</button></div></div>
         <div class="ops-modal-wrap" id="modal-rule"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-rule" aria-label="close">✕</button><div class="modal-header">🧭 Routing Rules</div></div><div class="ops-modal-help">Define debit/credit accounts and approval behavior by operation category.</div><div class="form-group"><label class="form-label">Rule category</label><input class="form-input" id="rule-cat"></div><div class="form-group"><label class="form-label">Debit account</label><input class="form-input" id="rule-dt"></div><div class="form-group"><label class="form-label">Credit account</label><input class="form-input" id="rule-kt"></div><div class="form-group"><label class="form-label"><input id="rule-approval" type="checkbox"> Require approval</label></div><button class="btn btn-primary" id="btn-rule-save">Save rule</button></div></div>
-        <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-import" aria-label="close">✕</button><div class="modal-header">📥 CSV Import</div></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><div class="form-group"><label class="form-label"><input id="log-smart-merge" type="checkbox" checked> Smart merge (skip duplicate rows from previous imports)</label></div><button class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
+        <div class="ops-modal-wrap" id="modal-import"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-import" aria-label="close">✕</button><div class="modal-header">📥 CSV Import</div></div><div class="ops-modal-help">Import in-game treasury logs for reconciliation and discrepancy detection.</div><div class="form-group"><label class="form-label">Log type</label><select id="log-type" class="form-select"><option value="silver">silver</option><option value="energy">energy</option></select></div><div class="form-group"><label class="form-label">CSV content</label><textarea id="log-content" class="form-input" style="min-height:160px;"></textarea></div><div class="form-group"><label class="form-label"><input id="log-smart-merge" type="checkbox" checked> Smart merge (skip duplicate rows from previous imports)</label></div><button type="button" class="btn btn-primary" id="btn-log-import">Import CSV</button></div></div>
         <div class="ops-modal-wrap" id="modal-buyback"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-buyback" aria-label="close">✕</button><div class="modal-header">📦 Loot Buyback</div></div><div class="ops-modal-help">Create manual buyback request by payout price only; market equivalent is auto-calculated (+20%).</div><div class="form-group"><label class="form-label">Buyback payout price</label><input class="form-input" id="lb-price" type="number" min="1" value="1000000"></div><button class="btn btn-primary" id="btn-loot-buyback">Create buyback request</button></div></div>
         <div class="ops-modal-wrap" id="modal-regear"><div class="ops-modal"><div class="ops-modal-head"><button class="ops-close-x js-close-modal" data-modal="modal-regear" aria-label="close">✕</button><div class="modal-header">🛡️ Regear Request</div></div><div class="ops-modal-help">Create regear insurance request with screenshot file attachment.</div><div class="form-group"><label class="form-label">Player</label><input class="form-input" id="rg-player" placeholder="Player_Y" list="player-nicknames"></div><div class="form-group"><label class="form-label">Content type</label><input class="form-input" id="rg-content" placeholder="CTA / Castle"></div><div class="form-group"><label class="form-label">Unit cost</label><input class="form-input" id="rg-cost" type="number" min="1" value="300000"></div><div class="form-group"><label class="form-label">Screenshot file</label><input class="form-input" id="rg-shot-file" type="file" accept="image/*"></div><button class="btn btn-primary" id="btn-regear-create">Create regear request</button></div></div>
 
@@ -744,6 +745,8 @@
           toast_task_deleted: "Task deleted",
           toast_alert_acked: "Alert acknowledged",
           toast_disc_resolved: "Discrepancy resolved",
+          toast_dashboard_refreshed: "Dashboard data refreshed",
+          toast_balance_recalc: "Balances refreshed from journal data",
           armory_title: "🧰 Armory Stock + Transactions",
           armory_move: "Armory movement",
           armory_unit_cost: "Unit cost (optional, for auto-posting)",
@@ -803,6 +806,8 @@
           toast_task_deleted: "Задача удалена",
           toast_alert_acked: "Алерт закрыт",
           toast_disc_resolved: "Расхождение решено",
+          toast_dashboard_refreshed: "Данные дашборда обновлены",
+          toast_balance_recalc: "Балансы пересчитаны по журналу",
           armory_title: "🧰 Склад регира + транзакции",
           armory_move: "Операция склада",
           armory_unit_cost: "Цена за штуку (опц., для авто-проводки)",
@@ -1281,6 +1286,44 @@
         if (toEl) toEl.value = toVal;
       }
 
+      const ECON_MAIN_FETCH_MS = 120000;
+      async function fetchEconomyMainPayload(qs) {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), ECON_MAIN_FETCH_MS);
+        try {
+          const r = await fetch("/dashboard/api/economy/data?" + qs.toString(), {
+            credentials: "same-origin",
+            signal: ctrl.signal,
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            return { ok: false, error: body.error || `HTTP ${r.status}` };
+          }
+          return body && typeof body === "object" ? body : { ok: false, error: "Invalid server response" };
+        } catch (e) {
+          const msg = String(e || "");
+          if (msg.toLowerCase().includes("abort")) {
+            return { ok: false, error: "Dashboard request timed out — server may be busy finishing an import. Retry shortly." };
+          }
+          return { ok: false, error: msg || "Network error" };
+        } finally {
+          clearTimeout(to);
+        }
+      }
+
+      let _economyLoadPromise = null;
+      async function loadEconomyOnce() {
+        if (_economyLoadPromise) return _economyLoadPromise;
+        _economyLoadPromise = (async () => {
+          try {
+            return await load();
+          } finally {
+            _economyLoadPromise = null;
+          }
+        })();
+        return _economyLoadPromise;
+      }
+
       async function refreshPlayerBalances(kind) {
         const logType = kind === "energy" ? "energy" : "silver";
         const btn = kind === "energy" ? $("#btn-bal-energy") : $("#btn-bal-silver");
@@ -1323,9 +1366,11 @@
         showErr("");
         const f = readFilters();
         const qs = new URLSearchParams({ days: String(f.days), entry_status: f.entry_status, category: f.category, source: f.source });
-        const out = await fetch("/dashboard/api/economy/data?" + qs.toString(), { credentials: "same-origin" })
-          .then((r) => r.json()).catch((e) => ({ ok: false, error: String(e) }));
-        if (!out.ok) return showErr(out.error || "Failed to load economy data");
+        const out = await fetchEconomyMainPayload(qs);
+        if (!out.ok) {
+          showErr(out.error || "Failed to load economy data");
+          return false;
+        }
         $("#chart-loader")?.classList.add("is-hidden");
         animateKpiCards();
 
@@ -1470,13 +1515,24 @@
           `<tr><td>${esc(a.id)}</td><td>${esc(a.created_at)}</td><td>${esc(a.mutation_type)}</td><td>${esc((a.entity_type || "") + ":" + (a.entity_id || ""))}</td><td>${esc(a.actor || "")}</td><td>${esc(JSON.stringify(a.payload || {}))}</td></tr>`
         ).join("") || `<tr><td colspan="6">${tr("no_audit")}</td></tr>`;
 
-        refreshPlayerBalances("energy").catch(() => {});
-        refreshPlayerBalances("silver").catch(() => {});
-        updateApiHealth().catch(() => {});
+        // Stagger secondary GETs so Waitress is not hit with economy/data + 3 APIs at once after a heavy import.
+        setTimeout(() => { refreshPlayerBalances("energy").catch(() => {}); }, 0);
+        setTimeout(() => { refreshPlayerBalances("silver").catch(() => {}); }, 150);
+        setTimeout(() => { updateApiHealth().catch(() => {}); }, 320);
+        return true;
       }
 
       $$(".nav-tab").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.target)));
-      on("#btn-refresh", "click", load);
+      on("#btn-refresh", "click", async () => {
+        const btn = $("#btn-refresh");
+        if (btn) btn.disabled = true;
+        try {
+          const ok = await loadEconomyOnce();
+          if (ok) toast(tr("toast_dashboard_refreshed"));
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
       on("#btn-api-refresh-now", "click", () => updateApiHealth().catch(() => {}));
       on("#btn-econ-reset-all", "click", async () => {
         const btn = $("#btn-econ-reset-all");
@@ -1515,7 +1571,10 @@
       on("#btn-range-silver-24h", "click", () => { _applyJournalRange(1, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#btn-range-silver-7d", "click", () => { _applyJournalRange(7, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
       on("#btn-range-silver-14d", "click", () => { _applyJournalRange(14, "silver"); refreshPlayerBalances("silver").catch(() => {}); });
-      on("#btn-recalc-balance", "click", async () => { await load(); toast("Balance recalculated from journal entries"); });
+      on("#btn-recalc-balance", "click", async () => {
+        const ok = await loadEconomyOnce();
+        if (ok) toast(tr("toast_balance_recalc"));
+      });
       on("#btn-arm-move", "click", async () => {
         const btn = $("#btn-arm-move");
         setBusy(btn, true);
@@ -1677,20 +1736,39 @@
       });
       on("#btn-log-import", "click", async () => {
         const btn = $("#btn-log-import");
+        const labelSaved = btn ? String(btn.textContent || "") : "";
         setBusy(btn, true);
-        if (!($("#log-content").value || "").trim()) {
-          setBusy(btn, false);
-          return showErr("CSV content is required");
+        const watchdog = setTimeout(() => {
+          if (btn) {
+            btn.disabled = false;
+            if (labelSaved) btn.textContent = labelSaved;
+          }
+        }, 25000);
+        try {
+          if (!($("#log-content").value || "").trim()) {
+            showErr("CSV content is required");
+            return;
+          }
+          const out = await post("/dashboard/api/economy/import-log", {
+            log_type: $("#log-type").value || "silver",
+            content: $("#log-content").value || "",
+            smart_merge: $("#log-smart-merge") ? !!$("#log-smart-merge").checked : true,
+          });
+          if (!out.ok) {
+            showErr(out.error || "Import failed");
+            return;
+          }
+          toast("CSV imported");
+          load().catch(() => {});
+        } catch (e) {
+          showErr(String(e || "Import failed"));
+        } finally {
+          clearTimeout(watchdog);
+          if (btn) {
+            btn.disabled = false;
+            if (labelSaved) btn.textContent = labelSaved;
+          }
         }
-        const out = await post("/dashboard/api/economy/import-log", {
-          log_type: $("#log-type").value || "silver",
-          content: $("#log-content").value || "",
-          smart_merge: $("#log-smart-merge") ? !!$("#log-smart-merge").checked : true,
-        });
-        setBusy(btn, false);
-        if (!out.ok) return showErr(out.error || "Import failed");
-        toast("CSV imported");
-        await load();
       });
       on("#log-type", "change", () => {
         $("#log-content").value = $("#log-type").value === "energy" ? ENERGY_CSV : SILVER_CSV;
