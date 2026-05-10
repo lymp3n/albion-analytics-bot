@@ -523,6 +523,29 @@ class Database:
             """,
             discord_id,
         )
+
+    async def list_players_by_guild(self, guild_db_id: int, limit: int = 500) -> list:
+        """All bot-registered players for a guild (DB id), ordered by role tier then nickname."""
+        lim = max(1, min(int(limit), 1000))
+        return await self.fetch(
+            """
+            SELECT id, discord_id, nickname, status, discord_username
+            FROM players
+            WHERE guild_id = $1
+            ORDER BY
+              CASE status
+                WHEN 'founder' THEN 1
+                WHEN 'mentor' THEN 2
+                WHEN 'active' THEN 3
+                WHEN 'pending' THEN 4
+                ELSE 5
+              END,
+              nickname ASC
+            LIMIT $2
+            """,
+            guild_db_id,
+            lim,
+        )
     
     async def get_player_by_id(self, player_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(

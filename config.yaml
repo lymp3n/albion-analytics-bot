@@ -6,13 +6,14 @@ bot:
 
 # Guild Settings (Example for initialization)
 guilds:
+  # Member invite code for Only Greens (TAB123 is reserved for Take a Break).
   - name: "Only Greens"
-    code: "TAB123"
-    founder_code: "FOUNDARTAB_UIO123" 
+    code: "ONLYGREENS123"
+    founder_code: "FOUNDARTAB_UIO123"
     mentor_code: "MENTORTAB_UIO942"
-  
-  - name: "Take a Break,"
-    code: "AM456"
+
+  - name: "Take a Break"
+    code: "TAB123"
     founder_code: "FOUNDERAM_XYZ789"
     mentor_code: "MENTORAM_ABC123"
 

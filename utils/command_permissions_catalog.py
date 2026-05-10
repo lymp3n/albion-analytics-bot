@@ -16,7 +16,7 @@ def get_role_assist_catalog() -> Dict[str, Any]:
         {
             "tier": "Everyone",
             "commands": "`/register`",
-            "details": "Join with a guild invite code. No bot role tier required yet.",
+            "details": "Join with a guild invite code (`/register code`). Founders/Mentors can register someone else: `/register code @member`.",
         },
         {
             "tier": "Basic",
@@ -25,7 +25,7 @@ def get_role_assist_catalog() -> Dict[str, Any]:
         },
         {
             "tier": "Staff",
-            "commands": "`/stats` (other player) · `/ticket` claim, rate, unclaim, info · `/event` close & roster · event Close/Manage",
+            "commands": "`/players list` · `/register` (for another user) · `/stats` (other player) · `/ticket` claim, rate, unclaim, info · `/event` close & roster · event Close/Manage",
             "details": "Mentor tier (`require_mentor`); founders count too. Event roster = add/remove/swap/extra. Shotcaller Discord role IDs act like staff for events: "
             + shot
             + ".",
