@@ -53,16 +53,17 @@ class AuthCommands(commands.Cog):
         # Find guild by code
         guild = await self.bot.db.get_guild_by_code(code_hash)
         if not guild:
-            await ctx.respond("❌ Invalid guild code. Please check and try again.", ephemeral=True)
+            await ctx.followup.send("❌ Invalid guild code. Please check and try again.", ephemeral=True)
             return
         
         # Check if already registered
         existing_player = await self.bot.db.get_player_by_discord_id(ctx.author.id)
         if existing_player:
+            gname = str(existing_player.get("guild_name") or "your guild").strip() or "your guild"
             if existing_player['status'] == 'pending':
-                await ctx.respond("⏳ Your registration is pending approval by guild founder.", ephemeral=True)
+                await ctx.followup.send("⏳ Your registration is pending approval by guild founder.", ephemeral=True)
             else:
-                await ctx.respond(f"✅ You are already registered in guild **{existing_player['guild_name']}**", ephemeral=True)
+                await ctx.followup.send(f"✅ You are already registered in guild **{gname}**", ephemeral=True)
             return
         
         # Determine status based on code
@@ -95,32 +96,34 @@ class AuthCommands(commands.Cog):
                 
                 founder_mentions = " ".join([f"<@{f['discord_id']}>" for f in founders]) if founders else "@here"
                 
-                await ctx.respond(
+                await ctx.followup.send(
                     f"✅ Registration submitted! Your application is pending approval.\n"
                     f"Guild founders have been notified: {founder_mentions}",
                     ephemeral=True
                 )
                 
                 # Send notification to #registration or #registration-logs
-                reg_channel = discord.utils.get(ctx.guild.channels, name="registration") or \
-                              discord.utils.get(ctx.guild.channels, name="registration-logs")
-                if reg_channel:
-                    await reg_channel.send(
-                        f"🆕 New registration pending approval:\n"
-                        f"Player: {ctx.author.mention} (`{ctx.author.display_name}`)\n"
-                        f"Guild: **{guild['name']}**\n"
-                        f"Use `/guild approve {ctx.author.id}` to approve"
-                    )
+                discord_guild = ctx.guild
+                if discord_guild:
+                    reg_channel = discord.utils.get(discord_guild.channels, name="registration") or \
+                                  discord.utils.get(discord_guild.channels, name="registration-logs")
+                    if reg_channel:
+                        await reg_channel.send(
+                            f"🆕 New registration pending approval:\n"
+                            f"Player: {ctx.author.mention} (`{ctx.author.display_name}`)\n"
+                            f"Guild: **{guild['name']}**\n"
+                            f"Use `/guild approve {ctx.author.id}` to approve"
+                        )
             else:
                 # Founders/Mentors auto-approved
                 role_name = "Founder" if status == PlayerStatus.FOUNDER.value else "Mentor"
-                await ctx.respond(
+                await ctx.followup.send(
                     f"✅ Welcome {role_name}! You have been registered in guild **{guild['name']}** with full permissions.",
                     ephemeral=True
                 )
                 
         except Exception as e:
-            await ctx.respond(f"❌ Registration failed: {str(e)}", ephemeral=True)
+            await ctx.followup.send(f"❌ Registration failed: {str(e)}", ephemeral=True)
     
     @discord.slash_command(name="guild", description="Guild management commands")
     @option("action", choices=["approve", "promote", "demote", "info"])
@@ -129,14 +132,14 @@ class AuthCommands(commands.Cog):
         """Manage the guild (Founders only)"""
         await ctx.defer(ephemeral=True)
         if not await self.bot.permissions.require_founder(ctx.author):
-            await ctx.respond("❌ Only guild founders can use this command.", ephemeral=True)
+            await ctx.followup.send("❌ Only guild founders can use this command.", ephemeral=True)
             return
         
         if action == "info":
             # Guild Info
             guild_id = await self.bot.permissions.get_guild_id(ctx.author)
             if not guild_id:
-                await ctx.respond("❌ Unable to determine your guild.", ephemeral=True)
+                await ctx.followup.send("❌ Unable to determine your guild.", ephemeral=True)
                 return
             
             stats = await self.bot.db.fetchrow("""
@@ -153,7 +156,10 @@ class AuthCommands(commands.Cog):
                 WHERE g.id = $1
                 GROUP BY g.id, g.name
             """, guild_id)
-            
+            if not stats:
+                await ctx.followup.send("❌ Unable to load guild statistics.", ephemeral=True)
+                return
+
             embed = discord.Embed(
                 title=f"Guild Statistics: {stats['guild_name']}",
                 color=discord.Color.blue()
@@ -165,25 +171,27 @@ class AuthCommands(commands.Cog):
             embed.add_field(name="Avg Score (30d)", value=f"{stats['avg_score']:.2f}" if stats['avg_score'] else "N/A", inline=True)
             embed.set_footer(text="Use /guild approve @user to approve pending registrations")
             
-            await ctx.respond(embed=embed)
+            await ctx.followup.send(embed=embed)
             return
         
         if not user:
-            await ctx.respond(f"❌ Please specify a user for action '{action}'.", ephemeral=True)
+            await ctx.followup.send(f"❌ Please specify a user for action '{action}'.", ephemeral=True)
             return
         
         target_player = await self.bot.db.get_player_by_discord_id(user.id)
         if not target_player:
-            await ctx.respond(f"❌ User {user.mention} is not registered in the system.", ephemeral=True)
+            await ctx.followup.send(f"❌ User {user.mention} is not registered in the system.", ephemeral=True)
             return
         
         if target_player['guild_id'] != await self.bot.permissions.get_guild_id(ctx.author):
-            await ctx.respond(f"❌ User {user.mention} belongs to a different guild.", ephemeral=True)
+            await ctx.followup.send(f"❌ User {user.mention} belongs to a different guild.", ephemeral=True)
             return
         
+        gname_dm = str(target_player.get("guild_name") or "your guild").strip() or "your guild"
+
         if action == "approve":
             if target_player['status'] != PlayerStatus.PENDING.value:
-                await ctx.respond(f"❌ User {user.mention} is not pending approval.", ephemeral=True)
+                await ctx.followup.send(f"❌ User {user.mention} is not pending approval.", ephemeral=True)
                 return
             
             await self.bot.db.execute(
@@ -191,16 +199,24 @@ class AuthCommands(commands.Cog):
                 target_player['id']
             )
             
-            member_role = discord.utils.get(ctx.guild.roles, name="Member")
-            if member_role and member_role not in user.roles:
-                await user.add_roles(member_role)
+            if ctx.guild:
+                member_role = discord.utils.get(ctx.guild.roles, name="Member")
+                if member_role and member_role not in user.roles:
+                    await user.add_roles(member_role)
             
-            await ctx.respond(f"✅ User {user.mention} has been approved and granted Member role.")
-            await user.send(f"🎉 Congratulations! Your registration in **{target_player['guild_name']}** has been approved. You now have access to all member features.")
+            await ctx.followup.send(f"✅ User {user.mention} has been approved and granted Member role.")
+            try:
+                await user.send(
+                    f"🎉 Congratulations! Your registration in **{gname_dm}** has been approved. You now have access to all member features."
+                )
+            except discord.Forbidden:
+                pass
         
         elif action == "promote":
             if target_player['status'] not in [PlayerStatus.ACTIVE.value, PlayerStatus.MENTOR.value]:
-                await ctx.respond(f"❌ Cannot promote user {user.mention} with status '{target_player['status']}'.", ephemeral=True)
+                await ctx.followup.send(
+                    f"❌ Cannot promote user {user.mention} with status '{target_player['status']}'.", ephemeral=True
+                )
                 return
             
             new_status = PlayerStatus.MENTOR.value if target_player['status'] == PlayerStatus.ACTIVE.value else PlayerStatus.FOUNDER.value
@@ -211,20 +227,29 @@ class AuthCommands(commands.Cog):
             )
             
             role_name = "Mentor" if new_status == PlayerStatus.MENTOR.value else "Founder"
-            discord_role = discord.utils.get(ctx.guild.roles, name=role_name)
-            if discord_role and discord_role not in user.roles:
-                await user.add_roles(discord_role)
+            if ctx.guild:
+                discord_role = discord.utils.get(ctx.guild.roles, name=role_name)
+                if discord_role and discord_role not in user.roles:
+                    await user.add_roles(discord_role)
             
-            await ctx.respond(f"✅ User {user.mention} has been promoted to **{role_name}**.")
-            await user.send(f"🌟 You have been promoted to **{role_name}** in **{target_player['guild_name']}**!")
+            await ctx.followup.send(f"✅ User {user.mention} has been promoted to **{role_name}**.")
+            try:
+                await user.send(f"🌟 You have been promoted to **{role_name}** in **{gname_dm}**!")
+            except discord.Forbidden:
+                pass
         
         elif action == "demote":
             if target_player['status'] not in [PlayerStatus.MENTOR.value, PlayerStatus.FOUNDER.value]:
-                await ctx.respond(f"❌ Cannot demote user {user.mention} with status '{target_player['status']}'.", ephemeral=True)
+                await ctx.followup.send(
+                    f"❌ Cannot demote user {user.mention} with status '{target_player['status']}'.", ephemeral=True
+                )
                 return
             
             if target_player['status'] == PlayerStatus.FOUNDER.value and ctx.author.id != user.id:
-                await ctx.respond("❌ Only founders can demote other founders (and only themselves).", ephemeral=True)
+                await ctx.followup.send(
+                    "❌ Only founders can demote other founders (and only themselves).",
+                    ephemeral=True,
+                )
                 return
             
             new_status = PlayerStatus.ACTIVE.value if target_player['status'] == PlayerStatus.MENTOR.value else PlayerStatus.MENTOR.value
@@ -236,16 +261,19 @@ class AuthCommands(commands.Cog):
             
             old_role_name = "Founder" if target_player['status'] == PlayerStatus.FOUNDER.value else "Mentor"
             new_role_name = "Mentor" if new_status == PlayerStatus.MENTOR.value else "Member"
-            old_role = discord.utils.get(ctx.guild.roles, name=old_role_name)
-            new_role = discord.utils.get(ctx.guild.roles, name=new_role_name)
+            if ctx.guild:
+                old_role = discord.utils.get(ctx.guild.roles, name=old_role_name)
+                new_role = discord.utils.get(ctx.guild.roles, name=new_role_name)
+                if old_role and old_role in user.roles:
+                    await user.remove_roles(old_role)
+                if new_role and new_role not in user.roles:
+                    await user.add_roles(new_role)
             
-            if old_role and old_role in user.roles:
-                await user.remove_roles(old_role)
-            if new_role and new_role not in user.roles:
-                await user.add_roles(new_role)
-            
-            await ctx.respond(f"✅ User {user.mention} has been demoted to **{new_role_name}**.")
-            await user.send(f"⬇️ Your role in **{target_player['guild_name']}** has been changed to **{new_role_name}**.")
+            await ctx.followup.send(f"✅ User {user.mention} has been demoted to **{new_role_name}**.")
+            try:
+                await user.send(f"⬇️ Your role in **{gname_dm}** has been changed to **{new_role_name}**.")
+            except discord.Forbidden:
+                pass
 
 def setup(bot):
     bot.add_cog(AuthCommands(bot))

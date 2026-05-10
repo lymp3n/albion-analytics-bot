@@ -515,8 +515,13 @@ class Database:
     
     async def get_player_by_discord_id(self, discord_id: int) -> Optional[Dict[str, Any]]:
         return await self.fetchrow(
-            "SELECT * FROM players WHERE discord_id = $1", 
-            discord_id
+            """
+            SELECT p.*, g.name AS guild_name
+            FROM players p
+            LEFT JOIN guilds g ON g.id = p.guild_id
+            WHERE p.discord_id = $1
+            """,
+            discord_id,
         )
     
     async def get_player_by_id(self, player_id: int) -> Optional[Dict[str, Any]]:
