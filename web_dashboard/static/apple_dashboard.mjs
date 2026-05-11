@@ -126,42 +126,127 @@ function HeatmapChart({ xLabels = [], yLabels = [], matrix = [], colorA = "34,21
   </div>`;
 }
 
-function CustomGraph({ title, subtitle, metricsMap, defaultPeriod = "7d", id }) {
+function _hashHue(str) {
+  let h = 0;
+  const s = String(str || "");
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+function colorForMetric(name) {
+  const hue = _hashHue(name);
+  return {
+    stroke: `hsl(${hue} 92% 72%)`,
+    fill: `hsla(${hue} 92% 72% / 0.22)`,
+    dot: `hsl(${hue} 92% 78%)`,
+  };
+}
+
+function MultiLineChart({ xLabels = [], series = [], height = 320, showArea = false }) {
+  const W = 920;
+  const H = 300;
+  const all = series.flatMap((s) => (s.values || []).map((v) => toNum(v)));
+  const max = Math.max(1, ...all);
+  const min = Math.min(0, ...all);
+
+  const xFor = (i) => (xLabels.length <= 1 ? 0 : (i / (xLabels.length - 1)) * W);
+  const yFor = (n) => H - ((toNum(n) - min) / (max - min || 1)) * H;
+
+  const [tip, setTip] = useState(null);
+  const clearTip = () => setTip(null);
+
+  const areaPath = (pts) => `M 0 ${H} L ${pts.map((p) => `${p[0]} ${p[1]}`).join(" L ")} L ${W} ${H} Z`;
+  const linePath = (pts) => `M ${pts.map((p) => `${p[0]} ${p[1]}`).join(" L ")}`;
+
+  return html`<div className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]" style=${{ height: `${height}px` }} onMouseLeave=${clearTip}>
+    ${tip ? html`<div className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-xl border border-white/15 bg-[#0f0f16]/90 px-3 py-2 text-xs text-slate-100 shadow-lg" style=${{ left: `${tip.xPct}%`, top: "10px" }}>
+      <div className="text-[11px] uppercase tracking-[0.12em] text-slate-300">${tip.metric}</div>
+      <div className="mt-1 text-sm font-medium">${fmt(tip.value)}</div>
+      <div className="mt-1 text-[11px] text-slate-400">${tip.xLabel}</div>
+    </div>` : null}
+    <svg viewBox="0 0 ${W} ${H}" className="h-full w-full" preserveAspectRatio="none">
+      ${series.map((s) => {
+        const c = colorForMetric(s.name);
+        const pts = (s.values || []).map((n, i) => [xFor(i), yFor(n)]);
+        const lp = linePath(pts);
+        const ap = areaPath(pts);
+        return html`<g key=${s.name}>
+          ${showArea ? html`<path d=${ap} fill=${c.fill}></path>` : null}
+          <path d=${lp} fill="none" stroke=${c.stroke} stroke-width="3"></path>
+          ${pts.map((p, i) => html`<circle
+            key=${`${s.name}-${i}`}
+            cx=${p[0]}
+            cy=${p[1]}
+            r="7"
+            fill="transparent"
+            onMouseEnter=${() => {
+              const xPct = (xLabels.length <= 1 ? 0 : (i / (xLabels.length - 1)) * 100);
+              setTip({ metric: s.name, value: toNum((s.values || [])[i]), xLabel: xLabels[i] || `#${i + 1}`, xPct });
+            }}
+          ></circle>`)}
+          ${pts.map((p, i) => html`<circle key=${`${s.name}-dot-${i}`} cx=${p[0]} cy=${p[1]} r="4.5" fill=${c.dot}></circle>`)}
+        </g>`;
+      })}
+    </svg>
+  </div>`;
+}
+
+function MultiBarChart({ xLabels = [], series = [], height = 320 }) {
+  const max = Math.max(1, ...series.flatMap((s) => (s.values || []).map((v) => toNum(v))));
+  return html`<div className="grid gap-4">
+    <div className="flex flex-wrap gap-3 text-[11px] text-slate-300">
+      ${series.map((s) => {
+        const c = colorForMetric(s.name);
+        return html`<div key=${s.name} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style=${{ background: c.stroke }}></span><span>${s.name}</span></div>`;
+      })}
+    </div>
+    <div className="grid items-end gap-3" style=${{ height: `${height}px`, gridTemplateColumns: `repeat(${xLabels.length}, minmax(0, 1fr))` }}>
+      ${xLabels.map((x, xi) => html`<div key=${x} className="group flex flex-col items-center gap-2">
+        <div className="grid w-full items-end gap-2" style=${{ gridTemplateColumns: `repeat(${Math.max(1, series.length)}, minmax(0, 1fr))` }}>
+          ${series.map((s) => {
+            const c = colorForMetric(s.name);
+            const n = toNum((s.values || [])[xi]);
+            const h = Math.max(6, Math.round((n / max) * 100));
+            return html`<div key=${`${s.name}-${xi}`} title=${`${s.name} / ${x}: ${fmt(n)}`} className="rounded-t-lg border border-white/10 transition-transform duration-200 group-hover:scale-y-105" style=${{ height: `${h}%`, background: `linear-gradient(180deg, ${c.stroke}, rgba(255,255,255,0.02))` }}></div>`;
+          })}
+        </div>
+        <div className="text-center text-[11px] text-slate-400">${x}</div>
+      </div>`)}
+    </div>
+  </div>`;
+}
+
+function CustomGraph({ title, subtitle, metricsMap, id }) {
   const metricKeys = Object.keys(metricsMap || {});
   const [selected, setSelected] = useState(metricKeys);
-  const [period, setPeriod] = useState(defaultPeriod);
   const [kind, setKind] = useState("line");
 
   useEffect(() => { setSelected(metricKeys); }, [id]);
 
-  const labels = selected;
-  const values = selected.map((k) => toNum(metricsMap[k]?.[period] ?? metricsMap[k]?.["7d"] ?? 0));
+  const xLabels = PERIODS;
+  const series = selected.map((k) => ({ name: k, values: PERIODS.map((p) => toNum(metricsMap?.[k]?.[p] ?? 0)) }));
 
   const toggleMetric = (m) => setSelected((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
 
   const chart = kind === "bar"
-    ? html`<${BarChart} labels=${labels} values=${values} color="from-cyan-300 to-blue-500" />`
+    ? html`<${MultiBarChart} xLabels=${xLabels} series=${series} height=${320} />`
     : kind === "area"
-      ? html`<${AreaChart} labels=${labels} values=${values} />`
-      : html`<${LineChart} labels=${labels} values=${values} />`;
+      ? html`<${MultiLineChart} xLabels=${xLabels} series=${series} height=${320} showArea=${true} />`
+      : html`<${MultiLineChart} xLabels=${xLabels} series=${series} height=${320} showArea=${false} />`;
 
   return html`<${ChartShell} title=${title} subtitle=${subtitle}>
-    <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+    <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_auto]">
       <div className="flex flex-wrap gap-2">
         ${metricKeys.map((m) => html`<button key=${m} className=${`rounded-full border px-3 py-1 text-xs ${selected.includes(m) ? "border-cyan-300/70 bg-cyan-300/15 text-cyan-100" : "border-white/15 bg-white/5 text-slate-300"}`} onClick=${() => toggleMetric(m)}>${m}</button>`)}
       </div>
-      <select className="apple-control-input apple-select-contrast rounded-xl px-3 py-2 text-sm" value=${period} onChange=${(e) => setPeriod(e.target.value)}>
-        ${PERIODS.map((p) => html`<option key=${p} value=${p}>${p}</option>`)}
-      </select>
       <select className="apple-control-input apple-select-contrast rounded-xl px-3 py-2 text-sm" value=${kind} onChange=${(e) => setKind(e.target.value)}>
         <option value="line">Line Chart</option>
         <option value="bar">Bar Chart</option>
         <option value="area">Area Chart</option>
       </select>
     </div>
-    <${motion.div} key=${`${kind}-${period}-${selected.join(",")}`} initial=${{ opacity: 0, y: 10 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: 0.24, ease }}>
+    <${motion.div} key=${`${kind}-${selected.join(",")}`} initial=${{ opacity: 0, y: 10 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: 0.24, ease }}>
       ${chart}
-      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400"><span>Y: metric value</span><span>X: selected metrics</span></div>
+      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400"><span>Y: metric value</span><span>X: preloaded periods</span></div>
     </${motion.div}>
   </${ChartShell}>`;
 }
@@ -445,10 +530,24 @@ function EconomyDashboard() {
   const k = data.kpis || {};
   const rep = data.reports || {};
   const entriesRows = (data.entries || []).slice(0, 80).map((e) => [e.id, e.category || e.entry_type || "—", e.amount ?? "—", e.status || "—", e.created_at || e.ts || "—"]);
-  const armoryRows = (data.armory_stock || []).slice(0, 100).map((s) => [s.item_name || "—", s.item_id || "—", s.qty ?? 0, s.target_qty ?? 0, s.deficit_abs ?? 0]);
+  const armoryRows = (data.armory_stock || []).slice(0, 120).map((s) => [
+    s.item_name || "—",
+    s.category || "—",
+    s.tier || "—",
+    s.enchant || "—",
+    s.quality || "—",
+    s.quantity ?? 0,
+    s.updated_at || "—",
+  ]);
   const alertsRows = (data.alerts || []).slice(0, 80).map((a) => [a.id, a.severity || "—", a.status || "—", a.message || a.title || "—"]);
   const routesRows = (data.routing_rules || []).slice(0, 80).map((r) => [r.category || r.op_type || "—", r.debit_account || "—", r.credit_account || "—", r.auto_post ? "yes" : "no"]);
-  const importsRows = (data.imports || []).slice(0, 80).map((i) => [i.id, i.source || "—", i.rows_count ?? 0, i.created_at || "—"]);
+  const importsRows = (data.imports || []).slice(0, 120).map((i) => [
+    i.id,
+    i.log_type || "—",
+    i.rows_count ?? 0,
+    i.imported_at || "—",
+    (i.summary?.discrepancies ?? 0),
+  ]);
   const pendingRows = (data.pending_approvals || []).slice(0, 80).map((p) => [p.id, p.category || "—", p.amount ?? "—", p.status || "—"]);
   const discrepanciesRows = (data.discrepancies || []).slice(0, 80).map((d) => [d.id, d.kind || d.category || "—", d.status || "—", d.delta_amount ?? "—"]);
   const auditRows = (data.audit_trail || []).slice(0, 80).map((a) => [a.id, a.actor || "—", a.action || "—", a.created_at || "—"]);
@@ -480,10 +579,10 @@ function EconomyDashboard() {
       `;
     }
     if (active === "entries") return html`<${DataTable} columns=${["ID", "Category", "Amount", "Status", "Created"]} rows=${entriesRows} />`;
-    if (active === "armory") return html`<${DataTable} columns=${["Item", "Item ID", "Qty", "Target", "Deficit"]} rows=${armoryRows} />`;
+    if (active === "armory") return html`<${DataTable} columns=${["Item", "Category", "Tier", "Enchant", "Quality", "Qty", "Updated"]} rows=${armoryRows} />`;
     if (active === "alerts") return html`<${DataTable} columns=${["ID", "Severity", "Status", "Message"]} rows=${alertsRows} />`;
     if (active === "routing") return html`<${DataTable} columns=${["Category", "Debit", "Credit", "Auto"]} rows=${routesRows} />`;
-    if (active === "imports") return html`<${DataTable} columns=${["ID", "Source", "Rows", "Created"]} rows=${importsRows} />`;
+    if (active === "imports") return html`<${DataTable} columns=${["ID", "Log type", "Rows", "Imported", "Discrepancies"]} rows=${importsRows} />`;
     if (active === "approvals") return html`<${DataTable} columns=${["ID", "Category", "Amount", "Status"]} rows=${pendingRows} />`;
     if (active === "discrepancies") return html`<${DataTable} columns=${["ID", "Kind", "Status", "Delta"]} rows=${discrepanciesRows} />`;
     if (active === "audit") return html`<${DataTable} columns=${["ID", "Actor", "Action", "Created"]} rows=${auditRows} />`;
