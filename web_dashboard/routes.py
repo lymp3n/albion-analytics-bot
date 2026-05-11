@@ -286,6 +286,64 @@ def register_dashboard(app: Flask) -> None:
             mimetype="application/json",
         )
 
+    @app.route("/dashboard/api/players/register", methods=["POST"])
+    @login_required
+    def dashboard_players_register():
+        body = request.get_json(silent=True) or {}
+        nickname = str(body.get("nickname") or "").strip()
+        discord_username = str(body.get("discord_username") or "").strip()
+        status = str(body.get("status") or "pending").strip().lower()
+        allowed_statuses = {"pending", "active", "mentor", "founder"}
+        if status not in allowed_statuses:
+            status = "pending"
+        try:
+            guild_id = int(body.get("guild_id") or 0)
+            discord_id = int(body.get("discord_id") or 0)
+        except (TypeError, ValueError):
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "guild_id and discord_id must be integers."}),
+                status=400,
+                mimetype="application/json",
+            )
+        if guild_id <= 0 or discord_id <= 0 or not nickname or not discord_username:
+            return app.response_class(
+                response=json.dumps(
+                    {"ok": False, "error": "nickname, discord_username, guild_id and discord_id are required."}
+                ),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_sync_connection() as (conn, backend):
+                cur = conn.cursor()
+                if backend == "sqlite":
+                    cur.execute(
+                        """
+                        INSERT INTO players (discord_id, discord_username, nickname, guild_id, status)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (discord_id, discord_username, nickname, guild_id, status),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO players (discord_id, discord_username, nickname, guild_id, status)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (discord_id, discord_username, nickname, guild_id, status),
+                    )
+                conn.commit()
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": str(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(
+            response=json.dumps({"ok": True, "message": "Player registered."}),
+            mimetype="application/json",
+        )
+
     @app.route("/dashboard/api/event-templates", methods=["POST"])
     @login_required
     def dashboard_event_templates_post():

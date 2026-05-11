@@ -98,6 +98,26 @@ html, body {
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
+.apple-neon-card {
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.22),
+    0 0 40px rgba(56, 189, 248, 0.2),
+    0 0 70px rgba(217, 70, 239, 0.16),
+    0 22px 68px rgba(0, 0, 0, 0.56),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.apple-neon-card:hover {
+  border-color: rgba(125, 211, 252, 0.7);
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.4),
+    0 0 52px rgba(56, 189, 248, 0.3),
+    0 0 84px rgba(217, 70, 239, 0.24),
+    0 30px 88px rgba(2, 6, 23, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
 .apple-row-transition {
   transition: background-color 260ms ease, transform 260ms ease;
 }
