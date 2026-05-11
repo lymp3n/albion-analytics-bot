@@ -94,6 +94,70 @@ function LineChart({ labels = [], values = [], stroke = "#7dd3fc", fill = "rgba(
   `;
 }
 
+function StackedAreaChart({ labels = [], series = [] }) {
+  const w = 700;
+  const h = 240;
+  const count = Math.max(labels.length, ...series.map((s) => (s.values || []).length), 1);
+  const valuesPerX = Array.from({ length: count }, (_, i) => series.reduce((acc, s) => acc + (Number((s.values || [])[i]) || 0), 0));
+  const maxTotal = Math.max(1, ...valuesPerX);
+  const stackedPolylines = [];
+  let accumulated = Array.from({ length: count }, () => 0);
+  series.forEach((s, idx) => {
+    const vals = Array.from({ length: count }, (_, i) => Number((s.values || [])[i]) || 0);
+    accumulated = accumulated.map((v, i) => v + vals[i]);
+    const points = accumulated.map((v, i) => {
+      const x = count === 1 ? 0 : (i / (count - 1)) * w;
+      const y = h - (v / maxTotal) * h;
+      return [x, y];
+    });
+    const bottom = idx === 0
+      ? Array.from({ length: count }, (_, i) => [count === 1 ? 0 : (i / (count - 1)) * w, h])
+      : stackedPolylines[idx - 1].points;
+    const area = `${points.map((p) => `${p[0]},${p[1]}`).join(" ")} ${bottom.slice().reverse().map((p) => `${p[0]},${p[1]}`).join(" ")}`;
+    stackedPolylines.push({ points, color: s.color, area, name: s.name, vals });
+  });
+  return html`
+    <div className="h-[240px] w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+      <svg viewBox="0 0 ${w} ${h}" className="h-full w-full">
+        ${stackedPolylines.map((s, i) => html`<g key=${i}>
+          <polygon points=${s.area} fill=${s.color} fill-opacity="0.24"></polygon>
+          <polyline points=${s.points.map((p) => `${p[0]},${p[1]}`).join(" ")} fill="none" stroke=${s.color} stroke-width="2.5"></polyline>
+          ${s.points.map((p, pi) => html`<g key=${pi}><circle cx=${p[0]} cy=${p[1]} r="2.5" fill=${s.color}></circle><title>${s.name} - ${labels[pi] || `#${pi + 1}`}: ${fmt(s.vals[pi])}</title></g>`)}
+        </g>`)}
+      </svg>
+    </div>
+  `;
+}
+
+function HeatmapChart({ xLabels = [], yLabels = [], matrix = [], colorA = "34,211,238", colorB = "168,85,247" }) {
+  const flat = matrix.flat().map((v) => Number(v) || 0);
+  const max = Math.max(1, ...flat);
+  const min = Math.min(...flat, 0);
+  const scale = (v) => (Number(v) - min) / (max - min || 1);
+  return html`
+    <div className="apple-scrollbar overflow-auto">
+      <div className="min-w-[520px]">
+        <div className="mb-2 grid" style=${{ gridTemplateColumns: `160px repeat(${xLabels.length}, minmax(54px,1fr))` }}>
+          <div></div>
+          ${xLabels.map((x, i) => html`<div key=${i} className="px-1 text-center text-[11px] text-slate-400">${x}</div>`)}
+        </div>
+        ${yLabels.map((y, yi) => html`<div key=${yi} className="mb-1 grid items-center gap-1" style=${{ gridTemplateColumns: `160px repeat(${xLabels.length}, minmax(54px,1fr))` }}>
+          <div className="pr-2 text-right text-[11px] text-slate-300">${y}</div>
+          ${(matrix[yi] || []).map((v, xi) => {
+            const k = scale(v);
+            return html`<div
+              key=${xi}
+              className="h-9 rounded-md border border-white/10 text-center text-[11px] leading-9 text-white"
+              style=${{ background: `linear-gradient(135deg, rgba(${colorA},${0.16 + k * 0.52}), rgba(${colorB},${0.12 + k * 0.45}))` }}
+              title=${`${y} / ${xLabels[xi]}: ${fmt(v)}`}
+            >${fmt(v)}</div>`;
+          })}
+        </div>`)}
+      </div>
+    </div>
+  `;
+}
+
 function DonutChart({ segments = [] }) {
   const total = Math.max(1, segments.reduce((a, s) => a + (Number(s.value) || 0), 0));
   let offset = 0;
@@ -121,7 +185,7 @@ function DonutChart({ segments = [] }) {
 function DataTable({ columns, rows }) {
   return html`
     <div className="${glass} apple-scrollbar overflow-auto">
-      <table className="w-full min-w-[760px] border-collapse">
+      <table className="apple-data-table w-full min-w-[760px] border-collapse">
         <thead>
           <tr>${columns.map((c) => html`<th key=${c} className="border-b border-white/10 px-3 py-2 text-left text-xs uppercase tracking-[0.12em] text-slate-300">${c}</th>`)}</tr>
         </thead>
@@ -304,8 +368,15 @@ function MainDashboard() {
         <${AxisHint} left="0" right="max count" bottom="metrics" />
       </${ChartCard}>
       <${ChartCard} title="Participation trend" subtitle="Event activity and CTA engagement" type="Line chart" legend=${["events", "participants", "cta"]}>
-        <${LineChart} labels=${["Events", "Participants", "CTA events", "CTA participants"]} values=${[events.events_in_period || 0, events.unique_participants_period || 0, events.cta_events_in_period || 0, events.cta_unique_participants_period || 0]} />
-        <${AxisHint} left="activity" right="peak" bottom="event metrics" />
+        <${StackedAreaChart}
+          labels=${["Events", "Participants", "CTA events", "CTA participants"]}
+          series=${[
+            { name: "Base events", values: [events.events_in_period || 0, events.events_in_period || 0, 0, 0], color: "#7dd3fc" },
+            { name: "Participation", values: [0, events.unique_participants_period || 0, 0, 0], color: "#c4b5fd" },
+            { name: "CTA lane", values: [0, 0, events.cta_events_in_period || 0, events.cta_unique_participants_period || 0], color: "#f9a8d4" },
+          ]}
+        />
+        <${AxisHint} left="low activity" right="high activity" bottom="event metrics" />
       </${ChartCard}>
     </div>
   `;
@@ -383,6 +454,18 @@ function MainDashboard() {
           <${ChartCard} title="Sessions and events line" subtitle="Expanded detailed trend in modal" type="Line chart" legend=${["sessions", "events"]} height="h-[360px]">
             <${LineChart} labels=${["Sessions", "Events", "CTA"]} values=${[o.sessions_period || 0, o.events_period || 0, o.events_period_cta || 0]} stroke="#c4b5fd" fill="rgba(196,181,253,.16)" />
             <p className="apple-muted mt-3 text-sm leading-relaxed">This modal view gives a more detailed reading than the main cards: counts, relative distance between metrics, and contextual text for quick decisions.</p>
+          </${ChartCard}>
+        </div>
+        <div className="mt-5">
+          <${ChartCard} title="Participation intensity matrix" subtitle="Detailed density by activity lanes" type="Heatmap" legend=${["darker = higher"]} height="h-auto">
+            <${HeatmapChart}
+              xLabels=${["Roster", "Unique", "Stable", "Low attendance", "Never attended"]}
+              yLabels=${["General events", "CTA events"]}
+              matrix=${[
+                [events.active_roster_count || 0, events.unique_participants_period || 0, (events.stable_attendance || []).length || 0, (events.low_attendance || []).length || 0, (events.never_attended || []).length || 0],
+                [events.active_roster_count || 0, events.cta_unique_participants_period || 0, events.cta_events_in_period || 0, (events.low_attendance || []).length || 0, (events.never_attended || []).length || 0],
+              ]}
+            />
           </${ChartCard}>
         </div>
       </${PreviewModal}>
@@ -497,8 +580,17 @@ function EconomyDashboard() {
           <${LineChart} labels=${(data.armory_stock || []).slice(0, 8).map((x) => x.item_name || x.item_id || "item")} values=${(data.armory_stock || []).slice(0, 8).map((x) => Number(x.deficit_abs || 0))} stroke="#fdba74" fill="rgba(251,146,60,.16)" />
           <${AxisHint} left="low deficit" right="high deficit" bottom="top items" />
         </${ChartCard}>
-        <${ChartCard} title="Treasury mix" subtitle="Cash vs energy split" type="Donut chart" legend=${["cash", "energy"]}>
-          <${DonutChart} segments=${[{ label: "Cash", value: rep.balance_snapshot?.cash_balance || 0, color: "#22d3ee" }, { label: "Energy", value: rep.balance_snapshot?.energy_balance || 0, color: "#c4b5fd" }]} />
+        <${ChartCard} title="Risk heatmap" subtitle="Cross-metric risk surface" type="Heatmap" legend=${["higher intensity = higher priority"]}>
+          <${HeatmapChart}
+            xLabels=${["alerts", "discrepancies", "approvals", "entries"]}
+            yLabels=${["live queue", "review queue"]}
+            matrix=${[
+              [(data.alerts || []).length, (data.discrepancies || []).length, (data.pending_approvals || []).length, k.pending_entries || 0],
+              [(data.alerts || []).filter((x) => String(x.status || "").toLowerCase() !== "ack").length, (data.discrepancies || []).filter((x) => String(x.status || "").toLowerCase() !== "resolved").length, (data.pending_approvals || []).length, (data.entries || []).filter((x) => String(x.status || "").toLowerCase() !== "posted").length],
+            ]}
+            colorA="245,158,11"
+            colorB="236,72,153"
+          />
         </${ChartCard}>
       </div>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">${["Operations", "Entries", "Armory", "Reports", "Alerts", "Snapshot"].map((name) => html`<${motion.button} key=${name} className=${`${glass} p-4 text-left`} whileHover=${{ scale: 1.02, y: -2 }} whileTap=${{ scale: 0.99 }} onClick=${() => setPreview(true)}><p className="text-sm font-medium">${name}</p><p className="apple-muted mt-2 text-xs">Open detailed modal</p></${motion.button}>`)}</div>
@@ -526,6 +618,31 @@ function EconomyDashboard() {
           <${ChartCard} title="Risk and backlog curve" subtitle="Alerts, discrepancies, approvals, pending entries" type="Line chart" legend=${["risk lanes"]} height="h-[380px]">
             <${LineChart} labels=${["Alerts", "Discrepancies", "Approvals", "Pending entries"]} values=${[(data.alerts || []).length, (data.discrepancies || []).length, (data.pending_approvals || []).length, k.pending_entries || 0]} stroke="#f9a8d4" fill="rgba(249,168,212,.16)" />
             <p className="apple-muted mt-2 text-sm">Use this curve to prioritize review sequence: spikes indicate areas where operational response should happen first.</p>
+          </${ChartCard}>
+        </div>
+        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+          <${ChartCard} title="Stacked financial lanes" subtitle="Income/expense/cashflow layered contribution" type="Stacked area" legend=${["income", "expense", "net"]} height="h-[380px]">
+            <${StackedAreaChart}
+              labels=${["P&L income", "P&L expense", "P&L profit", "Cash in", "Cash out", "Net cashflow"]}
+              series=${[
+                { name: "Income lane", values: [rep.pnl_summary?.income_total || 0, 0, 0, rep.cashflow_summary?.cash_in_total || 0, 0, 0], color: "#34d399" },
+                { name: "Expense lane", values: [0, rep.pnl_summary?.expense_total || 0, 0, 0, rep.cashflow_summary?.cash_out_total || 0, 0], color: "#f97316" },
+                { name: "Net lane", values: [0, 0, rep.pnl_summary?.profit_total || 0, 0, 0, rep.cashflow_summary?.net_cashflow || 0], color: "#60a5fa" },
+              ]}
+            />
+          </${ChartCard}>
+          <${ChartCard} title="Control heatmap" subtitle="Detailed control-plane intensity map" type="Heatmap" legend=${["high values are hotspots"]} height="h-[380px]">
+            <${HeatmapChart}
+              xLabels=${["alerts", "discrepancies", "approvals", "audit"]}
+              yLabels=${["all", "open-only", "last-window"]}
+              matrix=${[
+                [(data.alerts || []).length, (data.discrepancies || []).length, (data.pending_approvals || []).length, (data.audit_trail || []).length],
+                [(data.alerts || []).filter((x) => String(x.status || "").toLowerCase() !== "ack").length, (data.discrepancies || []).filter((x) => String(x.status || "").toLowerCase() !== "resolved").length, (data.pending_approvals || []).length, (data.audit_trail || []).slice(0, 40).length],
+                [(data.alerts || []).slice(0, 20).length, (data.discrepancies || []).slice(0, 20).length, (data.pending_approvals || []).slice(0, 20).length, (data.audit_trail || []).slice(0, 20).length],
+              ]}
+              colorA="16,185,129"
+              colorB="14,165,233"
+            />
           </${ChartCard}>
         </div>
       </${PreviewModal}>

@@ -135,6 +135,31 @@ html, body {
   background: rgba(148, 163, 184, 0.08);
 }
 
+.apple-data-table th,
+.apple-data-table td {
+  line-height: 1.35;
+}
+
+.apple-data-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(16, 16, 22, 0.92);
+  backdrop-filter: blur(10px);
+  z-index: 1;
+}
+
+.apple-data-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.apple-data-table tbody tr td:first-child {
+  padding-left: 16px;
+}
+
+.apple-data-table tbody tr td:last-child {
+  padding-right: 16px;
+}
+
 @media (max-width: 980px) {
   .apple-shell {
     padding: 16px;
