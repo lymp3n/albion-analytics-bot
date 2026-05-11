@@ -134,6 +134,12 @@ Discord bot and web dashboard for Albion Online guild operations: events, ticket
 3. `python bot.py`
 4. Открыть `/dashboard` и авторизоваться через `DASHBOARD_SECRET`
 
+#### Frontend (Apple Minimalism shell)
+- Маршруты `/dashboard`, `/dashboard/main`, `/dashboard/economy` теперь монтируют React-слой через `web_dashboard/static/apple_dashboard.mjs`.
+- Стили дизайн-токенов и glassmorphism лежат в `web_dashboard/static/apple_dashboard.css`.
+- Подготовлена структура полноценного React/Tailwind/Framer проекта в `web_frontend/` (`package.json`, `tailwind.config.ts`, UI primitives и страницы).
+- В текущем окружении без Node.js используется ESM/CDN-подключение для рантайма; при наличии Node можно перейти на Vite-сборку из `web_frontend/`.
+
 ---
 
 ## EN
