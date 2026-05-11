@@ -160,6 +160,14 @@ html, body {
   padding-right: 16px;
 }
 
+.apple-glass {
+  overflow: hidden;
+}
+
+.apple-soft-gap {
+  gap: 8px;
+}
+
 @media (max-width: 980px) {
   .apple-shell {
     padding: 16px;
