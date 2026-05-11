@@ -61,6 +61,7 @@
           <input id="f-fund" type="number" min="0" value="1000000" />
         </div>
         <div class="ds-actions">
+          <a href="/dashboard" class="ds-btn ds-btn-ghost">Dashboards</a>
           <a href="/dashboard/economy" class="ds-btn ds-btn-ghost">Economy Ops</a>
           <button type="button" class="ds-btn ds-btn-primary" id="btn-refresh">Refresh data</button>
           <form method="post" action="{{ url_for('dashboard_logout') }}" style="margin:0;">
@@ -72,18 +73,25 @@
 
     <div id="err-box" class="ds-error-banner" style="display:none;"></div>
 
-    <nav class="ds-tabs" role="tablist" aria-label="Dashboard sections">
-      <button type="button" class="ds-tab is-active" data-tab="overview">Overview</button>
-      <button type="button" class="ds-tab" data-tab="players">Players</button>
-      <button type="button" class="ds-tab" data-tab="tickets">Tickets</button>
-      <button type="button" class="ds-tab" data-tab="events">Events</button>
-      <button type="button" class="ds-tab" data-tab="templates">Event templates</button>
-      <button type="button" class="ds-tab" data-tab="roles">Role assist</button>
-      <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
-      <button type="button" class="ds-tab" data-tab="system">System</button>
-    </nav>
+    <div class="ds-shell">
+      <aside class="ds-sidebar" aria-label="Navigation">
+        <nav class="ds-tabs ds-tabs-vertical" role="tablist" aria-label="Dashboard sections">
+          <button type="button" class="ds-tab is-active" data-tab="overview">Overview</button>
+          <button type="button" class="ds-tab" data-tab="players">Players</button>
+          <button type="button" class="ds-tab" data-tab="tickets">Tickets</button>
+          <button type="button" class="ds-tab" data-tab="events">Events</button>
+          <button type="button" class="ds-tab" data-tab="templates">Event templates</button>
+          <button type="button" class="ds-tab" data-tab="roles">Role assist</button>
+          <button type="button" class="ds-tab" data-tab="mentors">Mentors</button>
+          <button type="button" class="ds-tab" data-tab="system">System</button>
+        </nav>
+        <div class="ds-sidebar-foot">
+          <a href="/dashboard" class="ds-btn ds-btn-ghost">Dashboard picker</a>
+          <a href="/dashboard/economy" class="ds-btn ds-btn-ghost">Economy Ops</a>
+        </div>
+      </aside>
 
-    <main id="main-content" style="display:none;">
+      <main id="main-content" class="ds-main" style="display:none;">
       <section class="ds-panel ds-tab-panel" data-panel="overview">
         <h2>Overview</h2>
         <div class="ds-grid-kpi" id="kpi-overview"></div>
@@ -303,7 +311,8 @@
         <h3 class="ds-muted" style="margin:1rem 0 0.5rem;text-transform:uppercase;font-size:0.75rem;">Full snapshot</h3>
         <pre class="ds-json" id="json-system"></pre>
       </section>
-    </main>
+      </main>
+    </div>
   </div>
 
   <script>

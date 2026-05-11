@@ -144,6 +144,11 @@ def register_dashboard(app: Flask) -> None:
     @app.route("/dashboard")
     @login_required
     def dashboard_app():
+        return render_template("dashboard_home.html")
+
+    @app.route("/dashboard/main")
+    @login_required
+    def dashboard_main_app():
         return render_template("dashboard.html")
 
     @app.route("/dashboard/economy")

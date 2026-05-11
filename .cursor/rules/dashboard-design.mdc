@@ -1,0 +1,19 @@
+---
+description: Dashboard UX rules (layout, charts, navigation, color)
+alwaysApply: true
+---
+
+# Dashboard design rules
+
+Use these rules when changing `web_dashboard/templates/*.html` and `web_dashboard/static/*.css`.
+
+- **Start from user questions**: every screen must answer 1–3 key questions first (top-left, above the fold). Avoid “art mockups” detached from real data.
+- **Hierarchy over decoration**: composition must be readable top→down, left→right. No “eye jumping” between unrelated blocks.
+- **Show totals + context**: if a section is about an entity (events, tickets, tasks, imports), always show the main total and the active filters/time window.
+- **One time window per screen**: avoid mixing 7d/30d/“today” in adjacent cards unless the relationship is explicit and interactive.
+- **Charts must be explainable**: always include axis meaning, units, and (when needed) legend. Avoid exotic/ambiguous charts (half donuts, segment-stacks) unless the audience is trained and the meaning is obvious.
+- **Numbers formatting consistency**: same units, same separators, same precision rules across the page.
+- **Color = meaning, not decoration**: use a small palette; keep semantic colors consistent (good/bad/warn). Ensure contrast; don’t rely on color alone for status.
+- **Navigation is explicit**: left sidebar with clear labels + tooltips; categories should be few. Prefer **preview cards** on main screen and **modal drill-down** for details.
+- **Performance-aware UI**: heavy loads must show progress/timeout; avoid firing multiple expensive requests at once.
+
