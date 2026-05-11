@@ -96,6 +96,28 @@
         <h2>Overview</h2>
         <div class="ds-grid-kpi" id="kpi-overview"></div>
         <p class="ds-muted" id="overview-since"></p>
+        <div class="ds-preview-grid">
+          <article class="ds-preview-card">
+            <h3>Players</h3>
+            <p>Roster quality and activity in selected period.</p>
+            <button type="button" class="ds-btn ds-btn-ghost ds-open-preview" data-preview="players">Quick view</button>
+          </article>
+          <article class="ds-preview-card">
+            <h3>Tickets</h3>
+            <p>Open/closed queue and recent moderation flow.</p>
+            <button type="button" class="ds-btn ds-btn-ghost ds-open-preview" data-preview="tickets">Quick view</button>
+          </article>
+          <article class="ds-preview-card">
+            <h3>Events</h3>
+            <p>Participation, low/stable attendance and CTA health.</p>
+            <button type="button" class="ds-btn ds-btn-ghost ds-open-preview" data-preview="events">Quick view</button>
+          </article>
+          <article class="ds-preview-card">
+            <h3>Mentors</h3>
+            <p>Fund split and mentoring load balance.</p>
+            <button type="button" class="ds-btn ds-btn-ghost ds-open-preview" data-preview="mentors">Quick view</button>
+          </article>
+        </div>
       </section>
 
       <section class="ds-panel ds-tab-panel" data-panel="players" hidden>
@@ -877,6 +899,51 @@
     }, 400);
   }
 
+  function openPreview(kind) {
+    const modal = document.getElementById("ds-preview-modal");
+    const title = document.getElementById("ds-preview-title");
+    const body = document.getElementById("ds-preview-body");
+    const s = window.__dsPreviewSnapshot || {};
+    if (!modal || !title || !body) return;
+    if (kind === "players") {
+      title.textContent = "Players quick view";
+      body.innerHTML =
+        `Total players in table: <strong>${esc(s.players_count ?? "—")}</strong><br/>` +
+        `Active roster: <strong>${esc(s.active_roster ?? "—")}</strong><br/>` +
+        `Top statuses: ${esc((s.players_statuses || []).join(", ") || "—")}`;
+    } else if (kind === "tickets") {
+      title.textContent = "Tickets quick view";
+      body.innerHTML =
+        `Open tickets: <strong>${esc(s.tickets_open ?? "—")}</strong><br/>` +
+        `Closed (period): <strong>${esc(s.tickets_closed ?? "—")}</strong><br/>` +
+        `Recent rows: <strong>${esc(s.tickets_recent ?? "—")}</strong>`;
+    } else if (kind === "events") {
+      title.textContent = "Events quick view";
+      body.innerHTML =
+        `Closed events (period): <strong>${esc(s.events_closed ?? "—")}</strong><br/>` +
+        `Participation: <strong>${esc(s.events_participation ?? "—")}</strong><br/>` +
+        `CTA closed: <strong>${esc(s.events_cta ?? "—")}</strong>`;
+    } else if (kind === "mentors") {
+      title.textContent = "Mentors quick view";
+      body.innerHTML =
+        `Mentors in split: <strong>${esc(s.mentors_count ?? "—")}</strong><br/>` +
+        `Window sessions: <strong>${esc(s.mentors_sessions ?? "—")}</strong><br/>` +
+        `Fund: <strong>${esc(s.mentors_fund ?? "—")}</strong>`;
+    } else {
+      title.textContent = "Preview";
+      body.textContent = "No data.";
+    }
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closePreview() {
+    const modal = document.getElementById("ds-preview-modal");
+    if (!modal) return;
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+  }
+
   async function load() {
     resetBanUI();
     showErr("");
@@ -1103,6 +1170,21 @@
       hideDiscordBanOverlay();
       $("#main-content").style.display = "block";
     }
+
+    window.__dsPreviewSnapshot = {
+      players_count: pl.length,
+      active_roster: ev.active_roster_count || 0,
+      players_statuses: Array.from(new Set(pl.map((x) => String(x.status || "")))).filter(Boolean).slice(0, 4),
+      tickets_open: ov.tickets_open || 0,
+      tickets_closed: ov.tickets_closed_period || 0,
+      tickets_recent: (tk.recent || []).length,
+      events_closed: ev.events_in_period || 0,
+      events_participation: (ev.participation_pct_of_roster ?? "—") + (ev.active_roster_count ? "%" : ""),
+      events_cta: ev.cta_events_in_period || 0,
+      mentors_count: (m.mentors || []).length,
+      mentors_sessions: m.total_sessions_window || 0,
+      mentors_fund: (m.fund || 0).toLocaleString(),
+    };
   }
 
   const banToSystem = document.getElementById("ds-ban-to-system");
@@ -1150,6 +1232,15 @@
   });
 
   $("#btn-refresh").addEventListener("click", load);
+  $$(".ds-open-preview").forEach((btn) => {
+    btn.addEventListener("click", () => openPreview(btn.getAttribute("data-preview")));
+  });
+  const previewClose = document.getElementById("ds-preview-close");
+  if (previewClose) previewClose.addEventListener("click", closePreview);
+  const previewModal = document.getElementById("ds-preview-modal");
+  if (previewModal) previewModal.addEventListener("click", (e) => {
+    if (e.target === previewModal) closePreview();
+  });
 
   const btnMentorsFund = document.getElementById("btn-mentors-apply-fund");
   const mentorsFundInput = document.getElementById("mentors-fund-input");
@@ -1200,5 +1291,14 @@
   });
 })();
   </script>
+  <div class="ds-modal" id="ds-preview-modal" aria-hidden="true">
+    <div class="ds-modal-card">
+      <div class="ds-modal-head">
+        <strong id="ds-preview-title">Preview</strong>
+        <button type="button" class="ds-btn ds-btn-ghost" id="ds-preview-close">Close</button>
+      </div>
+      <div id="ds-preview-body" class="ds-muted"></div>
+    </div>
+  </div>
 </body>
 </html>

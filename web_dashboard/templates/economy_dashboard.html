@@ -388,10 +388,72 @@
             stroke: var(--neon-cyan);
             stroke-width: 2;
         }
+        .eco-shell {
+            display: grid;
+            grid-template-columns: 260px minmax(0, 1fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .eco-side {
+            position: sticky;
+            top: 12px;
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(18, 18, 28, .75);
+            backdrop-filter: blur(12px);
+            box-shadow: var(--shadow-main);
+        }
+        .eco-main { min-width: 0; }
+        .eco-side .nav-tabs { display: flex; flex-direction: column; gap: 8px; }
+        .eco-side .nav-tab { width: 100%; text-align: left; }
+        .eco-side-links { display: grid; gap: 8px; margin-top: 12px; }
+        .eco-side-toggle { margin-bottom: 8px; width: 100%; }
+        .eco-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 12px 0 18px;
+        }
+        .eco-preview-card {
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            padding: 10px;
+            background: rgba(18,18,28,.72);
+        }
+        .eco-preview-card h4 {
+            margin: 0;
+            font-size: 12px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--neon-cyan);
+        }
+        .eco-preview-card p { margin: 6px 0 10px; color: var(--text-secondary); font-size: 12px; }
+        .eco-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(3,4,8,.7);
+            backdrop-filter: blur(3px);
+            z-index: 2100;
+            padding: 14px;
+        }
+        .eco-modal.open { display: flex; }
+        .eco-modal-card {
+            width: min(720px, 100%);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            background: linear-gradient(140deg, rgba(18,18,28,.95), rgba(12,12,20,.9));
+            box-shadow: var(--shadow-main);
+            padding: 14px;
+        }
+        .eco-modal-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
         #tbl-imports td:nth-child(4) { white-space:normal; max-width: 0; }
-        @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(2,minmax(180px,1fr)); } .ops-grid{ grid-template-columns:repeat(2,minmax(220px,1fr)); } }
+        @media (max-width:1200px){ .main-grid{ grid-template-columns:1fr; } .kpi-grid{ grid-template-columns:repeat(2,1fr);} .filters-grid{ grid-template-columns:repeat(2,minmax(180px,1fr)); } .ops-grid{ grid-template-columns:repeat(2,minmax(220px,1fr)); } .eco-shell{ grid-template-columns:1fr; } .eco-side{ position:relative; top:auto; } }
         @media (max-width:900px){ .ops-grid{ grid-template-columns:1fr; } .ops-launch-wide { grid-column:auto; } }
-        @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .nav-tabs{ display:none;} .reconciliation{ grid-template-columns:1fr;} }
+        @media (max-width:768px){ .kpi-grid{ grid-template-columns:1fr;} .header .nav-tabs{ display:none;} .reconciliation{ grid-template-columns:1fr;} }
     </style>
 </head>
 <body>
@@ -400,11 +462,6 @@
             <div class="logo"><span>🏰</span><span>GUILD ACCOUNTING</span></div>
             <nav class="nav-tabs">
                 <button class="nav-tab tooltip active" data-target="dashboard" data-i18n="tab_dashboard" data-tip="Main overview, KPI, API health and reconciliation preview.">📊 Dashboard</button>
-                <button class="nav-tab tooltip" data-target="operation" data-i18n="tab_operation" data-tip="Operations, buyback/regear requests, imports and routing rules.">➕ Operation</button>
-                <button class="nav-tab tooltip" data-target="journal" data-i18n="tab_journal" data-tip="Pending approval queue and manual moderation.">📋 Journal</button>
-                <button class="nav-tab tooltip" data-target="recon" data-i18n="tab_recon" data-tip="Reconciliation entities: tasks/imports/buyback/regear.">🔄 Reconciliation</button>
-                <button class="nav-tab tooltip" data-target="armory" data-tip="Armory stock and movement log." data-i18n="tab_armory">🧰 Armory</button>
-                <button class="nav-tab tooltip" data-target="reports" data-i18n="tab_reports" data-tip="Financial reports, forecast and audit trail.">📈 Reports</button>
             </nav>
             <div class="header-right">
                 <select class="form-select lang-select" id="lang-select">
@@ -418,8 +475,32 @@
         </header>
 
         <div class="error" id="err-box"></div>
-
+        <div class="eco-shell">
+        <aside class="eco-side">
+            <button class="btn btn-secondary eco-side-toggle" id="btn-eco-nav-toggle">Sections</button>
+            <nav class="nav-tabs" aria-label="Economy sections" id="eco-side-nav-list">
+                <button class="nav-tab tooltip active" data-target="dashboard" data-i18n="tab_dashboard" data-tip="Main overview, KPI, API health and reconciliation preview.">📊 Dashboard</button>
+                <button class="nav-tab tooltip" data-target="operation" data-i18n="tab_operation" data-tip="Operations, buyback/regear requests, imports and routing rules.">➕ Operation</button>
+                <button class="nav-tab tooltip" data-target="journal" data-i18n="tab_journal" data-tip="Pending approval queue and manual moderation.">📋 Journal</button>
+                <button class="nav-tab tooltip" data-target="recon" data-i18n="tab_recon" data-tip="Reconciliation entities: tasks/imports/buyback/regear.">🔄 Reconciliation</button>
+                <button class="nav-tab tooltip" data-target="armory" data-tip="Armory stock and movement log." data-i18n="tab_armory">🧰 Armory</button>
+                <button class="nav-tab tooltip" data-target="reports" data-i18n="tab_reports" data-tip="Financial reports, forecast and audit trail.">📈 Reports</button>
+            </nav>
+            <div class="eco-side-links">
+                <a class="btn btn-secondary" href="/dashboard">Dashboard picker</a>
+                <a class="btn btn-secondary" href="/dashboard/main">Main dashboard</a>
+            </div>
+        </aside>
+        <main class="eco-main">
         <div id="section-dashboard">
+        <div class="eco-preview-grid">
+            <article class="eco-preview-card"><h4>Operations</h4><p>Manual operations, CSV import, buyback/regear forms.</p><button class="btn btn-secondary btn-compact eco-open-preview" data-target="operation">Open</button></article>
+            <article class="eco-preview-card"><h4>Journal</h4><p>Player balances and pending approvals in one place.</p><button class="btn btn-secondary btn-compact eco-open-preview" data-target="journal">Open</button></article>
+            <article class="eco-preview-card"><h4>Reconciliation</h4><p>Rules, imports, buyback/regear tracking.</p><button class="btn btn-secondary btn-compact eco-open-preview" data-target="recon">Open</button></article>
+            <article class="eco-preview-card"><h4>Armory</h4><p>Stock and movement log with deficit check.</p><button class="btn btn-secondary btn-compact eco-open-preview" data-target="armory">Open</button></article>
+            <article class="eco-preview-card"><h4>Reports</h4><p>P&L, forecast and audit trail details.</p><button class="btn btn-secondary btn-compact eco-open-preview" data-target="reports">Open</button></article>
+            <article class="eco-preview-card"><h4>Snapshot</h4><p>Quick current state in modal preview.</p><button class="btn btn-secondary btn-compact" id="btn-eco-snapshot">Quick view</button></article>
+        </div>
         <div class="filters-dropdown">
             <button class="btn btn-secondary filters-toggle" id="btn-toggle-filters" data-i18n="toggle_filters_show">Show filters & alerts</button>
             <section class="filters is-collapsed" id="filters-panel">
@@ -670,9 +751,20 @@
                 <div class="recon-column"><div class="recon-title">Movement log</div><div class="scroll-wrap"><table id="tbl-armory-movements"><thead><tr><th>Time</th><th>Action</th><th>Item</th><th>Qty</th><th>Officer</th></tr></thead><tbody></tbody></table></div></div>
             </div>
         </div>
+        </main>
+        </div>
     </div>
 
     <div class="toast-wrap" id="toast-wrap"></div>
+    <div class="eco-modal" id="eco-preview-modal" aria-hidden="true">
+      <div class="eco-modal-card">
+        <div class="eco-modal-head">
+          <strong id="eco-preview-title">Snapshot</strong>
+          <button type="button" class="btn btn-secondary btn-compact" id="eco-preview-close">Close</button>
+        </div>
+        <div class="mono" id="eco-preview-body"></div>
+      </div>
+    </div>
     <datalist id="player-nicknames"></datalist>
     <datalist id="item-id-suggest"></datalist>
 
@@ -1237,6 +1329,29 @@
           const panel = $(sections[target]);
           if (panel) panel.classList.remove("hidden");
         }
+      }
+      function openEcoPreview() {
+        const modal = $("#eco-preview-modal");
+        const body = $("#eco-preview-body");
+        const title = $("#eco-preview-title");
+        if (!modal || !body || !title) return;
+        title.textContent = "Economy snapshot";
+        const entries = $$("#tbl-entries tbody tr").length;
+        const pending = $$("#tbl-pending-approvals tbody tr").length;
+        const imports = $$("#tbl-imports tbody tr").length;
+        const regear = $$("#tbl-regear tbody tr").length;
+        const buyback = $$("#tbl-buyback tbody tr").length;
+        const armRows = $$("#tbl-armory-stock tbody tr").length;
+        body.textContent =
+          `Entries: ${entries}\nPending approvals: ${pending}\nImports: ${imports}\nBuyback rows: ${buyback}\nRegear rows: ${regear}\nArmory rows: ${armRows}\n\nTip: open the specific section from left navigation for full drill-down.`;
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+      }
+      function closeEcoPreview() {
+        const modal = $("#eco-preview-modal");
+        if (!modal) return;
+        modal.classList.remove("open");
+        modal.setAttribute("aria-hidden", "true");
       }
       function on(id, event, cb) {
         const el = $(id);
@@ -1858,6 +1973,20 @@
       on("#btn-focus-op", "click", () => { switchTab("operation"); $("#modal-op")?.classList.add("is-open"); });
       on("#btn-import-csv", "click", () => { switchTab("operation"); $("#modal-import")?.classList.add("is-open"); });
       on("#btn-open-routing", "click", () => switchTab("recon"));
+      on("#btn-eco-nav-toggle", "click", () => {
+        const nav = $("#eco-side-nav-list");
+        if (!nav) return;
+        nav.classList.toggle("hidden");
+      });
+      $$(".eco-open-preview").forEach((btn) => btn.addEventListener("click", () => {
+        const target = btn.dataset.target;
+        if (target) switchTab(target);
+      }));
+      on("#btn-eco-snapshot", "click", openEcoPreview);
+      on("#eco-preview-close", "click", closeEcoPreview);
+      on("#eco-preview-modal", "click", (e) => {
+        if (e.target && e.target.id === "eco-preview-modal") closeEcoPreview();
+      });
       on("#btn-toggle-filters", "click", () => {
         const p = $("#filters-panel");
         const b = $("#btn-toggle-filters");

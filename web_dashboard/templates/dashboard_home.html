@@ -142,11 +142,12 @@
       position: relative;
       z-index: 1;
     }
-    .ds-enter {
+    .ds-enter { animation: none; }
+    body.ds-ready .ds-enter {
       animation: dsRise .75s cubic-bezier(.2,.9,.2,1) forwards;
     }
-    .ds-enter.delay-1 { animation-delay: .08s; }
-    .ds-enter.delay-2 { animation-delay: .16s; }
+    body.ds-ready .ds-enter.delay-1 { animation-delay: .08s; }
+    body.ds-ready .ds-enter.delay-2 { animation-delay: .16s; }
     @keyframes dsRise {
       from { transform: translateY(40px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -254,8 +255,11 @@
   <script>
     (function () {
       const boot = document.getElementById("boot");
-      // Quick “pre-crystal” feel: short boot, then reveal cards already animating.
-      setTimeout(() => boot && boot.classList.add("is-done"), 900);
+      // Stage 1: loading visual, stage 2: reveal cards from bottom.
+      setTimeout(() => {
+        if (boot) boot.classList.add("is-done");
+        document.body.classList.add("ds-ready");
+      }, 1200);
     })();
   </script>
 </body>
