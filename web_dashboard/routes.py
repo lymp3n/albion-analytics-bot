@@ -2,6 +2,7 @@ import json
 import os
 import time
 from functools import wraps
+from urllib.parse import parse_qs, urlparse
 
 from flask import (
     Flask,
@@ -11,6 +12,8 @@ from flask import (
     session,
     url_for,
 )
+
+import urllib.request
 
 from utils.command_permissions_catalog import get_role_assist_catalog
 from utils.role_config import parse_discord_snowflake_string, parse_single_snowflake
@@ -1256,3 +1259,72 @@ def register_dashboard(app: Flask) -> None:
                 mimetype="application/json",
             )
         return app.response_class(response=json.dumps(out, default=str), mimetype="application/json")
+
+    @app.route("/dashboard/api/economy/armory-import-sheet", methods=["POST"])
+    @login_required
+    def dashboard_economy_armory_import_sheet():
+        body = request.get_json(silent=True) or {}
+        sheet_url = str(body.get("sheet_url") or "").strip()
+        actor = str(body.get("actor") or "dashboard_admin").strip() or "dashboard_admin"
+        if not sheet_url:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": "sheet_url is required."}),
+                status=400,
+                mimetype="application/json",
+            )
+
+        def _to_csv_export(url: str) -> str:
+            # Supports:
+            # - https://docs.google.com/spreadsheets/d/<id>/edit#gid=0
+            # - .../view?gid=...  -> export?format=csv&gid=...
+            u = urlparse(url)
+            if "docs.google.com" not in (u.netloc or ""):
+                return url
+            parts = (u.path or "").split("/")
+            if "spreadsheets" not in parts:
+                return url
+            try:
+                d_idx = parts.index("d")
+                sheet_id = parts[d_idx + 1]
+            except Exception:
+                return url
+            gid = "0"
+            qs = parse_qs(u.query or "")
+            if "gid" in qs and qs["gid"]:
+                gid = str(qs["gid"][0])
+            if u.fragment and "gid=" in u.fragment:
+                try:
+                    gid = u.fragment.split("gid=", 1)[1].split("&", 1)[0]
+                except Exception:
+                    pass
+            return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+
+        export_url = _to_csv_export(sheet_url)
+        try:
+            req = urllib.request.Request(
+                export_url,
+                headers={
+                    "User-Agent": "albion-analytics-dashboard/1.0",
+                    "Accept": "text/csv,text/plain,*/*",
+                },
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                content = resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": f"Failed to fetch sheet: {_econ_err(e)}"}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        try:
+            with get_economy_sync_connection() as (conn, backend):
+                ensure_economy_schema(conn, backend)
+                out = import_armory_table_markdown(conn, backend, content=content, actor=actor)
+        except Exception as e:
+            return app.response_class(
+                response=json.dumps({"ok": False, "error": _econ_err(e)}, default=str),
+                status=400,
+                mimetype="application/json",
+            )
+        return app.response_class(response=json.dumps({"ok": True, "result": out}, default=str), mimetype="application/json")

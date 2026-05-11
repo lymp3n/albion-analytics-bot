@@ -77,17 +77,33 @@ function LineChart({ labels = [], values = [], stroke = "#7dd3fc", fill = "rgba(
   });
   const poly = pts.map((p) => `${p[0]},${p[1]}`).join(" ");
   const area = `0,${H} ${poly} ${W},${H}`;
-  return html`<div className="h-[320px] w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
-    <svg viewBox="0 0 ${W} ${H}" className="h-full w-full">
+  // Simple tooltip (fast, no DOM measuring beyond container width)
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [hoverX, setHoverX] = useState(0);
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)));
+    const idx = nums.length <= 1 ? 0 : Math.round(x * (nums.length - 1));
+    setHoverIdx(idx);
+    setHoverX((idx / Math.max(1, nums.length - 1)) * 100);
+  };
+  const onLeave = () => setHoverIdx(null);
+  return html`<div className="relative h-[320px] w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]" onMouseMove=${onMove} onMouseLeave=${onLeave}>
+    ${hoverIdx != null ? html`<div className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-xl border border-white/15 bg-[#0f0f16]/90 px-3 py-2 text-xs text-slate-100 shadow-lg" style=${{ left: `${hoverX}%`, top: "10px" }}>
+      <div className="text-[11px] uppercase tracking-[0.12em] text-slate-300">${labels[hoverIdx] || `#${hoverIdx + 1}`}</div>
+      <div className="mt-1 text-sm font-medium">${fmt(nums[hoverIdx])}</div>
+    </div>` : null}
+    <svg viewBox="0 0 ${W} ${H}" className="h-full w-full" preserveAspectRatio="none">
       <polyline points=${area} fill=${fill}></polyline>
       <polyline points=${poly} fill="none" stroke=${stroke} stroke-width="3"></polyline>
-      ${pts.map((p, i) => html`<g key=${i}><circle cx=${p[0]} cy=${p[1]} r="4.5" fill=${stroke}></circle><title>${labels[i]}: ${fmt(nums[i])}</title></g>`)}
+      ${pts.map((p, i) => html`<g key=${i}><circle cx=${p[0]} cy=${p[1]} r="4.5" fill=${stroke}></circle></g>`)}
     </svg>
   </div>`;
 }
 
 function AreaChart({ labels = [], values = [] }) {
-  return html`<${LineChart} labels=${labels} values=${values} stroke="#c4b5fd" fill="rgba(196,181,253,.22)" />`;
+  // More distinct than Line: softer stroke, no dots (handled by LineChart), stronger fill.
+  return html`<${LineChart} labels=${labels} values=${values} stroke="rgba(196,181,253,0.72)" fill="rgba(196,181,253,.34)" />`;
 }
 
 function HeatmapChart({ xLabels = [], yLabels = [], matrix = [], colorA = "34,211,238", colorB = "168,85,247" }) {
@@ -358,6 +374,11 @@ function EconomyDashboard() {
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState(false);
   const [opMsg, setOpMsg] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importLogType, setImportLogType] = useState("bank");
+  const [importSmartMerge, setImportSmartMerge] = useState(true);
+  const [importContent, setImportContent] = useState("");
+  const [armorySheetUrl, setArmorySheetUrl] = useState("");
   const [buybackPrice, setBuybackPrice] = useState("");
   const [regear, setRegear] = useState({ player_name: "", content_type: "", unit_cost: "", note: "" });
   const preload = readPreload();
@@ -380,6 +401,41 @@ function EconomyDashboard() {
       const out = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((r) => r.json());
       if (!out.ok) throw new Error(out.error || "Request failed");
       setOpMsg("Saved successfully.");
+      load({ force: true });
+    } catch (e) {
+      setOpMsg(String(e.message || e));
+    }
+  };
+
+  const runSmartImport = async () => {
+    setOpMsg("Importing...");
+    try {
+      const out = await fetch("/dashboard/api/economy/import-log", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_type: importLogType, content: importContent, smart_merge: importSmartMerge }),
+      }).then((r) => r.json());
+      if (!out.ok) throw new Error(out.error || "Import failed");
+      setOpMsg("Import OK.");
+      setImportOpen(false);
+      load({ force: true });
+    } catch (e) {
+      setOpMsg(String(e.message || e));
+    }
+  };
+
+  const importArmoryFromSheet = async () => {
+    setOpMsg("Fetching sheet...");
+    try {
+      const out = await fetch("/dashboard/api/economy/armory-import-sheet", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheet_url: armorySheetUrl, actor: "dashboard_admin" }),
+      }).then((r) => r.json());
+      if (!out.ok) throw new Error(out.error || "Sheet import failed");
+      setOpMsg("Armory import OK.");
       load({ force: true });
     } catch (e) {
       setOpMsg(String(e.message || e));
@@ -432,7 +488,57 @@ function EconomyDashboard() {
     if (active === "discrepancies") return html`<${DataTable} columns=${["ID", "Kind", "Status", "Delta"]} rows=${discrepanciesRows} />`;
     if (active === "audit") return html`<${DataTable} columns=${["ID", "Actor", "Action", "Created"]} rows=${auditRows} />`;
     if (active === "reports") return html`<div className="grid gap-5 xl:grid-cols-2"><${ChartShell} title="P&L structure" subtitle="Income/expense/profit"><${BarChart} labels=${["Income", "Expense", "Profit"]} values=${[rep.pnl_summary?.income_total || 0, rep.pnl_summary?.expense_total || 0, rep.pnl_summary?.profit_total || 0]} color="from-emerald-300 to-teal-500" /></${ChartShell}><${ChartShell} title="Cashflow pattern" subtitle="Cash in/out/net"><${LineChart} labels=${["Cash in", "Cash out", "Net"]} values=${[rep.cashflow_summary?.cash_in_total || 0, rep.cashflow_summary?.cash_out_total || 0, rep.cashflow_summary?.net_cashflow || 0]} stroke="#f9a8d4" fill="rgba(249,168,212,.16)" /></${ChartShell}></div>`;
-    return html`<div className="grid gap-5 xl:grid-cols-2"><div className="${glass} p-5"><h3 className="text-sm font-medium">Loot buyback</h3><input className="apple-control-input mt-3 w-full rounded-xl px-3 py-2 text-sm" type="number" min="1" placeholder="Buyback price" value=${buybackPrice} onChange=${(e) => setBuybackPrice(e.target.value)} /><button className="apple-control-btn mt-3 rounded-xl px-3 py-2 text-sm" onClick=${() => post("/dashboard/api/economy/loot-buyback", { buyback_price: Number(buybackPrice || 0), approved_by: "dashboard_admin" })}>Create buyback</button></div><div className="${glass} p-5"><h3 className="text-sm font-medium">Regear request</h3><input className="apple-control-input mt-3 w-full rounded-xl px-3 py-2 text-sm" placeholder="Player nickname" value=${regear.player_name} onChange=${(e) => setRegear((v) => ({ ...v, player_name: e.target.value }))} /><input className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" placeholder="Content type" value=${regear.content_type} onChange=${(e) => setRegear((v) => ({ ...v, content_type: e.target.value }))} /><input className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" type="number" min="1" placeholder="Unit cost" value=${regear.unit_cost} onChange=${(e) => setRegear((v) => ({ ...v, unit_cost: e.target.value }))} /><textarea className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" rows="3" placeholder="Note" value=${regear.note} onChange=${(e) => setRegear((v) => ({ ...v, note: e.target.value }))}></textarea><button className="apple-control-btn mt-3 rounded-xl px-3 py-2 text-sm" onClick=${() => post("/dashboard/api/economy/regear", { ...regear, unit_cost: Number(regear.unit_cost || 0), action: "create" })}>Create regear</button></div>${opMsg ? html`<p className="apple-muted mt-3 text-sm">${opMsg}</p>` : null}</div>`;
+    return html`<div className="grid gap-5 xl:grid-cols-2">
+      <div className="${glass} p-5">
+        <h3 className="text-sm font-medium">Operations</h3>
+        <div className="mt-3 grid gap-3">
+          <button className="apple-control-btn rounded-xl px-3 py-2 text-sm" onClick=${() => setImportOpen(true)}>Smart import (log)</button>
+          <div className="${glass} p-4">
+            <p className="text-sm font-medium">Armory import from Google Sheets</p>
+            <p className="apple-muted mt-1 text-xs">Paste public sheet URL. Use File → Share → Anyone with link, or publish.</p>
+            <input className="apple-control-input mt-3 w-full rounded-xl px-3 py-2 text-sm" placeholder="https://docs.google.com/spreadsheets/..." value=${armorySheetUrl} onChange=${(e) => setArmorySheetUrl(e.target.value)} />
+            <button className="apple-control-btn mt-3 rounded-xl px-3 py-2 text-sm" onClick=${importArmoryFromSheet}>Import armory</button>
+          </div>
+        </div>
+      </div>
+      <div className="${glass} p-5">
+        <h3 className="text-sm font-medium">Loot buyback</h3>
+        <input className="apple-control-input mt-3 w-full rounded-xl px-3 py-2 text-sm" type="number" min="1" placeholder="Buyback price" value=${buybackPrice} onChange=${(e) => setBuybackPrice(e.target.value)} />
+        <button className="apple-control-btn mt-3 rounded-xl px-3 py-2 text-sm" onClick=${() => post("/dashboard/api/economy/loot-buyback", { buyback_price: Number(buybackPrice || 0), approved_by: "dashboard_admin" })}>Create buyback</button>
+        <h3 className="mt-6 text-sm font-medium">Regear request</h3>
+        <input className="apple-control-input mt-3 w-full rounded-xl px-3 py-2 text-sm" placeholder="Player nickname" value=${regear.player_name} onChange=${(e) => setRegear((v) => ({ ...v, player_name: e.target.value }))} />
+        <input className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" placeholder="Content type" value=${regear.content_type} onChange=${(e) => setRegear((v) => ({ ...v, content_type: e.target.value }))} />
+        <input className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" type="number" min="1" placeholder="Unit cost" value=${regear.unit_cost} onChange=${(e) => setRegear((v) => ({ ...v, unit_cost: e.target.value }))} />
+        <textarea className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" rows="3" placeholder="Note" value=${regear.note} onChange=${(e) => setRegear((v) => ({ ...v, note: e.target.value }))}></textarea>
+        <button className="apple-control-btn mt-3 rounded-xl px-3 py-2 text-sm" onClick=${() => post("/dashboard/api/economy/regear", { ...regear, unit_cost: Number(regear.unit_cost || 0), action: "create" })}>Create regear</button>
+        ${opMsg ? html`<p className="apple-muted mt-3 text-sm">${opMsg}</p>` : null}
+      </div>
+      <${PreviewModal} open=${importOpen} close=${() => setImportOpen(false)} title="Smart import (economy log)">
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="text-sm">Log type
+            <select className="apple-control-input apple-select-contrast mt-2 w-full rounded-xl px-3 py-2 text-sm" value=${importLogType} onChange=${(e) => setImportLogType(e.target.value)}>
+              <option value="bank">bank</option>
+              <option value="market">market</option>
+              <option value="loot">loot</option>
+              <option value="other">other</option>
+            </select>
+          </label>
+          <label className="text-sm">Smart merge
+            <select className="apple-control-input apple-select-contrast mt-2 w-full rounded-xl px-3 py-2 text-sm" value=${importSmartMerge ? "1" : "0"} onChange=${(e) => setImportSmartMerge(e.target.value === "1")}>
+              <option value="1">on</option>
+              <option value="0">off</option>
+            </select>
+          </label>
+        </div>
+        <label className="mt-4 block text-sm">CSV content (paste from Google Sheets export or game log)</label>
+        <textarea className="apple-control-input mt-2 w-full rounded-xl px-3 py-2 text-sm" rows="10" value=${importContent} onChange=${(e) => setImportContent(e.target.value)} placeholder="Paste CSV here..."></textarea>
+        <div className="mt-4 flex gap-2">
+          <button className="apple-control-btn rounded-xl px-3 py-2 text-sm" onClick=${runSmartImport}>Run import</button>
+          <button className="apple-control-btn rounded-xl px-3 py-2 text-sm" onClick=${() => setImportOpen(false)}>Cancel</button>
+        </div>
+        ${opMsg ? html`<p className="apple-muted mt-3 text-sm">${opMsg}</p>` : null}
+      </${PreviewModal}>
+    </div>`;
   }, [active, data, loading, opMsg, buybackPrice, regear]);
 
   return html`<div className="apple-shell min-h-screen"><header className=${`${glass} mb-4 p-4`}><h1 className="apple-kern-title text-3xl font-medium">Economy Dashboard</h1><p className="apple-muted text-sm">Design QA pass</p></header><div className=${`${glass} mb-4 flex flex-wrap items-center gap-3 p-4`}><label className="text-sm">Days <input className="ml-2 apple-control-input w-20 rounded-xl px-2 py-1" type="number" min="1" max="365" value=${days} onChange=${(e) => setDays(Number(e.target.value || 7))} /></label><label className="text-sm">Status <input className="ml-2 apple-control-input w-32 rounded-xl px-2 py-1" value=${entryStatus} onChange=${(e) => setEntryStatus(e.target.value)} placeholder="pending/posted" /></label><label className="text-sm">Category <input className="ml-2 apple-control-input w-36 rounded-xl px-2 py-1" value=${category} onChange=${(e) => setCategory(e.target.value)} placeholder="regear" /></label><label className="text-sm">Source <input className="ml-2 apple-control-input w-36 rounded-xl px-2 py-1" value=${source} onChange=${(e) => setSource(e.target.value)} placeholder="dashboard" /></label><button className="apple-control-btn rounded-xl px-3 py-2 text-sm" onClick=${() => load({ force: true })}>Refresh</button><div className="ml-auto flex gap-2"><a className="apple-control-btn rounded-xl px-3 py-2 text-sm text-white no-underline" href="/dashboard">Picker</a><a className="apple-control-btn rounded-xl px-3 py-2 text-sm text-white no-underline" href="/dashboard/main">Main</a></div></div><div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]"><${Sidebar} items=${[{ id: "overview", label: "Overview" }, { id: "entries", label: "Entries" }, { id: "operations", label: "Operations" }, { id: "armory", label: "Armory" }, { id: "reports", label: "Reports" }, { id: "alerts", label: "Alerts" }, { id: "routing", label: "Routing" }, { id: "imports", label: "Imports" }, { id: "approvals", label: "Approvals" }, { id: "discrepancies", label: "Discrepancies" }, { id: "audit", label: "Audit" }]} active=${active} setActive=${setActive} /><section className="space-y-4">${panel}</section></div><${PreviewModal} open=${preview} close=${() => setPreview(false)} title="Economy detailed overview"><p className="apple-muted text-sm">Overview contains main customizable graph and priority heatmaps for speed and control-plane clarity.</p></${PreviewModal}></div>`;
