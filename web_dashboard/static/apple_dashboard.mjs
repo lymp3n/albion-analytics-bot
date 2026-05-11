@@ -49,9 +49,9 @@ function HealthStatusCard({ botHealth }) {
   </div>`;
 }
 
-function BarChart({ labels = [], values = [], color = "from-cyan-300 to-blue-500" }) {
+function BarChart({ labels = [], values = [], color = "from-cyan-300 to-blue-500", heightClass = "h-[320px]" }) {
   const max = Math.max(1, ...values.map((v) => toNum(v)));
-  return html`<div className="grid h-[320px] grid-cols-[repeat(auto-fit,minmax(52px,1fr))] items-end gap-3">
+  return html`<div className=${`grid ${heightClass} grid-cols-[repeat(auto-fit,minmax(52px,1fr))] items-end gap-3`}>
     ${values.map((v, i) => {
       const n = toNum(v);
       const h = Math.max(10, Math.round((n / max) * 100));
@@ -104,7 +104,7 @@ function HeatmapChart({ xLabels = [], yLabels = [], matrix = [], colorA = "34,21
       <div className="pr-2 text-right text-[11px] text-slate-300">${y}</div>
       ${(matrix[yi] || []).map((v, xi) => {
         const k = scale(v);
-        return html`<div key=${xi} title=${`${y} / ${xLabels[xi]}: ${fmt(v)}`} className="h-10 rounded-md border border-white/10 text-center text-[11px] leading-10 text-white" style=${{ background: `linear-gradient(135deg, rgba(${colorA},${0.16 + k * 0.52}), rgba(${colorB},${0.12 + k * 0.45}))` }}>${fmt(v)}</div>`;
+        return html`<div key=${xi} title=${`${y} / ${xLabels[xi]}: ${fmt(v)}`} className="h-9 rounded-md border border-white/10 text-center text-[11px] leading-9 text-white" style=${{ background: `linear-gradient(135deg, rgba(${colorA},${0.16 + k * 0.52}), rgba(${colorB},${0.12 + k * 0.45}))` }}>${fmt(v)}</div>`;
       })}
     </div>`)}
   </div>`;
@@ -159,7 +159,32 @@ function PreviewModal({ open, close, title, children }) {
 }
 
 function Loader({ done, progress, phase }) {
-  return html`<${AnimatePresence}>${!done && html`<${motion.div} className="fixed inset-0 z-[120] overflow-hidden bg-[#0b0b0f]" initial=${{ opacity: 1 }} exit=${{ opacity: 0 }}><${motion.div} className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-[#111118] to-[#0d0d12]" initial=${{ y: 0 }} exit=${{ y: "-100%" }} transition=${{ duration: 0.9, ease }} /><${motion.div} className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#111118] to-[#0d0d12]" initial=${{ y: 0 }} exit=${{ y: "100%" }} transition=${{ duration: 0.9, ease }} /><div className="absolute inset-0 flex flex-col items-center justify-center px-5"><h1 className="apple-kern-title text-center text-4xl font-medium text-slate-100 md:text-6xl">Albion Analytics</h1><p className="mt-3 text-center text-xs uppercase tracking-[0.17em] text-slate-400">${phase}</p><div className="mt-8 w-[min(640px,92vw)]"><div className="h-2 overflow-hidden rounded-full border border-white/20 bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 transition-all duration-200" style=${{ width: `${Math.max(4, Math.min(100, progress))}%` }}></div></div><div className="mt-2 flex justify-end text-[11px] text-slate-400">${Math.round(progress)}%</div></div></div></${motion.div}>`}<//>`;
+  return html`<${AnimatePresence}>${!done && html`<${motion.div} className="fixed inset-0 z-[120] overflow-hidden bg-[#0b0b0f]" initial=${{ opacity: 1 }} exit=${{ opacity: 0 }}>
+    <${motion.div} className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-[#111118] to-[#0d0d12]" initial=${{ y: 0 }} exit=${{ y: "-100%" }} transition=${{ duration: 0.9, ease }} />
+    <${motion.div} className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#111118] to-[#0d0d12]" initial=${{ y: 0 }} exit=${{ y: "100%" }} transition=${{ duration: 0.9, ease }} />
+    <div className="absolute inset-0 flex flex-col items-center justify-center px-5">
+      <${motion.h1}
+        className="apple-preload-title apple-kern-title text-center text-4xl font-semibold text-slate-100 md:text-6xl"
+        initial=${{ opacity: 0, y: 8 }}
+        animate=${{ opacity: 1, y: 0 }}
+        transition=${{ duration: 0.6, ease }}
+      >Albion Analytics</${motion.h1}>
+      <${motion.div}
+        className="mt-2 h-[2px] w-[min(520px,78vw)] rounded-full bg-gradient-to-r from-cyan-300/0 via-cyan-300/70 to-fuchsia-300/0"
+        initial=${{ scaleX: 0 }}
+        animate=${{ scaleX: 1 }}
+        transition=${{ duration: 0.9, ease }}
+        style=${{ transformOrigin: "50% 50%" }}
+      />
+      <p className="mt-4 text-center text-xs uppercase tracking-[0.17em] text-slate-400">${phase}</p>
+      <div className="mt-8 w-[min(640px,92vw)]">
+        <div className="h-2 overflow-hidden rounded-full border border-white/20 bg-white/5">
+          <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 transition-[width] duration-300 ease-out" style=${{ width: `${Math.max(4, Math.min(100, progress))}%` }}></div>
+        </div>
+        <div className="mt-2 flex justify-end text-[11px] text-slate-400">${Math.round(progress)}%</div>
+      </div>
+    </div>
+  </${motion.div}>`}<//>`;
 }
 
 function Sidebar({ items, active, setActive }) {
@@ -207,17 +232,41 @@ function metricsByPeriod(preload, getter) {
   return out;
 }
 
-async function preloadAll() {
-  const pack = { main: {}, econ: {} };
+async function fetchJsonWithTimeout(url, timeoutMs) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { credentials: "same-origin", signal: ctrl.signal });
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function preloadAll(onProgress) {
+  const pack = { main: {}, econ: {}, errors: [] };
+  const total = PERIODS.length;
+  let done = 0;
+
+  // Load each period with timeout; never block indefinitely.
   for (const p of PERIODS) {
     const dMain = periodDays(p, false);
     const dEcon = periodDays(p, true);
-    const [main, econ] = await Promise.all([
-      fetch(`/dashboard/api/data?days=${dMain}`, { credentials: "same-origin" }).then((r) => r.json()),
-      fetch(`/dashboard/api/economy/data?days=${dEcon}`, { credentials: "same-origin" }).then((r) => r.json()),
-    ]);
-    pack.main[p] = main;
-    pack.econ[p] = econ;
+    try {
+      const [main, econ] = await Promise.all([
+        fetchJsonWithTimeout(`/dashboard/api/data?days=${dMain}`, 12000),
+        fetchJsonWithTimeout(`/dashboard/api/economy/data?days=${dEcon}`, 12000),
+      ]);
+      pack.main[p] = main;
+      pack.econ[p] = econ;
+    } catch (e) {
+      pack.errors.push({ period: p, error: String(e?.message || e) });
+      pack.main[p] = pack.main[p] || {};
+      pack.econ[p] = pack.econ[p] || {};
+    } finally {
+      done += 1;
+      if (typeof onProgress === "function") onProgress(done / total);
+    }
   }
   return pack;
 }
@@ -228,18 +277,22 @@ function Landing() {
   const [progress, setProgress] = useState(2);
   useEffect(() => {
     let alive = true;
-    const t = setInterval(() => setProgress((v) => Math.min(88, v + 1.4)), 110);
     (async () => {
       setPhase("Preloading all metric periods");
-      const pack = await preloadAll();
+      const pack = await preloadAll((ratio) => {
+        // Smooth non-stalling progress, always converges to 98 while working.
+        setProgress((prev) => {
+          const target = Math.min(98, 6 + ratio * 92);
+          return prev + (target - prev) * 0.18;
+        });
+      });
       storePreload(pack);
       if (!alive) return;
-      clearInterval(t);
       setProgress(100);
       setPhase("Reveal");
       setTimeout(() => setReady(true), 260);
     })().catch(() => setReady(true));
-    return () => { alive = false; clearInterval(t); };
+    return () => { alive = false; };
   }, []);
   const cards = [
     { title: "Main Dashboard", href: "/dashboard/main", desc: "Guild operations, players, events, system analytics." },
@@ -353,7 +406,7 @@ function EconomyDashboard() {
         <${CustomGraph} id="econ-overview-custom" title="Economy custom analytics graph" subtitle="Main graph: choose metrics, period and chart type. Defaults: all + 7d + line." metricsMap=${metricMap} defaultPeriod="7d" />
         <div className="mt-5 grid gap-5 xl:grid-cols-2">
           <${ChartShell} title="Operational pressure" subtitle="Entries, alerts, approvals">
-            <${BarChart} labels=${["Pending entries", "Alerts", "Approvals"]} values=${[k.pending_entries || 0, (data.alerts || []).length, (data.pending_approvals || []).length]} color="from-cyan-300 to-blue-500" />
+            <${BarChart} labels=${["Pending entries", "Alerts", "Approvals"]} values=${[k.pending_entries || 0, (data.alerts || []).length, (data.pending_approvals || []).length]} color="from-cyan-300 to-blue-500" heightClass="h-[220px]" />
           </${ChartShell}>
           <${ChartShell} title="Risk heatmap" subtitle="Cross-metric risk surface">
             <${HeatmapChart}

@@ -6,6 +6,8 @@
   --apple-text: #f5f5f7;
   --apple-muted: #b7b7c2;
   --apple-border: rgba(255, 255, 255, 0.12);
+  --aa-font-heading: "Space Grotesk", "Montserrat", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --aa-font-body: "Plus Jakarta Sans", "Montserrat", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -15,11 +17,46 @@ html, body {
   min-height: 100%;
   scroll-behavior: smooth;
   color: var(--apple-text);
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--aa-font-body);
   background:
     radial-gradient(1300px 720px at 75% -20%, rgba(0, 122, 255, 0.22), transparent 58%),
     radial-gradient(1200px 650px at -15% 30%, rgba(96, 84, 255, 0.18), transparent 60%),
     linear-gradient(180deg, #111115 0%, #0a0a0e 100%);
+}
+
+.apple-kern-title,
+h1, h2, h3, h4 {
+  font-family: var(--aa-font-heading);
+  letter-spacing: -0.02em;
+}
+
+.apple-preload-title {
+  background-image: linear-gradient(90deg, rgba(125,211,252,1), rgba(196,181,253,1), rgba(249,168,212,1));
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: aaTitleShimmer 2.8s ease-in-out infinite;
+}
+
+@keyframes aaTitleShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.apple-kern-title {
+  font-feature-settings: "ss01" 1, "ss02" 1;
+}
+
+.apple-muted,
+p,
+button,
+input,
+select,
+textarea,
+table {
+  font-family: var(--aa-font-body);
 }
 
 .apple-shell {
