@@ -68,6 +68,15 @@ html, body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.apple-select-contrast {
+  color: #f8fafc;
+}
+
+.apple-select-contrast option {
+  color: #0b1220;
+  background: #e2e8f0;
+}
+
 .apple-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,.25) transparent;
